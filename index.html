@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A Gift for Victoria</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #fce8d5;
+        }
+        h1, h2 {
+            font-family: 'Dancing Script', cursive;
+        }
+
+        /* Envelope Animation */
+        #envelope-wrapper {
+            transition: all 1s ease-in-out;
+            cursor: pointer;
+        }
+        #envelope-wrapper.hidden {
+            opacity: 0;
+            transform: scale(0.8);
+            pointer-events: none;
+        }
+        #main-content {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 1s ease-in-out, transform 1s ease-in-out;
+            pointer-events: none;
+        }
+        #main-content.visible {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: all;
+        }
+
+        /* Balloon Animation */
+        .balloon-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            pointer-events: none;
+            z-index: 0;
+        }
+        .balloon {
+            position: absolute;
+            background-color: #fca5a5;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            bottom: -50px;
+            opacity: 0;
+            animation: float 10s ease-in-out infinite;
+        }
+        .balloon.pink { background-color: #f9a8d4; }
+        .balloon.purple { background-color: #a78bfa; }
+        .balloon.yellow { background-color: #fde047; }
+        .balloon.blue { background-color: #60a5fa; }
+        .balloon::before {
+            content: '';
+            position: absolute;
+            width: 0;
+            height: 0;
+            border-style: solid;
+            border-width: 0 5px 15px 5px;
+            border-color: transparent transparent #fca5a5 transparent;
+            bottom: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        .balloon.pink::before { border-color: transparent transparent #f9a8d4 transparent; }
+        .balloon.purple::before { border-color: transparent transparent #a78bfa transparent; }
+        .balloon.yellow::before { border-color: transparent transparent #fde047 transparent; }
+        .balloon.blue::before { border-color: transparent transparent #60a5fa transparent; }
+        @keyframes float {
+            0% { transform: translateY(0) scale(1) rotate(0deg); opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { transform: translateY(-100vh) scale(1.2) rotate(360deg); opacity: 0; }
+        }
+        .balloon:nth-child(1) { animation-delay: 0s; animation-duration: 12s; }
+        .balloon:nth-child(2) { animation-delay: 2s; animation-duration: 10s; }
+        .balloon:nth-child(3) { animation-delay: 4s; animation-duration: 14s; }
+        .balloon:nth-child(4) { animation-delay: 6s; animation-duration: 11s; }
+        .balloon:nth-child(5) { animation-delay: 8s; animation-duration: 13s; }
+
+        /* Gift Box */
+        .gift-box-top {
+            transition: transform 0.5s ease-out, opacity 0.5s ease-out;
+            transform-origin: top center;
+        }
+        .gift-box-top.opened {
+            transform: rotateX(90deg) translateY(-20px);
+            opacity: 0;
+        }
+
+        /* Timeline */
+        .timeline-item {
+            position: relative;
+            padding-left: 2rem;
+            border-left: 2px solid #ef4444; /* red-500 */
+        }
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -8px;
+            top: 0;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background-color: #ef4444; /* red-500 */
+            border: 2px solid white;
+            box-shadow: 0 0 0 4px #ef4444;
+        }
+        .timeline-item:nth-child(odd) {
+            border-left: 2px solid #3b82f6; /* blue-500 */
+        }
+        .timeline-item:nth-child(odd)::before {
+            background-color: #3b82f6;
+            box-shadow: 0 0 0 4px #3b82f6;
+        }
+
+        /* Reasons Section */
+        #reasons-button {
+            transition: all 0.3s ease-in-out;
+        }
+        #reasons-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
+        }
+        #reason-text {
+            animation: fadeIn 1s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Gallery Transitions */
+        #gallery-image {
+            transition: opacity 1s ease-in-out;
+        }
+    </style>
+</head>
+<body class="overflow-x-hidden flex flex-col items-center justify-center min-h-screen relative p-4">
+
+    <!-- The Envelope Wrapper -->
+    <div id="envelope-wrapper" class="relative w-full max-w-sm z-30">
+        <!-- Envelope Flap -->
+        <div id="envelope-flap" class="envelope-flap absolute top-0 z-20 w-full h-1/2 overflow-hidden">
+            <div class="absolute w-full h-full border-b-[200px] border-l-[200px] border-r-[200px] border-b-white border-l-transparent border-r-transparent rounded-t-lg"></div>
+        </div>
+        <!-- Envelope Body -->
+        <div id="envelope-body" class="relative z-10 w-full aspect-video rounded-lg bg-white shadow-xl flex items-center justify-center p-6 text-center">
+            <h1 class="text-xl sm:text-2xl font-bold text-gray-800">A Special Message from Precious</h1>
+        </div>
+    </div>
+    
+    <!-- Balloon Container -->
+    <div id="balloon-container" class="balloon-container hidden">
+        <div class="balloon pink" style="left: 10%;"></div>
+        <div class="balloon purple" style="left: 30%;"></div>
+        <div class="balloon yellow" style="left: 50%;"></div>
+        <div class="balloon blue" style="left: 70%;"></div>
+        <div class="balloon pink" style="left: 90%;"></div>
+    </div>
+
+    <!-- Main Content (Hidden initially) -->
+    <div id="main-content" class="w-full max-w-4xl p-8 bg-white/80 backdrop-blur-md rounded-2xl shadow-2xl space-y-12 text-center relative z-20">
+
+        <!-- Header Section -->
+        <header class="space-y-4">
+            <h1 class="text-5xl sm:text-7xl font-bold text-[#7e5c46] leading-tight">For Victoria, My Love</h1>
+            <p class="text-base sm:text-lg text-gray-700 max-w-2xl mx-auto">
+                This is just a small token of my immense love for you. I wanted to create a space that celebrates all the wonderful things that make you, you.
+            </p>
+        </header>
+
+        <!-- Our Journey Section -->
+        <section class="space-y-8">
+            <h2 class="text-4xl sm:text-5xl font-bold text-[#7e5c46]">Our Journey</h2>
+            <div class="relative flex flex-col items-start space-y-12 p-4">
+                <div class="timeline-item">
+                    <h3 class="text-xl font-semibold text-gray-800">The Day We Met</h3>
+                    <p class="text-gray-600 mt-1">
+                        I still remember the first time I saw you. It felt like the start of something truly special.
+                    </p>
+                </div>
+                <div class="timeline-item">
+                    <h3 class="text-xl font-semibold text-gray-800">Our First Date</h3>
+                    <p class="text-gray-600 mt-1">
+                        Laughing and talking for hours, completely losing track of time. It was a perfect day.
+                    </p>
+                </div>
+                <div class="timeline-item">
+                    <h3 class="text-xl font-semibold text-gray-800">Falling in Love</h3>
+                    <p class="text-gray-600 mt-1">
+                        The moment I knew my life was forever changed. My heart belongs to you.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Image Gallery Section -->
+        <section class="space-y-8">
+            <h2 class="text-4xl sm:text-5xl font-bold text-[#7e5c46]">Memories of Us</h2>
+            <div class="relative w-full max-w-lg mx-auto">
+                <img id="gallery-image" src="" alt="A photo of us" class="w-full h-auto rounded-xl shadow-lg border-4 border-white object-cover">
+                <div class="flex justify-center mt-4 space-x-2">
+                    <button class="bg-[#ef4444] text-white px-4 py-2 rounded-full font-bold shadow-lg hover:bg-[#dc2626] transition-colors" onclick="changeImage(-1)">Previous</button>
+                    <button class="bg-[#3b82f6] text-white px-4 py-2 rounded-full font-bold shadow-lg hover:bg-[#2563eb] transition-colors" onclick="changeImage(1)">Next</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Reasons I Love You Section -->
+        <section class="space-y-8">
+            <h2 class="text-4xl sm:text-5xl font-bold text-[#7e5c46]">Reasons I Love You</h2>
+            <div class="flex flex-col items-center justify-center">
+                <p id="reason-text" class="text-xl italic text-gray-700 max-w-2xl mx-auto mb-4 min-h-[5rem] flex items-center justify-center">
+                    Click the button below to discover a reason.
+                </p>
+                <button id="reasons-button" class="bg-pink-500 text-white px-8 py-4 rounded-full font-bold text-lg shadow-lg">
+                    Discover a Reason
+                </button>
+            </div>
+        </section>
+        
+        <!-- The Gift Box -->
+        <section id="gift-box-section" class="pt-8">
+            <h2 class="text-4xl sm:text-5xl font-bold text-[#7e5c46]">Open Your Gift!</h2>
+            <p class="text-gray-600 mt-2">Click the box below to reveal a surprise message.</p>
+            <div id="gift-box" class="relative w-48 h-48 mx-auto mt-6 cursor-pointer transform hover:scale-105 transition-transform duration-300">
+                <!-- Gift Box Body -->
+                <div class="absolute bottom-0 w-full h-3/4 rounded-b-xl bg-red-500 shadow-xl"></div>
+                <!-- Gift Box Top -->
+                <div id="gift-box-top" class="gift-box-top absolute top-0 w-full h-1/2 rounded-t-xl bg-red-700 shadow-xl"></div>
+                <!-- Ribbon -->
+                <div class="absolute inset-y-0 left-1/2 w-4 bg-red-900 transform -translate-x-1/2"></div>
+                <div class="absolute inset-x-0 top-1/2 h-4 bg-red-900 transform -translate-y-1/2"></div>
+                <!-- Bow -->
+                <div class="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-yellow-400"></div>
+                <div class="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-yellow-500"></div>
+            </div>
+            <!-- Gift Box Message (hidden) -->
+            <div id="gift-message" class="hidden mt-6 bg-yellow-100 p-6 rounded-xl shadow-inner max-w-lg mx-auto transition-all duration-500 transform scale-90 opacity-0">
+                <p class="text-xl font-semibold text-gray-800">
+                    My dearest Victoria, every day with you is a gift. You've taught me what true happiness is, and I can't wait to see what adventures the future holds for us. You are my everything.
+                </p>
+            </div>
+        </section>
+
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const envelopeWrapper = document.getElementById('envelope-wrapper');
+            const mainContent = document.getElementById('main-content');
+            const balloonContainer = document.getElementById('balloon-container');
+            const giftBox = document.getElementById('gift-box');
+            const giftBoxTop = document.getElementById('gift-box-top');
+            const giftMessage = document.getElementById('gift-message');
+            const reasonsButton = document.getElementById('reasons-button');
+            const reasonText = document.getElementById('reason-text');
+            const galleryImage = document.getElementById('gallery-image');
+
+            // Array of images for the gallery
+            const galleryImages = [
+                'https://i.imgur.com/TQzCfRY.jpg', // Our first photo
+                'https://i.imgur.com/R0bMgIf.jpg', // Our favorite memory
+                'https://i.imgur.com/J2wBJpS.jpg', // Adventure
+            ];
+            let currentImageIndex = 0;
+            let galleryInterval;
+
+            // Function to change the gallery image
+            const setGalleryImage = (index) => {
+                galleryImage.style.opacity = 0;
+                setTimeout(() => {
+                    galleryImage.src = galleryImages[index];
+                    galleryImage.style.opacity = 1;
+                }, 500); // Wait for fade-out before changing src
+            };
+
+            // Function to start the automatic image rotation
+            const startGalleryRotation = () => {
+                galleryInterval = setInterval(() => {
+                    currentImageIndex = (currentImageIndex + 1) % galleryImages.length;
+                    setGalleryImage(currentImageIndex);
+                }, 3000); // Change image every 3 seconds
+            };
+
+            // Set the initial image
+            if (galleryImages.length > 0) {
+                setGalleryImage(currentImageIndex);
+                startGalleryRotation();
+            }
+
+            // Array of reasons I love Victoria
+            const reasons = [
+                "Your smile brightens up my entire day.",
+                "You have the kindest heart I've ever known.",
+                "I love how you laugh at my silly jokes.",
+                "You're the most supportive person in my life.",
+                "Your intelligence and wit constantly amaze me.",
+                "You make every ordinary moment feel like a new adventure.",
+                "I love the way you see the best in everyone.",
+                "Just being with you feels like home.",
+            ];
+            let lastReasonIndex = -1;
+
+            // Envelope opening logic
+            envelopeWrapper.addEventListener('click', () => {
+                envelopeWrapper.classList.add('hidden');
+                setTimeout(() => {
+                    mainContent.classList.add('visible');
+                    balloonContainer.classList.remove('hidden');
+                }, 1000); // Delay to sync with envelope transition
+            });
+
+            // Gift box opening logic
+            giftBox.addEventListener('click', () => {
+                giftBoxTop.classList.add('opened');
+                giftMessage.classList.remove('hidden', 'opacity-0', 'scale-90');
+                setTimeout(() => {
+                    giftMessage.classList.add('visible-content');
+                }, 500);
+            });
+
+            // Reasons button logic
+            reasonsButton.addEventListener('click', () => {
+                let newIndex;
+                do {
+                    newIndex = Math.floor(Math.random() * reasons.length);
+                } while (newIndex === lastReasonIndex);
+                
+                reasonText.style.animation = 'none';
+                void reasonText.offsetWidth; // Trigger reflow to restart animation
+                reasonText.style.animation = 'fadeIn 1s ease-in-out';
+                reasonText.textContent = reasons[newIndex];
+                lastReasonIndex = newIndex;
+            });
+            
+            // Gallery image change logic for manual buttons
+            window.changeImage = (direction) => {
+                clearInterval(galleryInterval); // Stop automatic rotation
+                currentImageIndex = (currentImageIndex + direction + galleryImages.length) % galleryImages.length;
+                setGalleryImage(currentImageIndex);
+                startGalleryRotation(); // Restart rotation after a manual change
+            };
+        });
+    </script>
+</body>
+</html>
