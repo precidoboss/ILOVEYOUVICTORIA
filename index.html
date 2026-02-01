@@ -3,362 +3,909 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>A Gift for Victoria</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <title>RANDOM - Chaos Onchain</title>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Creepster&family=Monoton&family=Rubik+Glitch&family=VT323&family=Black+Ops+One&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --chaos-1: #FF00FF;
+            --chaos-2: #00FF00;
+            --chaos-3: #FFFF00;
+            --chaos-4: #00FFFF;
+            --chaos-5: #FF0000;
+            --chaos-6: #0000FF;
+        }
+
         body {
-            font-family: 'Inter', sans-serif;
-            background-color: #fce8d5;
-        }
-        h1, h2 {
-            font-family: 'Dancing Script', cursive;
-        }
-
-        /* Envelope Animation */
-        #envelope-wrapper {
-            transition: all 1s ease-in-out;
-            cursor: pointer;
-        }
-        #envelope-wrapper.hidden {
-            opacity: 0;
-            transform: scale(0.8);
-            pointer-events: none;
-        }
-        #main-content {
-            opacity: 0;
-            transform: translateY(20px);
-            transition: opacity 1s ease-in-out, transform 1s ease-in-out;
-            pointer-events: none;
-        }
-        #main-content.visible {
-            opacity: 1;
-            transform: translateY(0);
-            pointer-events: all;
+            min-height: 100vh;
+            overflow-x: hidden;
+            background: linear-gradient(45deg, #000000, #1a1a1a, #000000);
+            position: relative;
+            font-family: 'VT323', monospace;
         }
 
-        /* Balloon Animation */
-        .balloon-container {
+        /* Chaotic background animation */
+        body::before {
+            content: '';
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            overflow: hidden;
+            background: 
+                repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,0,255,0.03) 2px, rgba(255,0,255,0.03) 4px),
+                repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(0,255,255,0.03) 2px, rgba(0,255,255,0.03) 4px);
+            animation: glitchBg 5s infinite;
             pointer-events: none;
-            z-index: 0;
-        }
-        .balloon {
-            position: absolute;
-            background-color: #fca5a5;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            bottom: -50px;
-            opacity: 0;
-            animation: float 10s ease-in-out infinite;
-        }
-        .balloon.pink { background-color: #f9a8d4; }
-        .balloon.purple { background-color: #a78bfa; }
-        .balloon.yellow { background-color: #fde047; }
-        .balloon.blue { background-color: #60a5fa; }
-        .balloon::before {
-            content: '';
-            position: absolute;
-            width: 0;
-            height: 0;
-            border-style: solid;
-            border-width: 0 5px 15px 5px;
-            border-color: transparent transparent #fca5a5 transparent;
-            bottom: -15px;
-            left: 50%;
-            transform: translateX(-50%);
-        }
-        .balloon.pink::before { border-color: transparent transparent #f9a8d4 transparent; }
-        .balloon.purple::before { border-color: transparent transparent #a78bfa transparent; }
-        .balloon.yellow::before { border-color: transparent transparent #fde047 transparent; }
-        .balloon.blue::before { border-color: transparent transparent #60a5fa transparent; }
-        @keyframes float {
-            0% { transform: translateY(0) scale(1) rotate(0deg); opacity: 0; }
-            10% { opacity: 1; }
-            90% { opacity: 1; }
-            100% { transform: translateY(-100vh) scale(1.2) rotate(360deg); opacity: 0; }
-        }
-        .balloon:nth-child(1) { animation-delay: 0s; animation-duration: 12s; }
-        .balloon:nth-child(2) { animation-delay: 2s; animation-duration: 10s; }
-        .balloon:nth-child(3) { animation-delay: 4s; animation-duration: 14s; }
-        .balloon:nth-child(4) { animation-delay: 6s; animation-duration: 11s; }
-        .balloon:nth-child(5) { animation-delay: 8s; animation-duration: 13s; }
-
-        /* Gift Box */
-        .gift-box-top {
-            transition: transform 0.5s ease-out, opacity 0.5s ease-out;
-            transform-origin: top center;
-        }
-        .gift-box-top.opened {
-            transform: rotateX(90deg) translateY(-20px);
-            opacity: 0;
+            z-index: 1;
         }
 
-        /* Timeline */
-        .timeline-item {
+        @keyframes glitchBg {
+            0%, 100% { transform: translate(0, 0); opacity: 1; }
+            10% { transform: translate(-2px, 2px); }
+            20% { transform: translate(2px, -2px); }
+            30% { transform: translate(-2px, -2px); opacity: 0.8; }
+            40% { transform: translate(2px, 2px); }
+            50% { transform: translate(-1px, 1px); opacity: 1; }
+        }
+
+        .container {
             position: relative;
-            padding-left: 2rem;
-            border-left: 2px solid #ef4444; /* red-500 */
+            z-index: 2;
+            padding: 20px;
         }
-        .timeline-item::before {
+
+        .logo {
+            font-family: 'Rubik Glitch', cursive;
+            font-size: clamp(3rem, 15vw, 12rem);
+            text-align: center;
+            background: linear-gradient(45deg, var(--chaos-1), var(--chaos-2), var(--chaos-3), var(--chaos-4), var(--chaos-5));
+            background-size: 400% 400%;
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: rainbowShift 3s ease infinite, shake 0.5s infinite;
+            text-shadow: 3px 3px 0 rgba(255,0,255,0.5), -3px -3px 0 rgba(0,255,255,0.5);
+            transform-origin: center;
+            margin: 40px 0;
+            position: relative;
+        }
+
+        @keyframes rainbowShift {
+            0% { background-position: 0% 50%; filter: hue-rotate(0deg); }
+            50% { background-position: 100% 50%; filter: hue-rotate(180deg); }
+            100% { background-position: 0% 50%; filter: hue-rotate(360deg); }
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translate(0, 0) rotate(0deg); }
+            25% { transform: translate(-2px, 2px) rotate(-1deg); }
+            50% { transform: translate(2px, -2px) rotate(1deg); }
+            75% { transform: translate(-2px, -2px) rotate(-0.5deg); }
+        }
+
+        .wallet-section {
+            text-align: center;
+            margin: 40px auto;
+            max-width: 600px;
+        }
+
+        .wallet-btn {
+            font-family: 'Black Ops One', cursive;
+            font-size: 1.5rem;
+            padding: 20px 40px;
+            background: linear-gradient(135deg, var(--chaos-1), var(--chaos-3), var(--chaos-4));
+            background-size: 200% 200%;
+            border: 5px solid var(--chaos-2);
+            color: #000;
+            cursor: pointer;
+            text-transform: uppercase;
+            animation: buttonPulse 2s infinite, borderFlash 0.3s infinite;
+            transition: all 0.3s;
+            box-shadow: 0 0 20px var(--chaos-1), 0 0 40px var(--chaos-4);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .wallet-btn:hover {
+            transform: scale(1.1) rotate(-2deg);
+            box-shadow: 0 0 40px var(--chaos-1), 0 0 80px var(--chaos-4);
+        }
+
+        .wallet-btn::before {
             content: '';
             position: absolute;
-            left: -8px;
-            top: 0;
-            width: 16px;
-            height: 16px;
-            border-radius: 50%;
-            background-color: #ef4444; /* red-500 */
-            border: 2px solid white;
-            box-shadow: 0 0 0 4px #ef4444;
-        }
-        .timeline-item:nth-child(odd) {
-            border-left: 2px solid #3b82f6; /* blue-500 */
-        }
-        .timeline-item:nth-child(odd)::before {
-            background-color: #3b82f6;
-            box-shadow: 0 0 0 4px #3b82f6;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, transparent, rgba(255,255,255,0.3), transparent);
+            animation: shine 3s infinite;
         }
 
-        /* Reasons Section */
-        #reasons-button {
-            transition: all 0.3s ease-in-out;
+        @keyframes buttonPulse {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
         }
-        #reasons-button:hover {
-            transform: scale(1.05);
-            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
+
+        @keyframes borderFlash {
+            0%, 100% { border-color: var(--chaos-2); }
+            50% { border-color: var(--chaos-5); }
         }
-        #reason-text {
-            animation: fadeIn 1s ease-in-out;
+
+        @keyframes shine {
+            0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
+            100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
         }
+
+        .wallet-info {
+            margin-top: 20px;
+            font-size: 1.2rem;
+            color: var(--chaos-2);
+            text-shadow: 0 0 10px var(--chaos-2);
+            font-family: 'VT323', monospace;
+        }
+
+        .actions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 30px;
+            margin: 60px auto;
+            max-width: 1400px;
+            perspective: 1000px;
+        }
+
+        .action-card {
+            background: rgba(0, 0, 0, 0.8);
+            border: 3px solid;
+            padding: 30px;
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+            animation: cardFloat 3s ease-in-out infinite;
+            transform-style: preserve-3d;
+        }
+
+        .action-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            animation: rotate 10s linear infinite;
+        }
+
+        @keyframes rotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes cardFloat {
+            0%, 100% { transform: translateY(0) rotateX(0deg); }
+            50% { transform: translateY(-10px) rotateX(5deg); }
+        }
+
+        .action-card:hover {
+            transform: scale(1.05) rotateZ(2deg) !important;
+            box-shadow: 0 0 30px currentColor;
+        }
+
+        .action-card h3 {
+            font-family: 'Monoton', cursive;
+            font-size: 2rem;
+            margin-bottom: 15px;
+            animation: colorCycle 5s infinite;
+        }
+
+        .action-card p {
+            font-size: 1.2rem;
+            line-height: 1.6;
+        }
+
+        @keyframes colorCycle {
+            0% { color: var(--chaos-1); }
+            20% { color: var(--chaos-2); }
+            40% { color: var(--chaos-3); }
+            60% { color: var(--chaos-4); }
+            80% { color: var(--chaos-5); }
+            100% { color: var(--chaos-1); }
+        }
+
+        .status-panel {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.9);
+            border: 3px solid var(--chaos-1);
+            padding: 20px;
+            max-width: 300px;
+            z-index: 1000;
+            font-family: 'VT323', monospace;
+            font-size: 1.1rem;
+            box-shadow: 0 0 20px var(--chaos-1);
+            animation: statusPulse 2s infinite;
+        }
+
+        @keyframes statusPulse {
+            0%, 100% { box-shadow: 0 0 20px var(--chaos-1); }
+            50% { box-shadow: 0 0 40px var(--chaos-1), 0 0 60px var(--chaos-4); }
+        }
+
+        .status-panel h4 {
+            color: var(--chaos-3);
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+
+        .status-log {
+            color: var(--chaos-2);
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .status-log div {
+            margin: 5px 0;
+            animation: fadeIn 0.5s;
+        }
+
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
+            from { opacity: 0; transform: translateX(-10px); }
+            to { opacity: 1; transform: translateX(0); }
         }
 
-        /* Gallery Transitions */
-        #gallery-image {
-            transition: opacity 1s ease-in-out;
+        /* Floating chaos particles */
+        .chaos-particle {
+            position: fixed;
+            pointer-events: none;
+            font-size: 2rem;
+            animation: float 10s infinite;
+            z-index: 0;
+            opacity: 0.3;
+        }
+
+        @keyframes float {
+            0% { transform: translateY(100vh) rotate(0deg); }
+            100% { transform: translateY(-100px) rotate(720deg); }
+        }
+
+        .disabled {
+            opacity: 0.5;
+            cursor: not-allowed !important;
+            pointer-events: none;
+        }
+
+        /* Random position modifiers */
+        .action-card:nth-child(1) { border-color: var(--chaos-1); animation-delay: 0s; }
+        .action-card:nth-child(2) { border-color: var(--chaos-2); animation-delay: 0.5s; }
+        .action-card:nth-child(3) { border-color: var(--chaos-3); animation-delay: 1s; }
+        .action-card:nth-child(4) { border-color: var(--chaos-4); animation-delay: 1.5s; }
+        .action-card:nth-child(5) { border-color: var(--chaos-5); animation-delay: 2s; }
+        .action-card:nth-child(6) { border-color: var(--chaos-6); animation-delay: 2.5s; }
+
+        /* Glitch effect for logo */
+        .logo::after {
+            content: 'RANDOM';
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: inherit;
+            -webkit-background-clip: text;
+            background-clip: text;
+            animation: glitch 8s infinite;
+            opacity: 0.8;
+        }
+
+        @keyframes glitch {
+            0%, 90%, 100% { transform: translate(0, 0); opacity: 0; }
+            91% { transform: translate(-10px, 0); opacity: 0.8; }
+            92% { transform: translate(10px, 0); opacity: 0.8; }
+            93% { transform: translate(-10px, 0); opacity: 0.8; }
+        }
+
+        .chaos-meter {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            font-family: 'VT323', monospace;
+            font-size: 1.5rem;
+            color: var(--chaos-1);
+            text-shadow: 0 0 10px var(--chaos-1);
+            z-index: 1000;
+        }
+
+        .chaos-meter span {
+            font-size: 2rem;
+            animation: numberFlicker 0.1s infinite;
+        }
+
+        @keyframes numberFlicker {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .network-badge {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(232, 65, 66, 0.9);
+            border: 3px solid #E84142;
+            padding: 15px 25px;
+            font-family: 'Black Ops One', cursive;
+            color: white;
+            font-size: 1.2rem;
+            text-shadow: 0 0 10px #E84142;
+            box-shadow: 0 0 20px #E84142;
+            z-index: 1000;
+            animation: networkPulse 2s infinite;
+        }
+
+        @keyframes networkPulse {
+            0%, 100% { box-shadow: 0 0 20px #E84142; }
+            50% { box-shadow: 0 0 40px #E84142, 0 0 60px #E84142; }
+        }
+
+        .task-completed {
+            opacity: 0.6;
+            position: relative;
+        }
+
+        .task-completed::after {
+            content: '✓ COMPLETED';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 255, 0, 0.9);
+            color: black;
+            padding: 10px 20px;
+            font-family: 'Black Ops One', cursive;
+            font-size: 1.5rem;
+            border: 3px solid #00ff00;
+            box-shadow: 0 0 20px #00ff00;
+            z-index: 10;
+        }
+
+        .action-card button {
+            margin-top: 15px;
+            padding: 12px 24px;
+            background: linear-gradient(135deg, var(--chaos-1), var(--chaos-3));
+            border: 2px solid currentColor;
+            color: #000;
+            font-family: 'Black Ops One', cursive;
+            font-size: 1rem;
+            cursor: pointer;
+            text-transform: uppercase;
+            transition: all 0.3s;
+        }
+
+        .action-card button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 20px currentColor;
+        }
+
+        .action-card button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .link-button {
+            background: linear-gradient(135deg, #00FFFF, #0000FF) !important;
+            margin-right: 10px;
+        }
+
+        .verify-button {
+            background: linear-gradient(135deg, #FF00FF, #FF0000) !important;
         }
     </style>
 </head>
-<body class="overflow-x-hidden flex flex-col items-center justify-center min-h-screen relative p-4">
+<body>
+    <div class="chaos-meter">
+        CHAOS LEVEL: <span id="chaosLevel">0</span>%
+    </div>
 
-    <!-- The Envelope Wrapper -->
-    <div id="envelope-wrapper" class="relative w-full max-w-sm z-30">
-        <!-- Envelope Flap -->
-        <div id="envelope-flap" class="envelope-flap absolute top-0 z-20 w-full h-1/2 overflow-hidden">
-            <div class="absolute w-full h-full border-b-[200px] border-l-[200px] border-r-[200px] border-b-white border-l-transparent border-r-transparent rounded-t-lg"></div>
+    <div class="network-badge">
+        ⛰️ AVAX C-CHAIN
+    </div>
+
+    <div class="container">
+        <h1 class="logo">RANDOM</h1>
+
+        <div class="wallet-section">
+            <button class="wallet-btn" id="connectBtn">CONNECT WALLET</button>
+            <div class="wallet-info" id="walletInfo"></div>
         </div>
-        <!-- Envelope Body -->
-        <div id="envelope-body" class="relative z-10 w-full aspect-video rounded-lg bg-white shadow-xl flex items-center justify-center p-6 text-center">
-            <h1 class="text-xl sm:text-2xl font-bold text-gray-800">A Special Message from Precious</h1>
+
+        <div class="actions-grid" id="actionsGrid">
+            <!-- Actions will be dynamically generated -->
         </div>
     </div>
-    
-    <!-- Balloon Container -->
-    <div id="balloon-container" class="balloon-container hidden">
-        <div class="balloon pink" style="left: 10%;"></div>
-        <div class="balloon purple" style="left: 30%;"></div>
-        <div class="balloon yellow" style="left: 50%;"></div>
-        <div class="balloon blue" style="left: 70%;"></div>
-        <div class="balloon pink" style="left: 90%;"></div>
+
+    <div class="status-panel">
+        <h4>⚡ Activity Log</h4>
+        <div class="status-log" id="statusLog">
+            <div>System initialized...</div>
+        </div>
     </div>
 
-    <!-- Main Content (Hidden initially) -->
-    <div id="main-content" class="w-full max-w-4xl p-8 bg-white/80 backdrop-blur-md rounded-2xl shadow-2xl space-y-12 text-center relative z-20">
-
-        <!-- Header Section -->
-        <header class="space-y-4">
-            <h1 class="text-5xl sm:text-7xl font-bold text-[#7e5c46] leading-tight">For Victoria, My Love</h1>
-            <p class="text-base sm:text-lg text-gray-700 max-w-2xl mx-auto">
-                This is just a small token of my immense love for you. I wanted to create a space that celebrates all the wonderful things that make you, you.
-            </p>
-        </header>
-
-        <!-- Our Journey Section -->
-        <section class="space-y-8">
-            <h2 class="text-4xl sm:text-5xl font-bold text-[#7e5c46]">Our Journey</h2>
-            <div class="relative flex flex-col items-start space-y-12 p-4">
-                <div class="timeline-item">
-                    <h3 class="text-xl font-semibold text-gray-800">The Day We Met</h3>
-                    <p class="text-gray-600 mt-1">
-                        I still remember the first time I saw you. It felt like the start of something truly special.
-                    </p>
-                </div>
-                <div class="timeline-item">
-                    <h3 class="text-xl font-semibold text-gray-800">Our First Date</h3>
-                    <p class="text-gray-600 mt-1">
-                        Laughing and talking for hours, completely losing track of time. It was a perfect day.
-                    </p>
-                </div>
-                <div class="timeline-item">
-                    <h3 class="text-xl font-semibold text-gray-800">Falling in Love</h3>
-                    <p class="text-gray-600 mt-1">
-                        The moment I knew my life was forever changed. My heart belongs to you.
-                    </p>
-                </div>
-            </div>
-        </section>
-
-        <!-- Image Gallery Section -->
-        <section class="space-y-8">
-            <h2 class="text-4xl sm:text-5xl font-bold text-[#7e5c46]">Memories of Us</h2>
-            <div class="relative w-full max-w-lg mx-auto">
-                <img id="gallery-image" src="" alt="A photo of us" class="w-full h-auto rounded-xl shadow-lg border-4 border-white object-cover">
-                <div class="flex justify-center mt-4 space-x-2">
-                    <button class="bg-[#ef4444] text-white px-4 py-2 rounded-full font-bold shadow-lg hover:bg-[#dc2626] transition-colors" onclick="changeImage(-1)">Previous</button>
-                    <button class="bg-[#3b82f6] text-white px-4 py-2 rounded-full font-bold shadow-lg hover:bg-[#2563eb] transition-colors" onclick="changeImage(1)">Next</button>
-                </div>
-            </div>
-        </section>
-
-        <!-- Reasons I Love You Section -->
-        <section class="space-y-8">
-            <h2 class="text-4xl sm:text-5xl font-bold text-[#7e5c46]">Reasons I Love You</h2>
-            <div class="flex flex-col items-center justify-center">
-                <p id="reason-text" class="text-xl italic text-gray-700 max-w-2xl mx-auto mb-4 min-h-[5rem] flex items-center justify-center">
-                    Click the button below to discover a reason.
-                </p>
-                <button id="reasons-button" class="bg-pink-500 text-white px-8 py-4 rounded-full font-bold text-lg shadow-lg">
-                    Discover a Reason
-                </button>
-            </div>
-        </section>
-        
-        <!-- The Gift Box -->
-        <section id="gift-box-section" class="pt-8">
-            <h2 class="text-4xl sm:text-5xl font-bold text-[#7e5c46]">Open Your Gift!</h2>
-            <p class="text-gray-600 mt-2">Click the box below to reveal a surprise message.</p>
-            <div id="gift-box" class="relative w-48 h-48 mx-auto mt-6 cursor-pointer transform hover:scale-105 transition-transform duration-300">
-                <!-- Gift Box Body -->
-                <div class="absolute bottom-0 w-full h-3/4 rounded-b-xl bg-red-500 shadow-xl"></div>
-                <!-- Gift Box Top -->
-                <div id="gift-box-top" class="gift-box-top absolute top-0 w-full h-1/2 rounded-t-xl bg-red-700 shadow-xl"></div>
-                <!-- Ribbon -->
-                <div class="absolute inset-y-0 left-1/2 w-4 bg-red-900 transform -translate-x-1/2"></div>
-                <div class="absolute inset-x-0 top-1/2 h-4 bg-red-900 transform -translate-y-1/2"></div>
-                <!-- Bow -->
-                <div class="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-yellow-400"></div>
-                <div class="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-yellow-500"></div>
-            </div>
-            <!-- Gift Box Message (hidden) -->
-            <div id="gift-message" class="hidden mt-6 bg-yellow-100 p-6 rounded-xl shadow-inner max-w-lg mx-auto transition-all duration-500 transform scale-90 opacity-0">
-                <p class="text-xl font-semibold text-gray-800">
-                    My dearest Victoria, every day with you is a gift. You've taught me what true happiness is, and I can't wait to see what adventures the future holds for us. You are my everything.
-                </p>
-            </div>
-        </section>
-
-    </div>
-
+    <script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const envelopeWrapper = document.getElementById('envelope-wrapper');
-            const mainContent = document.getElementById('main-content');
-            const balloonContainer = document.getElementById('balloon-container');
-            const giftBox = document.getElementById('gift-box');
-            const giftBoxTop = document.getElementById('gift-box-top');
-            const giftMessage = document.getElementById('gift-message');
-            const reasonsButton = document.getElementById('reasons-button');
-            const reasonText = document.getElementById('reason-text');
-            const galleryImage = document.getElementById('gallery-image');
+        // Chaos state
+        let connected = false;
+        let chaosLevel = 0;
+        let userAddress = null;
+        let provider = null;
+        let signer = null;
 
-            // Array of images for the gallery
-            const galleryImages = [
-                'https://i.imgur.com/TQzCfRY.jpg', // Our first photo
-                'https://i.imgur.com/R0bMgIf.jpg', // Our favorite memory
-                'https://i.imgur.com/J2wBJpS.jpg', // Adventure
-            ];
-            let currentImageIndex = 0;
-            let galleryInterval;
+        // AVAX C-Chain Configuration
+        const AVAX_CHAIN_ID = '0xa86a'; // 43114 in hex
+        const AVAX_CHAIN_PARAMS = {
+            chainId: AVAX_CHAIN_ID,
+            chainName: 'Avalanche C-Chain',
+            nativeCurrency: {
+                name: 'AVAX',
+                symbol: 'AVAX',
+                decimals: 18
+            },
+            rpcUrls: ['https://api.avax.network/ext/bc/C/rpc'],
+            blockExplorerUrls: ['https://snowtrace.io/']
+        };
 
-            // Function to change the gallery image
-            const setGalleryImage = (index) => {
-                galleryImage.style.opacity = 0;
-                setTimeout(() => {
-                    galleryImage.src = galleryImages[index];
-                    galleryImage.style.opacity = 1;
-                }, 500); // Wait for fade-out before changing src
-            };
+        const BURN_ADDRESS = '0x000000000000000000000000000000000000dEaD';
+        const VERIFICATION_AMOUNT = '0.00001'; // AVAX
 
-            // Function to start the automatic image rotation
-            const startGalleryRotation = () => {
-                galleryInterval = setInterval(() => {
-                    currentImageIndex = (currentImageIndex + 1) % galleryImages.length;
-                    setGalleryImage(currentImageIndex);
-                }, 3000); // Change image every 3 seconds
-            };
+        // Task completion tracking
+        const completedTasks = new Set();
 
-            // Set the initial image
-            if (galleryImages.length > 0) {
-                setGalleryImage(currentImageIndex);
-                startGalleryRotation();
+        // Real AVAX tasks
+        const randomActions = [
+            {
+                id: 'follow_precidobos',
+                name: "FOLLOW @PRECIDOBOS",
+                description: "Follow @Precidobos on Twitter, then send 0.00001 AVAX to burn address to verify",
+                emoji: "🐦",
+                type: 'social',
+                link: 'https://twitter.com/Precidobos',
+                chaos: () => 15,
+                requiresTx: true
+            },
+            {
+                id: 'check_erol',
+                name: "CHECK $EROL",
+                description: "Check out $EROL on DexScreener, then burn 0.00001 AVAX to confirm",
+                emoji: "📊",
+                type: 'research',
+                link: 'https://dexscreener.com/avalanche',
+                chaos: () => 20,
+                requiresTx: true
+            },
+            {
+                id: 'visit_trader_joe',
+                name: "VISIT TRADER JOE",
+                description: "Visit TraderJoe DEX and explore, verify with 0.00001 AVAX burn",
+                emoji: "🔄",
+                type: 'defi',
+                link: 'https://traderjoexyz.com/',
+                chaos: () => 18,
+                requiresTx: true
+            },
+            {
+                id: 'check_avalanche',
+                name: "EXPLORE AVALANCHE",
+                description: "Visit Avalanche official site, learn about the ecosystem, burn to verify",
+                emoji: "🏔️",
+                type: 'education',
+                link: 'https://www.avax.network/',
+                chaos: () => 12,
+                requiresTx: true
+            },
+            {
+                id: 'random_swap',
+                name: "RANDOM SWAP",
+                description: "Make a small swap on any AVAX DEX (use your own judgment!)",
+                emoji: "💱",
+                type: 'onchain',
+                chaos: () => 25,
+                requiresTx: false
+            },
+            {
+                id: 'send_chaos',
+                name: "SEND CHAOS",
+                description: "Send 0.00001 AVAX to a random address for pure chaos",
+                emoji: "🎲",
+                type: 'onchain',
+                chaos: () => 30,
+                requiresTx: false
+            },
+            {
+                id: 'check_snowtrace',
+                name: "SNOWTRACE DIVE",
+                description: "Explore recent transactions on Snowtrace, verify with burn",
+                emoji: "🔍",
+                type: 'research',
+                link: 'https://snowtrace.io/',
+                chaos: () => 10,
+                requiresTx: true
+            },
+            {
+                id: 'visit_benqi',
+                name: "BENQI PROTOCOL",
+                description: "Check out BENQI lending protocol, burn to confirm visit",
+                emoji: "🏦",
+                type: 'defi',
+                link: 'https://benqi.fi/',
+                chaos: () => 16,
+                requiresTx: true
+            },
+            {
+                id: 'chaos_donation',
+                name: "CHAOS DONATION",
+                description: "Donate 0.0001 AVAX to the void (burn address)",
+                emoji: "🔥",
+                type: 'onchain',
+                chaos: () => 35,
+                requiresTx: false
+            },
+            {
+                id: 'twitter_share',
+                name: "SHARE CHAOS",
+                description: "Tweet about RANDOM game, verify with 0.00001 AVAX burn",
+                emoji: "📢",
+                type: 'social',
+                link: 'https://twitter.com/intent/tweet?text=Just%20played%20RANDOM%20on%20AVAX%20chain%20%F0%9F%94%A5%20Pure%20chaos!',
+                chaos: () => 22,
+                requiresTx: true
+            },
+            {
+                id: 'check_pangolin',
+                name: "PANGOLIN DEX",
+                description: "Visit Pangolin DEX, explore pools, burn to verify",
+                emoji: "🐧",
+                type: 'defi',
+                link: 'https://pangolin.exchange/',
+                chaos: () => 17,
+                requiresTx: true
+            },
+            {
+                id: 'avax_bridge',
+                name: "BRIDGE EXPLORER",
+                description: "Check out Avalanche Bridge, learn about cross-chain, verify",
+                emoji: "🌉",
+                type: 'education',
+                link: 'https://core.app/bridge/',
+                chaos: () => 14,
+                requiresTx: true
+            }
+        ];
+
+        // Initialize floating particles
+        function createChaosParticles() {
+            const particles = ['⚡', '🔥', '💀', '👾', '🌈', '💥', '✨', '🎲'];
+            for (let i = 0; i < 20; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'chaos-particle';
+                particle.textContent = particles[Math.floor(Math.random() * particles.length)];
+                particle.style.left = Math.random() * 100 + '%';
+                particle.style.animationDuration = (Math.random() * 10 + 5) + 's';
+                particle.style.animationDelay = Math.random() * 5 + 's';
+                document.body.appendChild(particle);
+            }
+        }
+
+        // Render action cards
+        function renderActions() {
+            const grid = document.getElementById('actionsGrid');
+            grid.innerHTML = '';
+            
+            randomActions.forEach((action, index) => {
+                const card = document.createElement('div');
+                card.className = 'action-card';
+                if (!connected) card.classList.add('disabled');
+                if (completedTasks.has(action.id)) card.classList.add('task-completed');
+                
+                let buttons = '';
+                if (action.link) {
+                    buttons += `<button class="link-button" onclick="openLink('${action.link}', '${action.id}')">OPEN LINK</button>`;
+                }
+                if (action.requiresTx) {
+                    buttons += `<button class="verify-button" onclick="verifyTask('${action.id}')">VERIFY (Burn 0.00001 AVAX)</button>`;
+                } else if (action.type === 'onchain') {
+                    buttons += `<button class="verify-button" onclick="executeOnchainAction('${action.id}')">EXECUTE</button>`;
+                }
+                
+                card.innerHTML = `
+                    <h3>${action.emoji} ${action.name}</h3>
+                    <p>${action.description}</p>
+                    <div>${buttons}</div>
+                `;
+                
+                grid.appendChild(card);
+            });
+        }
+
+        // Open external link
+        window.openLink = function(url, taskId) {
+            addLog(`🔗 Opening: ${randomActions.find(a => a.id === taskId).name}`);
+            window.open(url, '_blank');
+        }
+
+        // Verify task with burn transaction
+        window.verifyTask = async function(taskId) {
+            if (!connected || !signer) {
+                addLog('❌ Please connect wallet first!');
+                return;
             }
 
-            // Array of reasons I love Victoria
-            const reasons = [
-                "Your smile brightens up my entire day.",
-                "You have the kindest heart I've ever known.",
-                "I love how you laugh at my silly jokes.",
-                "You're the most supportive person in my life.",
-                "Your intelligence and wit constantly amaze me.",
-                "You make every ordinary moment feel like a new adventure.",
-                "I love the way you see the best in everyone.",
-                "Just being with you feels like home.",
-            ];
-            let lastReasonIndex = -1;
+            const action = randomActions.find(a => a.id === taskId);
+            if (completedTasks.has(taskId)) {
+                addLog('⚠️ Task already completed!');
+                return;
+            }
 
-            // Envelope opening logic
-            envelopeWrapper.addEventListener('click', () => {
-                envelopeWrapper.classList.add('hidden');
-                setTimeout(() => {
-                    mainContent.classList.add('visible');
-                    balloonContainer.classList.remove('hidden');
-                }, 1000); // Delay to sync with envelope transition
-            });
-
-            // Gift box opening logic
-            giftBox.addEventListener('click', () => {
-                giftBoxTop.classList.add('opened');
-                giftMessage.classList.remove('hidden', 'opacity-0', 'scale-90');
-                setTimeout(() => {
-                    giftMessage.classList.add('visible-content');
-                }, 500);
-            });
-
-            // Reasons button logic
-            reasonsButton.addEventListener('click', () => {
-                let newIndex;
-                do {
-                    newIndex = Math.floor(Math.random() * reasons.length);
-                } while (newIndex === lastReasonIndex);
+            try {
+                addLog(`🔥 Preparing burn transaction for: ${action.name}`);
                 
-                reasonText.style.animation = 'none';
-                void reasonText.offsetWidth; // Trigger reflow to restart animation
-                reasonText.style.animation = 'fadeIn 1s ease-in-out';
-                reasonText.textContent = reasons[newIndex];
-                lastReasonIndex = newIndex;
-            });
+                const tx = await signer.sendTransaction({
+                    to: BURN_ADDRESS,
+                    value: ethers.utils.parseEther(VERIFICATION_AMOUNT)
+                });
+
+                addLog(`⏳ Transaction sent: ${tx.hash.slice(0, 10)}...`);
+                addLog(`🔗 View on Snowtrace: snowtrace.io/tx/${tx.hash}`);
+                
+                const receipt = await tx.wait();
+                
+                if (receipt.status === 1) {
+                    completedTasks.add(taskId);
+                    const chaosGain = action.chaos();
+                    chaosLevel = Math.min(100, chaosLevel + chaosGain);
+                    
+                    addLog(`✅ VERIFIED! ${action.name} completed!`);
+                    addLog(`📈 Chaos +${chaosGain}% (Total: ${chaosLevel}%)`);
+                    updateChaosLevel();
+                    renderActions();
+                    
+                    if (Math.random() > 0.6) {
+                        triggerChaosEvent();
+                    }
+                } else {
+                    addLog('❌ Transaction failed!');
+                }
+                
+            } catch (error) {
+                console.error(error);
+                if (error.code === 4001) {
+                    addLog('❌ Transaction rejected by user');
+                } else if (error.code === -32603) {
+                    addLog('❌ Insufficient AVAX balance');
+                } else {
+                    addLog(`❌ Error: ${error.message || 'Transaction failed'}`);
+                }
+            }
+        }
+
+        // Execute onchain actions
+        window.executeOnchainAction = async function(taskId) {
+            if (!connected || !signer) {
+                addLog('❌ Please connect wallet first!');
+                return;
+            }
+
+            const action = randomActions.find(a => a.id === taskId);
             
-            // Gallery image change logic for manual buttons
-            window.changeImage = (direction) => {
-                clearInterval(galleryInterval); // Stop automatic rotation
-                currentImageIndex = (currentImageIndex + direction + galleryImages.length) % galleryImages.length;
-                setGalleryImage(currentImageIndex);
-                startGalleryRotation(); // Restart rotation after a manual change
-            };
-        });
+            try {
+                addLog(`⚡ Executing: ${action.name}`);
+                
+                let tx;
+                if (taskId === 'send_chaos') {
+                    const randomAddress = '0x' + [...Array(40)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');
+                    tx = await signer.sendTransaction({
+                        to: randomAddress,
+                        value: ethers.utils.parseEther('0.00001')
+                    });
+                } else if (taskId === 'chaos_donation') {
+                    tx = await signer.sendTransaction({
+                        to: BURN_ADDRESS,
+                        value: ethers.utils.parseEther('0.0001')
+                    });
+                } else if (taskId === 'random_swap') {
+                    addLog('💡 Please use TraderJoe or Pangolin for swaps!');
+                    return;
+                }
+
+                if (tx) {
+                    addLog(`⏳ Transaction sent: ${tx.hash.slice(0, 10)}...`);
+                    const receipt = await tx.wait();
+                    
+                    if (receipt.status === 1) {
+                        completedTasks.add(taskId);
+                        const chaosGain = action.chaos();
+                        chaosLevel = Math.min(100, chaosLevel + chaosGain);
+                        
+                        addLog(`✅ ${action.name} complete!`);
+                        addLog(`📈 Chaos +${chaosGain}% (Total: ${chaosLevel}%)`);
+                        updateChaosLevel();
+                        renderActions();
+                    }
+                }
+                
+            } catch (error) {
+                console.error(error);
+                if (error.code === 4001) {
+                    addLog('❌ Transaction rejected');
+                } else {
+                    addLog(`❌ Error: ${error.message || 'Failed'}`);
+                }
+            }
+        }
+
+        // Mock wallet connection
+        async function connectWallet() {
+            const btn = document.getElementById('connectBtn');
+            const info = document.getElementById('walletInfo');
+            
+            addLog('🔌 Connecting to wallet...');
+            
+            if (typeof window.ethereum !== 'undefined') {
+                try {
+                    addLog('🦊 MetaMask detected!');
+                    
+                    // Request accounts
+                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    
+                    // Check if on Avalanche network
+                    const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+                    
+                    if (chainId !== AVAX_CHAIN_ID) {
+                        addLog('⚠️ Wrong network! Switching to Avalanche...');
+                        try {
+                            await window.ethereum.request({
+                                method: 'wallet_switchEthereumChain',
+                                params: [{ chainId: AVAX_CHAIN_ID }],
+                            });
+                        } catch (switchError) {
+                            // This error code indicates that the chain has not been added to MetaMask
+                            if (switchError.code === 4902) {
+                                try {
+                                    await window.ethereum.request({
+                                        method: 'wallet_addEthereumChain',
+                                        params: [AVAX_CHAIN_PARAMS],
+                                    });
+                                } catch (addError) {
+                                    addLog('❌ Failed to add Avalanche network');
+                                    return;
+                                }
+                            } else {
+                                addLog('❌ Failed to switch network');
+                                return;
+                            }
+                        }
+                    }
+                    
+                    // Setup provider and signer
+                    provider = new ethers.providers.Web3Provider(window.ethereum);
+                    signer = provider.getSigner();
+                    userAddress = accounts[0];
+                    connected = true;
+                    
+                    // Get AVAX balance
+                    const balance = await provider.getBalance(userAddress);
+                    const avaxBalance = ethers.utils.formatEther(balance);
+                    
+                    btn.textContent = 'CONNECTED ⛰️';
+                    btn.style.background = 'linear-gradient(135deg, #E84142, #E84142)';
+                    info.innerHTML = `${userAddress.slice(0, 6)}...${userAddress.slice(-4)}<br>Balance: ${parseFloat(avaxBalance).toFixed(4)} AVAX`;
+                    
+                    addLog(`✅ Connected: ${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`);
+                    addLog(`💰 Balance: ${parseFloat(avaxBalance).toFixed(4)} AVAX`);
+                    renderActions();
+                    
+                    // Listen for account changes
+                    window.ethereum.on('accountsChanged', (accounts) => {
+                        if (accounts.length === 0) {
+                            location.reload();
+                        } else {
+                            location.reload();
+                        }
+                    });
+                    
+                    // Listen for chain changes
+                    window.ethereum.on('chainChanged', (chainId) => {
+                        location.reload();
+                    });
+                    
+                } catch (error) {
+                    console.error(error);
+                    addLog('❌ Connection failed: ' + error.message);
+                }
+            } else {
+                addLog('❌ No wallet detected!');
+                addLog('💡 Install MetaMask to play: metamask.io');
+                
+                // Open MetaMask download page
+                setTimeout(() => {
+                    if (confirm('MetaMask not detected. Install MetaMask?')) {
+                        window.open('https://metamask.io/download/', '_blank');
+                    }
+                }, 1000);
+            }
+        }
+
+        // Update chaos level display
+        function updateChaosLevel() {
+            const display = document.getElementById('chaosLevel');
+            display.textContent = chaosLevel;
+            
+            // Change colors based on chaos level
+            if (chaosLevel > 75) {
+                document.documentElement.style.setProperty('--chaos-1', '#FF0000');
+            } else if (chaosLevel > 50) {
+                document.documentElement.style.setProperty('--chaos-1', '#FF8800');
+            }
+        }
+
+        // Random chaos events
+        function triggerChaosEvent() {
+            const events = [
+                '🎰 AVALANCHE BONUS: +10 chaos points!',
+                '⛰️ SNOWSTORM: Network congestion incoming...',
+                '🎲 LUCKY VALIDATOR: Your transaction got priority!',
+                '👻 PHANTOM TRANSACTION: Already confirmed on subnet 42',
+                '🔮 PROPHECY: AVAX will reach new heights',
+                '⚠️ WARNING: Too much chaos. Avalanche consensus engaged.',
+                '🎪 SUBNET CIRCUS: Reality fragmenting across chains',
+                '🌈 RED PROTOCOL: Maximum chaos aesthetic achieved',
+                '❄️ FREEZE DETECTED: Time to chill and HODL',
+                '🔥 BURN COMPLETE: 0.00001 AVAX sacrificed to the void'
+            ];
+            
+            addLog(events[Math.floor(Math.random() * events.length)]);
+        }
+
+        // Add to activity log
+        function addLog(message) {
+            const log = document.getElementById('statusLog');
+            const entry = document.createElement('div');
+            entry.textContent = `> ${message}`;
+            log.insertBefore(entry, log.firstChild);
+            
+            // Keep only last 10 entries
+            while (log.children.length > 10) {
+                log.removeChild(log.lastChild);
+            }
+        }
+
+        // Event listeners
+        document.getElementById('connectBtn').addEventListener('click', connectWallet);
+
+        // Initialize
+        createChaosParticles();
+        renderActions();
+
+        // Random background color shifts
+        setInterval(() => {
+            const colors = ['#FF00FF', '#00FF00', '#FFFF00', '#00FFFF', '#FF0000', '#0000FF'];
+            const randomColor = colors[Math.floor(Math.random() * colors.length)];
+            document.body.style.background = `linear-gradient(${Math.random() * 360}deg, #000000, ${randomColor}22, #000000)`;
+        }, 5000);
+
+        // Random chaos level fluctuation
+        setInterval(() => {
+            if (connected && chaosLevel > 0) {
+                chaosLevel = Math.max(0, chaosLevel - Math.floor(Math.random() * 3));
+                updateChaosLevel();
+            }
+        }, 3000);
     </script>
 </body>
 </html>
