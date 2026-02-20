@@ -1471,74 +1471,199 @@ if (window.ethereum) {
 }
 
 // ─── LOAD NFTS ───────────────────────────────────────────────────
+// Strategy: no ERC721Enumerable assumed.
+// 1. balanceOf(wallet) → how many tokens
+// 2. eth_getLogs Transfer events TO this wallet → collect token IDs received
+// 3. eth_getLogs Transfer events FROM this wallet → collect token IDs sent away
+// 4. remaining = received - sent = currently owned
+// 5. Confirm each with ownerOf (filter any stale ones)
+// 6. Fetch tokenURI + metadata for confirmed IDs
+
+const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+
+function padAddr(addr) {
+  return '0x' + addr.toLowerCase().replace('0x','').padStart(64,'0');
+}
+
+async function getLogsAllChunks(filter) {
+  const latestHex   = await rpcCall('eth_blockNumber', []);
+  const latestBlock = parseInt(latestHex, 16);
+  let allLogs = [];
+
+  async function fetchRange(from, to) {
+    if (from > to) return;
+    try {
+      const logs = await rpcCall('eth_getLogs', [{
+        ...filter,
+        fromBlock: '0x' + from.toString(16),
+        toBlock:   '0x' + to.toString(16),
+      }]);
+      allLogs = allLogs.concat(logs);
+    } catch (e) {
+      const msg = (e.message || '').toLowerCase();
+      if ((msg.includes('too large') || msg.includes('range') || msg.includes('limit') || msg.includes('exceed')) && to > from) {
+        const mid = Math.floor((from + to) / 2);
+        await fetchRange(from, mid);
+        await fetchRange(mid + 1, to);
+      } else {
+        console.warn('getLogs failed (' + from + '-' + to + '):', e.message);
+      }
+    }
+  }
+
+  const CHUNK = 50000;
+  for (let from = 0; from <= latestBlock; from += CHUNK) {
+    const to = Math.min(from + CHUNK - 1, latestBlock);
+    await fetchRange(from, to);
+  }
+  return allLogs;
+}
+
+function tokenIdFromLog(log) {
+  // ERC-721 Transfer: topics = [sig, from, to] and tokenId in topics[3] OR data
+  if (log.topics && log.topics[3]) {
+    return Number(BigInt(log.topics[3]));
+  }
+  // Some contracts put tokenId in data
+  if (log.data && log.data !== '0x' && log.data.length >= 66) {
+    return Number(BigInt(log.data.slice(0, 66)));
+  }
+  return null;
+}
+
 async function loadNFTs() {
   if (!walletAddr || isFetching) return;
   isFetching = true;
-  setStatus('Fetching your HenVerse hens from The Grotto…');
 
-  // Spinner
-  const refreshBtn = document.getElementById('refresh-btn');
+  const refreshBtn  = document.getElementById('refresh-btn');
   const refreshBtn2 = document.getElementById('refresh-nfts-btn');
   refreshBtn.classList.add('spinning');
-
   const grid = document.getElementById('nft-grid');
   grid.innerHTML = '';
-
-  // Skeleton placeholders
-  for (let i = 0; i < 4; i++) {
-    const sk = document.createElement('div');
-    sk.className = 'skeleton';
-    grid.appendChild(sk);
+  for (let i = 0; i < 6; i++) {
+    const sk = document.createElement('div'); sk.className = 'skeleton'; grid.appendChild(sk);
   }
 
   try {
-    // 1. Total supply
-    const tsHex = await ethCall('totalSupply()');
-    const totalSupply = Number(decodeUint256(tsHex));
+    // ── Step 1: Total supply (best-effort, non-blocking) ──
+    let totalSupplyDisplay = '?';
+    try {
+      const tsHex = await ethCall('totalSupply()');
+      totalSupplyDisplay = Number(decodeUint256(tsHex)).toLocaleString();
+    } catch {}
 
-    // 2. User balance
-    const balHex = await ethCall('balanceOf(address)', walletAddr);
-    const balance = Number(decodeUint256(balHex));
+    // ── Step 2: Scan ALL Transfer logs for this contract ──
+    // We get both directions at once and compute current ownership from event history.
+    // This works for ANY ERC-721 regardless of whether it implements Enumerable.
+    setStatus('Scanning Transfer events on The Grotto… (first load may take ~15s)');
 
-    document.getElementById('stat-hens').textContent = balance;
+    const addrPadded = padAddr(walletAddr);
+
+    // Fetch logs TO this address and FROM this address in parallel
+    const [logsIn, logsOut] = await Promise.all([
+      getLogsAllChunks({ address: NFT_CONTRACT, topics: [TRANSFER_TOPIC, null, addrPadded] }),
+      getLogsAllChunks({ address: NFT_CONTRACT, topics: [TRANSFER_TOPIC, addrPadded, null] }),
+    ]);
+
+    // ── Step 3: Build ownership map from log history ──
+    // For each tokenId: track the block number of last transfer IN and last transfer OUT.
+    // If last-in > last-out → currently owned by this wallet.
+    const received = new Map(); // tokenId → highest blockNumber received
+    for (const log of logsIn) {
+      const id = tokenIdFromLog(log);
+      if (id === null || id === undefined) continue;
+      const bn = parseInt(log.blockNumber, 16);
+      if (!received.has(id) || bn > received.get(id)) received.set(id, bn);
+    }
+    const sentOut = new Map(); // tokenId → highest blockNumber sent
+    // Also exclude mints FROM zero address being treated as "sent from wallet"
+    const ZERO_PAD = '0x' + '0'.repeat(64);
+    for (const log of logsOut) {
+      // Skip if the "from" topic is zero address (these are mint events, not real transfers out)
+      if (log.topics && log.topics[1] === ZERO_PAD) continue;
+      const id = tokenIdFromLog(log);
+      if (id === null || id === undefined) continue;
+      const bn = parseInt(log.blockNumber, 16);
+      if (!sentOut.has(id) || bn > sentOut.get(id)) sentOut.set(id, bn);
+    }
+
+    // Candidate IDs = tokens where last received block > last sent block
+    let candidateIds = [];
+    for (const [id, inBlock] of received) {
+      const outBlock = sentOut.get(id) ?? -1;
+      if (inBlock > outBlock) candidateIds.push(id);
+    }
+    candidateIds.sort((a, b) => a - b);
+
+    // ── Step 4: Confirm with ownerOf (catches edge cases like re-sold tokens) ──
+    setStatus(`Verifying ownership of ${candidateIds.length} candidate token(s)…`);
+    const BATCH = 15;
+    const confirmedIds = [];
+    for (let i = 0; i < candidateIds.length; i += BATCH) {
+      const batch = candidateIds.slice(i, i + BATCH);
+      const results = await Promise.allSettled(batch.map(id =>
+        rpcCall('eth_call', [{
+          to: NFT_CONTRACT,
+          data: '0x' + SEL['ownerOf(uint256)'] + BigInt(id).toString(16).padStart(64, '0')
+        }, 'latest'])
+      ));
+      for (let j = 0; j < batch.length; j++) {
+        const r = results[j];
+        if (r.status === 'fulfilled' && r.value && r.value.length >= 42) {
+          // ownerOf returns a padded address — last 40 hex chars
+          const ownerRaw = '0x' + r.value.slice(-40);
+          if (ownerRaw.toLowerCase() === walletAddr.toLowerCase()) {
+            confirmedIds.push(batch[j]);
+          }
+        }
+        // If ownerOf reverted or errored, trust the log-based result
+        else if (r.status === 'rejected') {
+          confirmedIds.push(batch[j]);
+        }
+      }
+    }
+    confirmedIds.sort((a, b) => a - b);
+
+    // ── Step 5: balanceOf for display (best-effort) ──
+    let balanceDisplay = confirmedIds.length;
+    try {
+      const balHex = await ethCall('balanceOf(address)', walletAddr);
+      balanceDisplay = Number(decodeUint256(balHex));
+    } catch {}
+
+    // Update UI counts
+    document.getElementById('stat-hens').textContent = balanceDisplay;
     document.getElementById('nft-count-label').innerHTML =
-      `You own <strong>${balance}</strong> hen${balance !== 1 ? 's' : ''}
-       &nbsp;·&nbsp; <span style="opacity:.6">${totalSupply} total minted</span>`;
-
+      `You own <strong>${confirmedIds.length}</strong> hen${confirmedIds.length !== 1 ? 's' : ''}
+       &nbsp;·&nbsp; <span style="opacity:.6">${totalSupplyDisplay} total minted</span>`;
     userNFTs = [];
 
-    if (balance === 0) {
+    if (confirmedIds.length === 0) {
       grid.innerHTML = '';
       const empty = document.createElement('div');
       empty.className = 'empty-state';
-      empty.innerHTML = '<div class="big">🐣</div><p>No HenVerse hens in this wallet yet.<br/>Mint some to get started!</p>';
+      empty.innerHTML = `<div class="big">🐣</div>
+        <p>No HenVerse hens found in this wallet.<br/>
+        <span style="font-size:.8rem;opacity:.6">Scanned ${logsIn.length} inbound transfer events</span></p>`;
       grid.appendChild(empty);
+      document.getElementById('stat-hens').textContent = 0;
       setStatus('');
       updateCoopStats();
       return;
     }
 
-    // 3. Fetch token IDs
-    const tokenPromises = [];
-    for (let i = 0; i < balance; i++) {
-      tokenPromises.push(
-        ethCall('tokenOfOwnerByIndex(address,uint256)', walletAddr, i)
-          .then(hex => Number(decodeUint256(hex)))
-      );
-    }
-    const tokenIds = await Promise.all(tokenPromises);
-
-    // 4. Fetch tokenURIs + metadata (parallel, with concurrency limit)
-    const CONCURRENCY = 4;
+    // ── Step 6: Fetch tokenURI + metadata in parallel batches ──
+    setStatus(`Fetching metadata for ${confirmedIds.length} hen(s)…`);
+    const CONCURRENCY = 6;
     const nfts = [];
-    for (let i = 0; i < tokenIds.length; i += CONCURRENCY) {
-      const batch = tokenIds.slice(i, i + CONCURRENCY);
+    for (let i = 0; i < confirmedIds.length; i += CONCURRENCY) {
+      const batch = confirmedIds.slice(i, i + CONCURRENCY);
       const results = await Promise.all(batch.map(async (id) => {
         let metadata = null;
         try {
           const uriHex = await ethCall('tokenURI(uint256)', id);
           const uri    = decodeString(uriHex);
-          metadata     = await fetchMetadata(uri);
+          if (uri) metadata = await fetchMetadata(uri);
         } catch {}
         return { tokenId: id, metadata };
       }));
@@ -1546,21 +1671,23 @@ async function loadNFTs() {
     }
     userNFTs = nfts;
 
-    // 5. Render grid
+    // ── Step 7: Render cards ──
     grid.innerHTML = '';
-    nfts.forEach(nft => {
-      grid.appendChild(createNFTCard(nft));
-    });
-
+    nfts.forEach(nft => grid.appendChild(createNFTCard(nft)));
+    document.getElementById('stat-hens').textContent = nfts.length;
     updateCoopStats();
     setStatus('');
+
   } catch (e) {
     grid.innerHTML = '';
     const errEl = document.createElement('div');
     errEl.className = 'empty-state';
-    errEl.innerHTML = '<div class="big">⚠️</div><p>Failed to load hens: ' + escHtml(e.message) + '</p>';
+    errEl.innerHTML = `<div class="big">⚠️</div>
+      <p style="color:var(--shell)">Failed to load hens</p>
+      <p style="font-size:.8rem;margin-top:.5rem;font-family:var(--font-mono);color:var(--red-warn)">${escHtml(e.message)}</p>
+      <p style="font-size:.78rem;margin-top:.75rem;opacity:.6">Make sure you're connected to <strong>The Grotto</strong> network (Chain ID 36463)</p>`;
     grid.appendChild(errEl);
-    setStatus('Error loading NFTs: ' + e.message, true);
+    setStatus('Error: ' + e.message, true);
   } finally {
     isFetching = false;
     refreshBtn.classList.remove('spinning');
@@ -1718,159 +1845,127 @@ async function startHolderScan() {
   if (scanRunning) return;
   scanRunning = true;
 
-  // UI state
-  document.getElementById('holders-idle').style.display = 'none';
-  document.getElementById('holders-progress').style.display = 'block';
+  // UI reset
+  document.getElementById('holders-idle').style.display       = 'none';
+  document.getElementById('holders-progress').style.display   = 'block';
   document.getElementById('holders-search-bar').style.display = 'none';
   document.getElementById('holders-table-container').style.display = 'none';
   document.getElementById('holders-pagination').style.display = 'none';
-  document.getElementById('holders-meta').style.display = 'none';
-  document.getElementById('holders-load-btn').style.display = 'none';
+  document.getElementById('holders-meta').style.display       = 'none';
+  document.getElementById('holders-load-btn').style.display   = 'none';
   document.getElementById('holders-refresh-btn').style.display = 'none';
   document.getElementById('holders-count-badge').style.display = 'none';
   setStatus('Scanning HenVerse holders on The Grotto…');
 
   try {
-    // ── Step 1: get totalSupply ──
-    setProgress('Fetching total supply…', 2);
-    const tsHex = await ethCall('totalSupply()');
-    const total = Number(decodeUint256(tsHex));
+    // ── Step 1: Get latest block + total supply ──
+    setProgress('Connecting to The Grotto…', 2);
+    const [latestHex, tsHex] = await Promise.all([
+      rpcCall('eth_blockNumber', []),
+      ethCall('totalSupply()').catch(() => '0x0'),
+    ]);
+    const latestBlock = parseInt(latestHex, 16);
+    const totalMinted = Number(decodeUint256(tsHex));
+    document.getElementById('meta-minted').textContent = totalMinted.toLocaleString();
 
-    if (total === 0) {
-      showHolderEmpty('No tokens minted yet.');
-      return;
-    }
+    // ── Step 2: Scan ALL Transfer events in chunks ──
+    // Build a map: tokenId → {owner, blockNumber} using latest transfer
+    const CHUNK = 100000;
+    const totalChunks = Math.ceil(latestBlock / CHUNK);
+    // tokenState[id] = { owner (lowercased), block }
+    const tokenState = {};  // tracks latest known owner per token
 
-    document.getElementById('meta-minted').textContent = total.toLocaleString();
-
-    // ── Step 2: Detect token ID start (0-based or 1-based) ──
-    // Try ownerOf(0) — if it errors, collection is 1-indexed
-    let startId = 0;
-    try {
-      const ownerHex = await rpcCall('eth_call', [{
-        to: NFT_CONTRACT,
-        data: '0x' + SEL['ownerOf(uint256)'] + BigInt(0).toString(16).padStart(64,'0')
-      }, 'latest']);
-      // If we get a non-zero address back, 0-indexed
-      const owner0 = '0x' + ownerHex.slice(-40);
-      if (owner0 === '0x0000000000000000000000000000000000000000') startId = 1;
-    } catch { startId = 1; }
-
-    // ── Step 3: Try Transfer events first (most reliable) ──
-    setProgress('Scanning Transfer events (block 0 → latest)…', 8);
-    let tokenIds = new Set();
-
-    try {
-      // ERC-721 Transfer event topic: keccak256("Transfer(address,address,uint256)")
-      const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
-      // Fetch in chunks to avoid RPC limits
-      const latestHex = await rpcCall('eth_blockNumber', []);
-      const latestBlock = parseInt(latestHex, 16);
-      const CHUNK = 100000;
-      let fromBlock = 0;
-      let chunksDone = 0;
-      const totalChunks = Math.ceil(latestBlock / CHUNK);
-
-      while (fromBlock <= latestBlock) {
-        const toBlock = Math.min(fromBlock + CHUNK - 1, latestBlock);
-        setProgress(
-          `Scanning blocks ${fromBlock.toLocaleString()} → ${toBlock.toLocaleString()}…`,
-          8 + Math.round((chunksDone / Math.max(totalChunks, 1)) * 55)
-        );
-        document.getElementById('progress-sub').textContent =
-          `Found ${tokenIds.size} tokens so far · Chunk ${chunksDone+1}/${totalChunks}`;
-
-        try {
-          const logs = await rpcCall('eth_getLogs', [{
-            address: NFT_CONTRACT,
-            topics: [TRANSFER_TOPIC],
-            fromBlock: '0x' + fromBlock.toString(16),
-            toBlock: '0x' + toBlock.toString(16),
-          }]);
-          for (const log of logs) {
-            // tokenId is in data field (for ERC-721) or topics[3]
-            let tokenId;
-            if (log.topics && log.topics[3]) {
-              tokenId = Number(BigInt(log.topics[3]));
-            } else if (log.data && log.data !== '0x') {
-              tokenId = Number(BigInt(log.data));
-            }
-            if (tokenId !== undefined && !isNaN(tokenId)) tokenIds.add(tokenId);
-          }
-        } catch (logErr) {
-          // Range too large or unsupported — break and fall back to sequential
-          console.warn('getLogs chunk failed:', logErr.message);
-          break;
-        }
-
-        fromBlock = toBlock + 1;
-        chunksDone++;
-      }
-    } catch (logErr) {
-      console.warn('Transfer log scan failed:', logErr.message);
-    }
-
-    // ── Fallback: if we got fewer IDs than totalSupply, fill with sequential ──
-    if (tokenIds.size < total) {
-      setProgress(`Filling token IDs sequentially (${startId} → ${startId + total - 1})…`, 60);
-      for (let i = startId; i < startId + total; i++) tokenIds.add(i);
-    }
-
-    const allIds = [...tokenIds].sort((a,b) => a - b);
-
-    // ── Step 4: ownerOf each token in batches ──
-    setProgress(`Resolving owners for ${allIds.length} tokens…`, 65);
-    const ownerMap = {}; // address → Set of tokenIds
-    const BATCH = 20;
-
-    for (let i = 0; i < allIds.length; i += BATCH) {
-      const batch = allIds.slice(i, i + BATCH);
-      const pct = 65 + Math.round((i / allIds.length) * 30);
+    let chunkIdx = 0;
+    for (let from = 0; from <= latestBlock; from += CHUNK) {
+      const to = Math.min(from + CHUNK - 1, latestBlock);
+      const pct = 5 + Math.round((chunkIdx / Math.max(totalChunks, 1)) * 80);
       setProgress(
-        `Fetching owners… (${i}/${allIds.length})`,
+        `Scanning blocks ${from.toLocaleString()} → ${to.toLocaleString()}…`,
         pct
       );
       document.getElementById('progress-sub').textContent =
-        `Token IDs ${batch[0]} – ${batch[batch.length-1]}`;
+        `Chunk ${chunkIdx + 1} / ${totalChunks} · ${Object.keys(tokenState).length} tokens found`;
 
-      const results = await Promise.allSettled(
-        batch.map(id => rpcCall('eth_call', [{
-          to: NFT_CONTRACT,
-          data: '0x' + SEL['ownerOf(uint256)'] + BigInt(id).toString(16).padStart(64,'0')
-        }, 'latest']))
-      );
+      let logs = [];
+      try {
+        logs = await rpcCall('eth_getLogs', [{
+          address: NFT_CONTRACT,
+          topics:  [TRANSFER_TOPIC],
+          fromBlock: '0x' + from.toString(16),
+          toBlock:   '0x' + to.toString(16),
+        }]);
+      } catch (e) {
+        console.warn('getLogs chunk failed:', e.message);
+        // try halving the chunk
+        try {
+          const mid = Math.floor((from + to) / 2);
+          const [a, b] = await Promise.all([
+            rpcCall('eth_getLogs', [{ address: NFT_CONTRACT, topics: [TRANSFER_TOPIC], fromBlock: '0x' + from.toString(16), toBlock: '0x' + mid.toString(16) }]),
+            rpcCall('eth_getLogs', [{ address: NFT_CONTRACT, topics: [TRANSFER_TOPIC], fromBlock: '0x' + (mid+1).toString(16), toBlock: '0x' + to.toString(16) }]),
+          ]);
+          logs = [...a, ...b];
+        } catch { /* skip chunk */ }
+      }
 
-      for (let j = 0; j < batch.length; j++) {
-        const r = results[j];
-        if (r.status === 'fulfilled' && r.value && r.value.length >= 66) {
-          const owner = ('0x' + r.value.slice(-40)).toLowerCase();
-          const ZERO  = '0x0000000000000000000000000000000000000000';
-          if (owner !== ZERO) {
-            if (!ownerMap[owner]) ownerMap[owner] = [];
-            ownerMap[owner].push(batch[j]);
-          }
+      // Process logs in block order
+      for (const log of logs) {
+        const id = tokenIdFromLog(log);
+        if (id === null || isNaN(id)) continue;
+        const blockNum = parseInt(log.blockNumber, 16);
+        const toAddr   = ('0x' + (log.topics[2] || '').slice(-40)).toLowerCase();
+        const ZERO     = '0x0000000000000000000000000000000000000000';
+
+        // Only update if this event is newer than what we have
+        if (!tokenState[id] || blockNum >= tokenState[id].block) {
+          tokenState[id] = {
+            owner: toAddr === ZERO ? null : toAddr,  // null = burned
+            block: blockNum,
+          };
         }
       }
+      chunkIdx++;
     }
 
-    // ── Step 5: Build sorted leaderboard ──
-    setProgress('Building leaderboard…', 97);
+    // ── Step 3: Build owner map from tokenState ──
+    setProgress('Building holder leaderboard…', 88);
+    document.getElementById('progress-sub').textContent = `Processing ${Object.keys(tokenState).length} token states…`;
+
+    const ownerMap = {};
+    for (const [idStr, state] of Object.entries(tokenState)) {
+      if (!state.owner) continue; // burned
+      const owner = state.owner;
+      if (!ownerMap[owner]) ownerMap[owner] = [];
+      ownerMap[owner].push(Number(idStr));
+    }
+
+    // ── Step 4: Verify ambiguous cases with ownerOf ──
+    // Skip full verification to keep it fast; Transfer logs are reliable
+    setProgress('Finalising…', 96);
+
+    if (Object.keys(ownerMap).length === 0) {
+      showHolderEmpty('No holders found. The collection may have no mints yet.');
+      return;
+    }
+
     holderData = Object.entries(ownerMap)
-      .map(([address, tokens]) => ({ address, tokens: tokens.sort((a,b)=>a-b), count: tokens.length }))
-      .sort((a,b) => b.count - a.count);
+      .map(([address, tokens]) => ({
+        address,
+        tokens: tokens.sort((a, b) => a - b),
+        count:  tokens.length,
+      }))
+      .sort((a, b) => b.count - a.count);
 
     holderFiltered = [...holderData];
 
-    // ── Step 6: Render ──
     setProgress('Done!', 100);
-    await sleep(400);
+    await sleep(350);
     renderHolders();
     setStatus('');
 
   } catch (e) {
     setStatus('Holder scan failed: ' + e.message, true);
     document.getElementById('holders-progress').style.display = 'none';
-    document.getElementById('holders-idle').style.display = 'block';
+    document.getElementById('holders-idle').style.display     = 'block';
     document.getElementById('holders-idle').innerHTML =
       `<div style="font-size:2.5rem;margin-bottom:.5rem">⚠️</div>
        <p>Scan failed: ${escHtml(e.message)}</p>`;
