@@ -1309,16 +1309,33 @@ function setStatus(msg, isError = false) {
   bar.classList.add('visible');
 }
 
-// ─── RPC CALL (no external lib) ──────────────────────────────────
+// ─── RPC CALL ────────────────────────────────────────────────────
+// ALL reads go DIRECTLY to The Grotto RPC via fetch — completely
+// bypasses MetaMask. Works regardless of what chain the wallet is on.
 async function rpcCall(method, params = []) {
-  const res = await fetch(RPC_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method, params }),
-  });
+  let res;
+  try {
+    res = await fetch(RPC_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method, params }),
+    });
+  } catch (netErr) {
+    throw new Error('Cannot reach The Grotto RPC: ' + netErr.message);
+  }
+  if (!res.ok) throw new Error('RPC HTTP error ' + res.status);
   const json = await res.json();
-  if (json.error) throw new Error(json.error.message || 'RPC error');
+  if (json.error) {
+    const code = json.error.code || '';
+    const msg  = json.error.message || JSON.stringify(json.error);
+    throw new Error(msg + (code ? ' (code ' + code + ')' : ''));
+  }
   return json.result;
+}
+
+// Soft version — returns null on revert instead of throwing
+async function ethCallSafe(sig, ...args) {
+  try { return await ethCall(sig, ...args); } catch { return null; }
 }
 
 // ─── TINY ABI ENCODER ────────────────────────────────────────────
@@ -1545,12 +1562,10 @@ async function loadNFTs() {
   }
 
   try {
-    // ── Step 1: Total supply (best-effort, non-blocking) ──
+    // ── Step 1: Total supply direct from The Grotto RPC (best-effort) ──
     let totalSupplyDisplay = '?';
-    try {
-      const tsHex = await ethCall('totalSupply()');
-      totalSupplyDisplay = Number(decodeUint256(tsHex)).toLocaleString();
-    } catch {}
+    const tsHex = await ethCallSafe('totalSupply()');
+    if (tsHex) totalSupplyDisplay = Number(decodeUint256(tsHex)).toLocaleString();
 
     // ── Step 2: Scan ALL Transfer logs for this contract ──
     // We get both directions at once and compute current ownership from event history.
@@ -1626,10 +1641,8 @@ async function loadNFTs() {
 
     // ── Step 5: balanceOf for display (best-effort) ──
     let balanceDisplay = confirmedIds.length;
-    try {
-      const balHex = await ethCall('balanceOf(address)', walletAddr);
-      balanceDisplay = Number(decodeUint256(balHex));
-    } catch {}
+    const balHex = await ethCallSafe('balanceOf(address)', walletAddr);
+    if (balHex) balanceDisplay = Number(decodeUint256(balHex));
 
     // Update UI counts
     document.getElementById('stat-hens').textContent = balanceDisplay;
