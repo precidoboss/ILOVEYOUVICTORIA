@@ -435,6 +435,221 @@ main { flex: 1; padding: 2rem; max-width: 1300px; margin: 0 auto; width: 100%; }
 .power-bar-fill.warn { background: linear-gradient(90deg, var(--yolk), #e67e22); }
 .power-bar-fill.danger { background: linear-gradient(90deg, #e67e22, var(--red-warn)); }
 
+/* ─── HOLDERS TAB ──────────────────────────────────────────── */
+.holders-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;
+}
+.holders-meta {
+  display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem;
+}
+.holders-meta-card {
+  background: linear-gradient(160deg, rgba(107,58,31,.7), rgba(61,32,8,.9));
+  border: 1.5px solid var(--coop-mid);
+  border-radius: var(--radius-sm);
+  padding: .9rem 1.2rem;
+  flex: 1; min-width: 140px;
+}
+.holders-meta-card .label {
+  font-family: var(--font-mono); font-size: .68rem;
+  letter-spacing: .07em; text-transform: uppercase;
+  color: var(--straw); margin-bottom: .3rem;
+}
+.holders-meta-card .value {
+  font-size: 1.6rem; font-weight: 900; color: var(--yolk); line-height: 1;
+}
+
+.holders-table-wrap {
+  background: linear-gradient(160deg, rgba(107,58,31,.7), rgba(61,32,8,.9));
+  border: 1.5px solid var(--coop-mid);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.holders-search {
+  display: flex; align-items: center; gap: .75rem;
+  padding: 1rem 1.2rem;
+  border-bottom: 1px solid rgba(160,98,42,.3);
+}
+.holders-search input {
+  flex: 1;
+  background: rgba(0,0,0,.25);
+  border: 1.5px solid var(--coop-mid);
+  border-radius: var(--radius-sm);
+  color: var(--shell);
+  font-family: var(--font-mono);
+  font-size: .82rem;
+  padding: .5rem .85rem;
+  outline: none;
+  transition: border-color .2s;
+}
+.holders-search input::placeholder { color: var(--coop-light); }
+.holders-search input:focus { border-color: var(--yolk); }
+.holders-search .search-icon { color: var(--straw); font-size: 1rem; flex-shrink: 0; }
+
+.holders-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.holders-table th {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: .7rem;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--straw);
+  padding: .75rem 1.2rem;
+  border-bottom: 1px solid rgba(160,98,42,.3);
+  background: rgba(61,32,8,.4);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.holders-table th:hover { color: var(--yolk); }
+.holders-table th .sort-arrow { opacity: .4; margin-left: .3rem; }
+.holders-table th.sorted .sort-arrow { opacity: 1; color: var(--yolk); }
+
+.holders-table td {
+  padding: .7rem 1.2rem;
+  border-bottom: 1px solid rgba(160,98,42,.12);
+  font-family: var(--font-mono);
+  font-size: .82rem;
+  color: var(--shell);
+  vertical-align: middle;
+}
+.holders-table tr:last-child td { border-bottom: none; }
+.holders-table tr:hover td { background: rgba(245,166,35,.05); }
+.holders-table tr.is-connected td { background: rgba(245,166,35,.08); }
+.holders-table tr.is-connected td:first-child { border-left: 3px solid var(--yolk); }
+
+.rank-num {
+  color: var(--straw); opacity: .5; font-size: .75rem; min-width: 28px; display: inline-block;
+}
+.rank-num.top3 { color: var(--yolk); opacity: 1; font-weight: 700; font-size: .85rem; }
+
+.addr-cell { display: flex; align-items: center; gap: .6rem; }
+.addr-avatar {
+  width: 28px; height: 28px; border-radius: 50%;
+  flex-shrink: 0; font-size: 1rem;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, var(--coop-mid), var(--coop-brown));
+  border: 1.5px solid var(--coop-light);
+}
+.addr-text { display: flex; flex-direction: column; gap: .1rem; }
+.addr-full {
+  font-size: .78rem;
+  color: var(--shell);
+  letter-spacing: .02em;
+}
+.addr-short { display: none; }
+.you-tag {
+  font-size: .6rem; background: var(--yolk); color: var(--coop-brown);
+  padding: .05rem .35rem; border-radius: 999px; font-weight: 700;
+  letter-spacing: .04em; align-self: flex-start;
+}
+.copy-btn {
+  background: none; border: none; cursor: pointer;
+  color: var(--coop-light); font-size: .85rem;
+  transition: color .15s; padding: .1rem;
+}
+.copy-btn:hover { color: var(--yolk); }
+
+.token-chips {
+  display: flex; flex-wrap: wrap; gap: .3rem; max-width: 320px;
+}
+.token-chip {
+  background: rgba(245,166,35,.12);
+  border: 1px solid rgba(245,166,35,.22);
+  border-radius: 5px;
+  padding: .12rem .4rem;
+  font-size: .7rem;
+  color: var(--straw);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all .15s;
+}
+.token-chip:hover { background: rgba(245,166,35,.25); color: var(--yolk); }
+
+.holders-count-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(245,166,35,.18);
+  border: 1px solid rgba(245,166,35,.3);
+  color: var(--yolk);
+  font-family: var(--font-mono);
+  font-size: .82rem;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: .25rem .85rem;
+  min-width: 60px;
+}
+
+.scan-progress {
+  padding: 1.5rem;
+  text-align: center;
+}
+.scan-progress .progress-label {
+  font-family: var(--font-mono);
+  font-size: .82rem;
+  color: var(--straw);
+  margin-bottom: .75rem;
+}
+.progress-track {
+  height: 8px;
+  background: rgba(255,255,255,.1);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: .5rem;
+}
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--yolk-deep), var(--yolk));
+  border-radius: 999px;
+  transition: width .3s ease;
+}
+.scan-sub { font-family: var(--font-mono); font-size: .72rem; color: var(--coop-light); }
+
+.holders-load-btn {
+  background: linear-gradient(135deg, var(--yolk), var(--yolk-deep));
+  border: none;
+  color: var(--coop-brown);
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: .95rem;
+  padding: .65rem 1.8rem;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: 0 4px 18px var(--glow);
+  transition: transform .15s, box-shadow .15s;
+}
+.holders-load-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px var(--glow); }
+.holders-load-btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+.pagination {
+  display: flex; align-items: center; justify-content: center;
+  gap: .5rem; padding: 1rem;
+  border-top: 1px solid rgba(160,98,42,.2);
+  flex-wrap: wrap;
+}
+.page-btn {
+  background: transparent;
+  border: 1.5px solid var(--coop-mid);
+  color: var(--straw);
+  font-family: var(--font-mono);
+  font-size: .78rem;
+  padding: .35rem .75rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.page-btn:hover { border-color: var(--yolk); color: var(--yolk); }
+.page-btn.active { background: var(--yolk); border-color: var(--yolk); color: var(--coop-brown); font-weight: 700; }
+.page-btn:disabled { opacity: .3; cursor: not-allowed; }
+
+@media(max-width: 700px) {
+  .addr-full { display: none; }
+  .addr-short { display: block; font-size: .78rem; color: var(--shell); }
+  .token-chips { display: none; }
+}
+
 /* ─── TOKENOMICS TAB ────────────────────────────────────────── */
 .toko-grid {
   display: grid;
@@ -635,6 +850,7 @@ footer a:hover { text-decoration: underline; }
 
     <nav>
       <button class="nav-btn active" onclick="switchTab('coop')">🐔 My Coop</button>
+      <button class="nav-btn" onclick="switchTab('holders')">👥 Holders</button>
       <button class="nav-btn" onclick="switchTab('tokenomics')">📊 Tokenomics</button>
       <button class="nav-btn" onclick="switchTab('market')">🛒 Market</button>
     </nav>
@@ -891,6 +1107,87 @@ footer a:hover { text-decoration: underline; }
             <div style="font-size:.83rem;color:var(--straw);line-height:1.6">EGG earned → buy more hens / upgrades → more hashrate → more EGG. Halvings create scarcity pressure driving token value.</div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- HOLDERS TAB -->
+    <div id="tab-holders" class="tab-panel">
+      <div class="holders-header">
+        <div class="section-title" style="margin-bottom:0"><span>👥</span> HenVerse Holders</div>
+        <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;">
+          <span id="holders-count-badge" class="holders-count-badge" style="display:none">—</span>
+          <button class="holders-load-btn" id="holders-load-btn" onclick="startHolderScan()">
+            🔍 Scan All Holders
+          </button>
+          <button class="refresh-btn" id="holders-refresh-btn" onclick="startHolderScan()" style="display:none">
+            ↻ Re-scan
+          </button>
+        </div>
+      </div>
+
+      <div class="holders-meta" id="holders-meta" style="display:none">
+        <div class="holders-meta-card">
+          <div class="label">Unique Holders</div>
+          <div class="value" id="meta-holders">—</div>
+        </div>
+        <div class="holders-meta-card">
+          <div class="label">Total Minted</div>
+          <div class="value" id="meta-minted">—</div>
+        </div>
+        <div class="holders-meta-card">
+          <div class="label">Avg per Wallet</div>
+          <div class="value" id="meta-avg">—</div>
+        </div>
+        <div class="holders-meta-card">
+          <div class="label">Contract</div>
+          <div class="value" style="font-size:.75rem;word-break:break-all;color:var(--straw)">0x42c3…b7CF</div>
+        </div>
+      </div>
+
+      <div class="holders-table-wrap" id="holders-table-wrap">
+        <!-- Idle state -->
+        <div id="holders-idle" style="text-align:center;padding:3rem 1.5rem;color:var(--straw);opacity:.65;">
+          <div style="font-size:3rem;margin-bottom:.75rem">🔍</div>
+          <p style="font-size:.95rem">Click <strong style="color:var(--yolk)">Scan All Holders</strong> to enumerate every wallet<br/>holding a HenVerse NFT from The Grotto chain.</p>
+          <p style="font-size:.78rem;margin-top:.75rem;font-family:var(--font-mono);opacity:.6">Scans Transfer events from block 0 → latest · No API key needed</p>
+        </div>
+
+        <!-- Progress -->
+        <div id="holders-progress" style="display:none" class="scan-progress">
+          <div class="progress-label" id="progress-label">Scanning Transfer events…</div>
+          <div class="progress-track">
+            <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+          </div>
+          <div class="scan-sub" id="progress-sub">Starting…</div>
+        </div>
+
+        <!-- Search bar (shown after load) -->
+        <div class="holders-search" id="holders-search-bar" style="display:none">
+          <span class="search-icon">🔎</span>
+          <input type="text" id="holders-search-input"
+            placeholder="Search by address or token ID…"
+            oninput="filterHolders(this.value)"/>
+          <span id="holders-filter-count" style="font-family:var(--font-mono);font-size:.75rem;color:var(--straw);white-space:nowrap;"></span>
+        </div>
+
+        <!-- Table -->
+        <div style="overflow-x:auto;" id="holders-table-container" style="display:none">
+          <table class="holders-table" id="holders-table">
+            <thead>
+              <tr>
+                <th onclick="sortHolders('rank')">#<span class="sort-arrow">↕</span></th>
+                <th onclick="sortHolders('address')">Wallet<span class="sort-arrow">↕</span></th>
+                <th onclick="sortHolders('count')" class="sorted">Hens<span class="sort-arrow">↓</span></th>
+                <th>Token IDs</th>
+                <th>Explorer</th>
+              </tr>
+            </thead>
+            <tbody id="holders-tbody"></tbody>
+          </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination" id="holders-pagination" style="display:none"></div>
       </div>
     </div>
 
@@ -1403,7 +1700,383 @@ function updateCoopStats() {
   tbody.innerHTML = rows;
 })();
 
-// ─── UTILS ───────────────────────────────────────────────────────
+// ─── HOLDERS SCANNER ──────────────────────────────────────────────
+// Strategy:
+//   1. Get totalSupply → that's how many token IDs exist (1-based or 0-based)
+//   2. Fetch ownerOf for each tokenId in parallel batches
+//   3. Group by owner → build leaderboard
+//   Fallback: also try eth_getLogs for Transfer events to find all ever-minted IDs
+
+let holderData     = [];   // [{address, tokens:[]}]
+let holderFiltered = [];
+let holderSort     = { key: 'count', dir: -1 };
+let holderPage     = 0;
+const HOLDER_PER_PAGE = 25;
+let scanRunning    = false;
+
+async function startHolderScan() {
+  if (scanRunning) return;
+  scanRunning = true;
+
+  // UI state
+  document.getElementById('holders-idle').style.display = 'none';
+  document.getElementById('holders-progress').style.display = 'block';
+  document.getElementById('holders-search-bar').style.display = 'none';
+  document.getElementById('holders-table-container').style.display = 'none';
+  document.getElementById('holders-pagination').style.display = 'none';
+  document.getElementById('holders-meta').style.display = 'none';
+  document.getElementById('holders-load-btn').style.display = 'none';
+  document.getElementById('holders-refresh-btn').style.display = 'none';
+  document.getElementById('holders-count-badge').style.display = 'none';
+  setStatus('Scanning HenVerse holders on The Grotto…');
+
+  try {
+    // ── Step 1: get totalSupply ──
+    setProgress('Fetching total supply…', 2);
+    const tsHex = await ethCall('totalSupply()');
+    const total = Number(decodeUint256(tsHex));
+
+    if (total === 0) {
+      showHolderEmpty('No tokens minted yet.');
+      return;
+    }
+
+    document.getElementById('meta-minted').textContent = total.toLocaleString();
+
+    // ── Step 2: Detect token ID start (0-based or 1-based) ──
+    // Try ownerOf(0) — if it errors, collection is 1-indexed
+    let startId = 0;
+    try {
+      const ownerHex = await rpcCall('eth_call', [{
+        to: NFT_CONTRACT,
+        data: '0x' + SEL['ownerOf(uint256)'] + BigInt(0).toString(16).padStart(64,'0')
+      }, 'latest']);
+      // If we get a non-zero address back, 0-indexed
+      const owner0 = '0x' + ownerHex.slice(-40);
+      if (owner0 === '0x0000000000000000000000000000000000000000') startId = 1;
+    } catch { startId = 1; }
+
+    // ── Step 3: Try Transfer events first (most reliable) ──
+    setProgress('Scanning Transfer events (block 0 → latest)…', 8);
+    let tokenIds = new Set();
+
+    try {
+      // ERC-721 Transfer event topic: keccak256("Transfer(address,address,uint256)")
+      const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+      // Fetch in chunks to avoid RPC limits
+      const latestHex = await rpcCall('eth_blockNumber', []);
+      const latestBlock = parseInt(latestHex, 16);
+      const CHUNK = 100000;
+      let fromBlock = 0;
+      let chunksDone = 0;
+      const totalChunks = Math.ceil(latestBlock / CHUNK);
+
+      while (fromBlock <= latestBlock) {
+        const toBlock = Math.min(fromBlock + CHUNK - 1, latestBlock);
+        setProgress(
+          `Scanning blocks ${fromBlock.toLocaleString()} → ${toBlock.toLocaleString()}…`,
+          8 + Math.round((chunksDone / Math.max(totalChunks, 1)) * 55)
+        );
+        document.getElementById('progress-sub').textContent =
+          `Found ${tokenIds.size} tokens so far · Chunk ${chunksDone+1}/${totalChunks}`;
+
+        try {
+          const logs = await rpcCall('eth_getLogs', [{
+            address: NFT_CONTRACT,
+            topics: [TRANSFER_TOPIC],
+            fromBlock: '0x' + fromBlock.toString(16),
+            toBlock: '0x' + toBlock.toString(16),
+          }]);
+          for (const log of logs) {
+            // tokenId is in data field (for ERC-721) or topics[3]
+            let tokenId;
+            if (log.topics && log.topics[3]) {
+              tokenId = Number(BigInt(log.topics[3]));
+            } else if (log.data && log.data !== '0x') {
+              tokenId = Number(BigInt(log.data));
+            }
+            if (tokenId !== undefined && !isNaN(tokenId)) tokenIds.add(tokenId);
+          }
+        } catch (logErr) {
+          // Range too large or unsupported — break and fall back to sequential
+          console.warn('getLogs chunk failed:', logErr.message);
+          break;
+        }
+
+        fromBlock = toBlock + 1;
+        chunksDone++;
+      }
+    } catch (logErr) {
+      console.warn('Transfer log scan failed:', logErr.message);
+    }
+
+    // ── Fallback: if we got fewer IDs than totalSupply, fill with sequential ──
+    if (tokenIds.size < total) {
+      setProgress(`Filling token IDs sequentially (${startId} → ${startId + total - 1})…`, 60);
+      for (let i = startId; i < startId + total; i++) tokenIds.add(i);
+    }
+
+    const allIds = [...tokenIds].sort((a,b) => a - b);
+
+    // ── Step 4: ownerOf each token in batches ──
+    setProgress(`Resolving owners for ${allIds.length} tokens…`, 65);
+    const ownerMap = {}; // address → Set of tokenIds
+    const BATCH = 20;
+
+    for (let i = 0; i < allIds.length; i += BATCH) {
+      const batch = allIds.slice(i, i + BATCH);
+      const pct = 65 + Math.round((i / allIds.length) * 30);
+      setProgress(
+        `Fetching owners… (${i}/${allIds.length})`,
+        pct
+      );
+      document.getElementById('progress-sub').textContent =
+        `Token IDs ${batch[0]} – ${batch[batch.length-1]}`;
+
+      const results = await Promise.allSettled(
+        batch.map(id => rpcCall('eth_call', [{
+          to: NFT_CONTRACT,
+          data: '0x' + SEL['ownerOf(uint256)'] + BigInt(id).toString(16).padStart(64,'0')
+        }, 'latest']))
+      );
+
+      for (let j = 0; j < batch.length; j++) {
+        const r = results[j];
+        if (r.status === 'fulfilled' && r.value && r.value.length >= 66) {
+          const owner = ('0x' + r.value.slice(-40)).toLowerCase();
+          const ZERO  = '0x0000000000000000000000000000000000000000';
+          if (owner !== ZERO) {
+            if (!ownerMap[owner]) ownerMap[owner] = [];
+            ownerMap[owner].push(batch[j]);
+          }
+        }
+      }
+    }
+
+    // ── Step 5: Build sorted leaderboard ──
+    setProgress('Building leaderboard…', 97);
+    holderData = Object.entries(ownerMap)
+      .map(([address, tokens]) => ({ address, tokens: tokens.sort((a,b)=>a-b), count: tokens.length }))
+      .sort((a,b) => b.count - a.count);
+
+    holderFiltered = [...holderData];
+
+    // ── Step 6: Render ──
+    setProgress('Done!', 100);
+    await sleep(400);
+    renderHolders();
+    setStatus('');
+
+  } catch (e) {
+    setStatus('Holder scan failed: ' + e.message, true);
+    document.getElementById('holders-progress').style.display = 'none';
+    document.getElementById('holders-idle').style.display = 'block';
+    document.getElementById('holders-idle').innerHTML =
+      `<div style="font-size:2.5rem;margin-bottom:.5rem">⚠️</div>
+       <p>Scan failed: ${escHtml(e.message)}</p>`;
+    document.getElementById('holders-load-btn').style.display = 'inline-block';
+  } finally {
+    scanRunning = false;
+  }
+}
+
+function setProgress(label, pct) {
+  document.getElementById('progress-label').textContent = label;
+  document.getElementById('progress-fill').style.width  = Math.min(100, pct) + '%';
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function renderHolders() {
+  const total      = holderData.reduce((s,h) => s + h.count, 0);
+  const uniq       = holderData.length;
+  const avg        = uniq ? (total / uniq).toFixed(2) : '0';
+
+  document.getElementById('meta-holders').textContent = uniq.toLocaleString();
+  document.getElementById('meta-minted').textContent  = total.toLocaleString();
+  document.getElementById('meta-avg').textContent     = avg;
+  document.getElementById('holders-meta').style.display = 'flex';
+
+  document.getElementById('holders-count-badge').textContent = uniq + ' holders';
+  document.getElementById('holders-count-badge').style.display = 'inline-flex';
+
+  document.getElementById('holders-progress').style.display   = 'none';
+  document.getElementById('holders-search-bar').style.display = 'flex';
+  document.getElementById('holders-table-container').style.display = 'block';
+  document.getElementById('holders-load-btn').style.display   = 'none';
+  document.getElementById('holders-refresh-btn').style.display = 'inline-block';
+
+  holderPage = 0;
+  renderHoldersPage();
+}
+
+function renderHoldersPage() {
+  const tbody = document.getElementById('holders-tbody');
+  const total = holderFiltered.length;
+  const start = holderPage * HOLDER_PER_PAGE;
+  const slice = holderFiltered.slice(start, start + HOLDER_PER_PAGE);
+
+  tbody.innerHTML = '';
+  if (slice.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--straw);opacity:.6">No results found</td></tr>`;
+  } else {
+    slice.forEach((h, idx) => {
+      const globalRank = holderData.indexOf(h) + 1;
+      const isYou = walletAddr && h.address.toLowerCase() === walletAddr.toLowerCase();
+      const medals = ['🥇','🥈','🥉'];
+      const rankDisplay = globalRank <= 3
+        ? `<span class="rank-num top3">${medals[globalRank-1]}</span>`
+        : `<span class="rank-num">${globalRank}</span>`;
+
+      const shortAddr = h.address.slice(0,6) + '…' + h.address.slice(-4);
+      const avatarEmoji = addressEmoji(h.address);
+
+      // Show up to 6 token chips
+      const chipHtml = h.tokens.slice(0,6).map(id =>
+        `<span class="token-chip" onclick="openTokenModal(${id})">#${id}</span>`
+      ).join('') + (h.tokens.length > 6 ? `<span class="token-chip" style="opacity:.5">+${h.tokens.length-6}</span>` : '');
+
+      const tr = document.createElement('tr');
+      if (isYou) tr.className = 'is-connected';
+      tr.innerHTML = `
+        <td>${rankDisplay}</td>
+        <td>
+          <div class="addr-cell">
+            <div class="addr-avatar">${avatarEmoji}</div>
+            <div class="addr-text">
+              <div class="addr-full">${h.address}${isYou ? ' <span class="you-tag">YOU</span>' : ''}</div>
+              <div class="addr-short">${shortAddr}${isYou ? ' <span class="you-tag">YOU</span>' : ''}</div>
+            </div>
+            <button class="copy-btn" title="Copy address" onclick="copyAddr('${h.address}')">⎘</button>
+          </div>
+        </td>
+        <td><strong style="color:var(--yolk)">${h.count}</strong></td>
+        <td><div class="token-chips">${chipHtml}</div><span style="font-size:.72rem;color:var(--straw);display:none" class="token-count-mobile">${h.count} tokens</span></td>
+        <td>
+          <a href="${EXPLORER}/address/${h.address}" target="_blank" rel="noreferrer"
+            style="color:var(--yolk);font-family:var(--font-mono);font-size:.75rem;text-decoration:none;border:1px solid rgba(245,166,35,.3);padding:.2rem .55rem;border-radius:5px;white-space:nowrap;"
+            onmouseover="this.style.background='rgba(245,166,35,.12)'" onmouseout="this.style.background='none'">
+            View ↗
+          </a>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  renderPagination(total);
+  document.getElementById('holders-filter-count').textContent =
+    holderFiltered.length !== holderData.length
+      ? `${holderFiltered.length} of ${holderData.length}`
+      : `${holderData.length} holders`;
+}
+
+function renderPagination(total) {
+  const totalPages = Math.ceil(total / HOLDER_PER_PAGE);
+  const pag = document.getElementById('holders-pagination');
+  if (totalPages <= 1) { pag.style.display = 'none'; return; }
+  pag.style.display = 'flex';
+
+  let html = `<button class="page-btn" onclick="goPage(${holderPage-1})" ${holderPage===0?'disabled':''}>← Prev</button>`;
+
+  const range = pagRange(holderPage, totalPages);
+  let prev = null;
+  for (const p of range) {
+    if (prev !== null && p > prev + 1) html += `<span style="color:var(--straw);padding:0 .25rem">…</span>`;
+    html += `<button class="page-btn ${p===holderPage?'active':''}" onclick="goPage(${p})">${p+1}</button>`;
+    prev = p;
+  }
+  html += `<button class="page-btn" onclick="goPage(${holderPage+1})" ${holderPage>=totalPages-1?'disabled':''}>Next →</button>`;
+  pag.innerHTML = html;
+}
+
+function pagRange(current, total) {
+  const delta = 2;
+  const pages = new Set([0, total-1]);
+  for (let i = Math.max(0,current-delta); i <= Math.min(total-1,current+delta); i++) pages.add(i);
+  return [...pages].sort((a,b)=>a-b);
+}
+
+function goPage(p) {
+  const totalPages = Math.ceil(holderFiltered.length / HOLDER_PER_PAGE);
+  if (p < 0 || p >= totalPages) return;
+  holderPage = p;
+  renderHoldersPage();
+  document.getElementById('holders-table-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function filterHolders(q) {
+  const query = q.trim().toLowerCase();
+  if (!query) {
+    holderFiltered = [...holderData];
+  } else {
+    holderFiltered = holderData.filter(h =>
+      h.address.toLowerCase().includes(query) ||
+      h.tokens.some(id => String(id).includes(query))
+    );
+  }
+  holderPage = 0;
+  renderHoldersPage();
+}
+
+function sortHolders(key) {
+  if (holderSort.key === key) {
+    holderSort.dir *= -1;
+  } else {
+    holderSort.key = key;
+    holderSort.dir = key === 'count' ? -1 : 1;
+  }
+  holderFiltered.sort((a,b) => {
+    if (key === 'count')   return holderSort.dir * (a.count - b.count);
+    if (key === 'address') return holderSort.dir * a.address.localeCompare(b.address);
+    return 0;
+  });
+  holderPage = 0;
+  renderHoldersPage();
+  // Update header arrows
+  document.querySelectorAll('.holders-table th').forEach(th => th.classList.remove('sorted'));
+  event.currentTarget.classList.add('sorted');
+}
+
+function copyAddr(addr) {
+  navigator.clipboard.writeText(addr).then(() => {
+    setStatus('Address copied: ' + addr);
+    setTimeout(() => setStatus(''), 2000);
+  });
+}
+
+// Deterministic emoji avatar from address
+function addressEmoji(addr) {
+  const emojis = ['🐔','🐣','🥚','🦚','🦅','🌾','🐓','🌻','🪺','🌿'];
+  const n = parseInt(addr.slice(2,8), 16);
+  return emojis[n % emojis.length];
+}
+
+function showHolderEmpty(msg) {
+  document.getElementById('holders-progress').style.display = 'none';
+  document.getElementById('holders-idle').style.display = 'block';
+  document.getElementById('holders-idle').innerHTML = `<div style="font-size:2.5rem;margin-bottom:.5rem">🐣</div><p>${escHtml(msg)}</p>`;
+  document.getElementById('holders-load-btn').style.display = 'inline-block';
+}
+
+// Open a token in modal from holders tab (fetch metadata)
+async function openTokenModal(tokenId) {
+  // Try to find in loaded NFTs first
+  const cached = userNFTs.find(n => n.tokenId === tokenId);
+  if (cached) { openModal(cached); return; }
+  // Otherwise fetch on-demand
+  try {
+    const uriHex  = await ethCall('tokenURI(uint256)', tokenId);
+    const uri     = decodeString(uriHex);
+    const metadata = await fetchMetadata(uri);
+    openModal({ tokenId, metadata });
+  } catch {
+    openModal({ tokenId, metadata: null });
+  }
+}
+
+
+
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
