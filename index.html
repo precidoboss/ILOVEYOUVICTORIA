@@ -1,914 +1,1415 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>The Grotto — Token Launcher</title>
-<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;900&family=Raleway:wght@300;400;500&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>HenVerse — Egg Mining on The Grotto</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,700;0,9..144,900;1,9..144,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <style>
-  :root {
-    --teal: #00e5c8;
-    --teal-dim: #00bfa5;
-    --gold: #c9a84c;
-    --dark: #060c0f;
-    --surface: #0a1419;
-    --surface2: #0f1e26;
-    --border: rgba(0,229,200,0.15);
-    --text: #cde8e4;
-    --muted: #6a9e98;
-  }
-
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-
-  body {
-    background: var(--dark);
-    color: var(--text);
-    font-family: 'Raleway', sans-serif;
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
-
-  /* Animated cave background */
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background:
-      radial-gradient(ellipse 60% 40% at 20% 80%, rgba(0,100,90,0.18) 0%, transparent 60%),
-      radial-gradient(ellipse 40% 60% at 80% 20%, rgba(0,60,80,0.2) 0%, transparent 60%),
-      radial-gradient(ellipse 80% 30% at 50% 100%, rgba(0,229,200,0.06) 0%, transparent 50%);
-    pointer-events: none;
-    z-index: 0;
-  }
-
-  /* Stalactite SVG top decoration */
-  .stalactites {
-    position: fixed;
-    top: 0; left: 0; width: 100%;
-    height: 120px;
-    z-index: 1;
-    pointer-events: none;
-    opacity: 0.4;
-  }
-
-  .container {
-    position: relative;
-    z-index: 2;
-    max-width: 680px;
-    margin: 0 auto;
-    padding: 60px 24px 80px;
-  }
-
-  /* Header */
-  .header {
-    text-align: center;
-    margin-bottom: 48px;
-  }
-
-  .logo-glyph {
-    width: 64px;
-    height: 64px;
-    margin: 0 auto 16px;
-    position: relative;
-  }
-
-  .logo-glyph svg {
-    filter: drop-shadow(0 0 12px var(--teal));
-  }
-
-  .title {
-    font-family: 'Cinzel', serif;
-    font-size: clamp(28px, 5vw, 42px);
-    font-weight: 900;
-    letter-spacing: 0.12em;
-    color: #fff;
-    text-shadow: 0 0 30px rgba(0,229,200,0.4);
-    line-height: 1;
-  }
-
-  .subtitle {
-    font-family: 'Cinzel', serif;
-    font-size: 11px;
-    letter-spacing: 0.35em;
-    color: var(--teal-dim);
-    margin-top: 8px;
-    text-transform: uppercase;
-  }
-
-  .network-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: rgba(0,229,200,0.08);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    padding: 5px 14px;
-    font-size: 11px;
-    letter-spacing: 0.08em;
-    color: var(--teal);
-    margin-top: 18px;
-  }
-
-  .dot {
-    width: 7px; height: 7px;
-    border-radius: 50%;
-    background: var(--teal);
-    box-shadow: 0 0 8px var(--teal);
-    animation: pulse 2s ease-in-out infinite;
-  }
-
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
-  }
-
-  /* Wallet Connect */
-  .wallet-bar {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 16px 20px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 28px;
-  }
-
-  .wallet-info {
-    font-size: 13px;
-    color: var(--muted);
-  }
-
-  .wallet-info span {
-    color: var(--teal);
-    font-family: monospace;
-    font-size: 12px;
-  }
-
-  /* Main card */
-  .card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    padding: 36px;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .card::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--teal), transparent);
-    opacity: 0.6;
-  }
-
-  .section-label {
-    font-family: 'Cinzel', serif;
-    font-size: 10px;
-    letter-spacing: 0.3em;
-    color: var(--gold);
-    text-transform: uppercase;
-    margin-bottom: 20px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .section-label::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: linear-gradient(90deg, rgba(201,168,76,0.3), transparent);
-  }
-
-  /* Form */
-  .form-grid {
-    display: grid;
-    gap: 18px;
-  }
-
-  .form-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 18px;
-  }
-
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .field.full {
-    grid-column: 1 / -1;
-  }
-
-  label {
-    font-size: 11px;
-    letter-spacing: 0.15em;
-    color: var(--muted);
-    text-transform: uppercase;
-    font-weight: 500;
-  }
-
-  input, select, textarea {
-    background: var(--surface2);
-    border: 1px solid rgba(0,229,200,0.12);
-    border-radius: 10px;
-    padding: 12px 16px;
-    color: var(--text);
-    font-family: 'Raleway', sans-serif;
-    font-size: 14px;
-    transition: border-color 0.2s, box-shadow 0.2s;
-    outline: none;
-    width: 100%;
-  }
-
-  input:focus, select:focus, textarea:focus {
-    border-color: var(--teal);
-    box-shadow: 0 0 0 3px rgba(0,229,200,0.08), inset 0 0 20px rgba(0,229,200,0.03);
-  }
-
-  input::placeholder { color: rgba(106,158,152,0.4); }
-
-  select {
-    appearance: none;
-    cursor: pointer;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2300e5c8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 14px center;
-    padding-right: 36px;
-  }
-
-  select option { background: var(--surface2); }
-
-  .hint {
-    font-size: 11px;
-    color: var(--muted);
-    opacity: 0.7;
-    margin-top: -4px;
-  }
-
-  /* Divider */
-  .divider {
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--border), transparent);
-    margin: 28px 0;
-  }
-
-  /* Toggle row */
-  .toggle-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 0;
-    border-bottom: 1px solid rgba(0,229,200,0.06);
-  }
-
-  .toggle-row:last-child { border-bottom: none; }
-
-  .toggle-label {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-  }
-
-  .toggle-label strong {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text);
-  }
-
-  .toggle-label small {
-    font-size: 11px;
-    color: var(--muted);
-  }
-
-  .toggle {
-    position: relative;
-    width: 44px;
-    height: 24px;
-    flex-shrink: 0;
-  }
-
-  .toggle input { opacity: 0; width: 0; height: 0; }
-
-  .slider {
-    position: absolute;
-    inset: 0;
-    background: rgba(0,229,200,0.1);
-    border: 1px solid var(--border);
-    border-radius: 24px;
-    cursor: pointer;
-    transition: 0.3s;
-  }
-
-  .slider::before {
-    content: '';
-    position: absolute;
-    left: 3px; top: 50%;
-    transform: translateY(-50%);
-    width: 16px; height: 16px;
-    background: var(--muted);
-    border-radius: 50%;
-    transition: 0.3s;
-  }
-
-  .toggle input:checked + .slider {
-    background: rgba(0,229,200,0.2);
-    border-color: var(--teal);
-    box-shadow: 0 0 10px rgba(0,229,200,0.2);
-  }
-
-  .toggle input:checked + .slider::before {
-    transform: translateX(20px) translateY(-50%);
-    background: var(--teal);
-  }
-
-  /* Tax fields - conditionally shown */
-  .tax-fields {
-    display: none;
-    margin-top: 16px;
-  }
-
-  .tax-fields.visible {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-  }
-
-  /* Summary */
-  .summary {
-    background: rgba(0,229,200,0.04);
-    border: 1px solid rgba(0,229,200,0.1);
-    border-radius: 12px;
-    padding: 20px;
-    margin-top: 24px;
-  }
-
-  .summary-row {
-    display: flex;
-    justify-content: space-between;
-    font-size: 13px;
-    padding: 6px 0;
-    border-bottom: 1px solid rgba(0,229,200,0.06);
-  }
-
-  .summary-row:last-child { border-bottom: none; }
-
-  .summary-row .key { color: var(--muted); }
-  .summary-row .val { color: var(--text); font-weight: 500; }
-  .summary-row .val.accent { color: var(--teal); }
-
-  /* Launch button */
-  .launch-btn {
-    width: 100%;
-    margin-top: 28px;
-    padding: 18px;
-    background: linear-gradient(135deg, rgba(0,229,200,0.15), rgba(0,180,160,0.1));
-    border: 1px solid var(--teal);
-    border-radius: 14px;
-    color: var(--teal);
-    font-family: 'Cinzel', serif;
-    font-size: 14px;
-    letter-spacing: 0.2em;
-    cursor: pointer;
-    transition: all 0.3s;
-    position: relative;
-    overflow: hidden;
-    text-transform: uppercase;
-  }
-
-  .launch-btn::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(135deg, rgba(0,229,200,0.08), transparent);
-    opacity: 0;
-    transition: opacity 0.3s;
-  }
-
-  .launch-btn:hover::before { opacity: 1; }
-  .launch-btn:hover {
-    box-shadow: 0 0 30px rgba(0,229,200,0.2), 0 0 60px rgba(0,229,200,0.08);
-    transform: translateY(-1px);
-  }
-
-  .launch-btn:active { transform: translateY(0); }
-  .launch-btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
-  }
-
-  /* Status messages */
-  .status {
-    margin-top: 20px;
-    padding: 14px 18px;
-    border-radius: 10px;
-    font-size: 13px;
-    display: none;
-    line-height: 1.5;
-  }
-
-  .status.error {
-    display: block;
-    background: rgba(255,80,80,0.08);
-    border: 1px solid rgba(255,80,80,0.2);
-    color: #ff8080;
-  }
-
-  .status.success {
-    display: block;
-    background: rgba(0,229,200,0.08);
-    border: 1px solid rgba(0,229,200,0.2);
-    color: var(--teal);
-  }
-
-  .status.loading {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    background: rgba(0,229,200,0.05);
-    border: 1px solid var(--border);
-    color: var(--muted);
-  }
-
-  .spinner {
-    width: 16px; height: 16px;
-    border: 2px solid rgba(0,229,200,0.2);
-    border-top-color: var(--teal);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    flex-shrink: 0;
-  }
-
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  /* Btn styles */
-  .connect-btn {
-    background: rgba(0,229,200,0.1);
-    border: 1px solid var(--teal);
-    color: var(--teal);
-    padding: 8px 18px;
-    border-radius: 8px;
-    cursor: pointer;
-    font-family: 'Raleway', sans-serif;
-    font-size: 12px;
-    letter-spacing: 0.08em;
-    transition: all 0.2s;
-  }
-
-  .connect-btn:hover {
-    background: rgba(0,229,200,0.18);
-    box-shadow: 0 0 15px rgba(0,229,200,0.15);
-  }
-
-  /* Responsive */
-  @media (max-width: 520px) {
-    .form-row { grid-template-columns: 1fr; }
-    .tax-fields.visible { grid-template-columns: 1fr; }
-    .card { padding: 24px 20px; }
-  }
-
-  /* Entrance animation */
-  .card { animation: fadeUp 0.6s ease both; }
-  .wallet-bar { animation: fadeUp 0.6s ease 0.1s both; }
-  .header { animation: fadeUp 0.6s ease 0.0s both; }
-
-  @keyframes fadeUp {
-    from { opacity: 0; transform: translateY(20px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  /* Token address display */
-  .token-address {
-    font-family: monospace;
-    font-size: 12px;
-    word-break: break-all;
-    margin-top: 6px;
-    color: var(--teal);
-  }
-
-  a.explorer-link {
-    color: var(--gold);
-    text-decoration: none;
-    font-size: 12px;
-    display: inline-block;
-    margin-top: 8px;
-  }
-
-  a.explorer-link:hover { text-decoration: underline; }
+/* ─── DESIGN TOKENS ─────────────────────────────────────────── */
+:root {
+  --yolk:       #F5A623;
+  --yolk-deep:  #C8781A;
+  --shell:      #FFF8E8;
+  --coop-brown: #3D2008;
+  --coop-mid:   #6B3A1F;
+  --coop-light: #A0622A;
+  --straw:      #E8C97A;
+  --straw-pale: #F5EAC5;
+  --green:      #5B8C3E;
+  --green-pale: #C5DFB3;
+  --red-warn:   #C0392B;
+  --sky:        #D0EAF8;
+  --ink:        #1A0D00;
+  --ink-mid:    #4A2E10;
+  --shadow:     rgba(61,32,8,.18);
+  --glow:       rgba(245,166,35,.35);
+  --radius:     14px;
+  --radius-sm:  8px;
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-mono:    'DM Mono', monospace;
+}
+
+/* ─── RESET ─────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: var(--font-display);
+  background: var(--coop-brown);
+  color: var(--shell);
+  min-height: 100vh;
+  overflow-x: hidden;
+  position: relative;
+}
+
+/* ─── BACKGROUND TEXTURE ────────────────────────────────────── */
+body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% -10%, #6B3A1F 0%, transparent 70%),
+    radial-gradient(ellipse 60% 40% at 100% 100%, #A0622A22 0%, transparent 60%),
+    repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 18px,
+      rgba(160,98,42,.07) 18px,
+      rgba(160,98,42,.07) 19px
+    );
+  pointer-events: none;
+}
+
+/* Grain overlay */
+body::after {
+  content: '';
+  position: fixed; inset: 0; z-index: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events: none;
+  opacity: .5;
+}
+
+/* ─── FLOATING BITS ─────────────────────────────────────────── */
+.floaters { position: fixed; inset: 0; pointer-events: none; z-index: 1; overflow: hidden; }
+.floater {
+  position: absolute;
+  font-size: 1.4rem;
+  opacity: .18;
+  animation: drift linear infinite;
+}
+@keyframes drift {
+  0%   { transform: translateY(110vh) rotate(0deg);   opacity: .0; }
+  10%  { opacity: .18; }
+  90%  { opacity: .18; }
+  100% { transform: translateY(-10vh)  rotate(360deg); opacity: .0; }
+}
+
+/* ─── LAYOUT ────────────────────────────────────────────────── */
+#app { position: relative; z-index: 2; min-height: 100vh; display: flex; flex-direction: column; }
+
+/* ─── HEADER ────────────────────────────────────────────────── */
+header {
+  display: flex; align-items: center; gap: 1.5rem;
+  padding: 1.1rem 2rem;
+  background: rgba(61,32,8,.78);
+  backdrop-filter: blur(14px);
+  border-bottom: 2px solid var(--coop-light);
+  position: sticky; top: 0; z-index: 100;
+  flex-wrap: wrap;
+}
+.logo {
+  display: flex; align-items: center; gap: .75rem;
+  flex-shrink: 0;
+}
+.logo-egg {
+  font-size: 2.2rem;
+  filter: drop-shadow(0 0 12px var(--yolk));
+  animation: pulse-egg 3s ease-in-out infinite;
+}
+@keyframes pulse-egg {
+  0%,100% { filter: drop-shadow(0 0 10px var(--yolk)); transform: scale(1); }
+  50%      { filter: drop-shadow(0 0 22px var(--yolk)); transform: scale(1.07); }
+}
+.logo-text h1 {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 1.55rem;
+  color: var(--yolk);
+  letter-spacing: -.02em;
+  line-height: 1;
+}
+.logo-text p {
+  font-size: .72rem;
+  font-family: var(--font-mono);
+  color: var(--straw);
+  letter-spacing: .08em;
+  opacity: .8;
+}
+
+nav { display: flex; gap: .5rem; flex: 1; justify-content: center; flex-wrap: wrap; }
+.nav-btn {
+  background: none;
+  border: 1.5px solid transparent;
+  color: var(--straw-pale);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: .9rem;
+  padding: .45rem 1.1rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all .2s;
+  letter-spacing: .01em;
+}
+.nav-btn:hover { border-color: var(--straw); color: var(--shell); }
+.nav-btn.active {
+  background: var(--yolk);
+  border-color: var(--yolk);
+  color: var(--coop-brown);
+}
+
+.wallet-zone { display: flex; align-items: center; gap: .75rem; flex-shrink: 0; }
+#connect-btn {
+  background: linear-gradient(135deg, var(--yolk), var(--yolk-deep));
+  border: none;
+  color: var(--coop-brown);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: .9rem;
+  padding: .5rem 1.4rem;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: 0 3px 14px var(--glow);
+  transition: transform .15s, box-shadow .15s;
+}
+#connect-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px var(--glow); }
+#connect-btn:active { transform: translateY(0); }
+#wallet-badge {
+  display: none;
+  align-items: center; gap: .5rem;
+  background: rgba(245,166,35,.15);
+  border: 1.5px solid var(--yolk);
+  border-radius: 999px;
+  padding: .35rem .9rem;
+  font-family: var(--font-mono);
+  font-size: .82rem;
+  color: var(--yolk);
+}
+#wallet-badge .dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #4CAF50;
+  box-shadow: 0 0 6px #4CAF50;
+  flex-shrink: 0;
+}
+
+/* ─── STATUS BAR ────────────────────────────────────────────── */
+#status-bar {
+  display: none;
+  background: rgba(200,120,26,.25);
+  border-bottom: 1px solid var(--yolk-deep);
+  padding: .55rem 2rem;
+  font-family: var(--font-mono);
+  font-size: .82rem;
+  color: var(--straw);
+  text-align: center;
+  z-index: 99;
+}
+#status-bar.error { background: rgba(192,57,43,.25); border-color: var(--red-warn); color: #f8a5a0; }
+#status-bar.visible { display: block; }
+
+/* ─── MAIN ──────────────────────────────────────────────────── */
+main { flex: 1; padding: 2rem; max-width: 1300px; margin: 0 auto; width: 100%; }
+
+/* Tabs */
+.tab-panel { display: none; animation: fadeIn .3s ease; }
+.tab-panel.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* ─── SECTION TITLES ────────────────────────────────────────── */
+.section-title {
+  font-size: 1.6rem;
+  font-weight: 900;
+  color: var(--yolk);
+  margin-bottom: 1.5rem;
+  display: flex; align-items: center; gap: .6rem;
+}
+.section-title span { font-size: 1.8rem; }
+
+/* ─── COOP TAB ──────────────────────────────────────────────── */
+#tab-coop { display: grid; grid-template-columns: 320px 1fr; gap: 2rem; align-items: start; }
+@media(max-width:900px) { #tab-coop { grid-template-columns: 1fr; } }
+
+/* Facility Card */
+.facility-card {
+  background: linear-gradient(160deg, rgba(107,58,31,.85), rgba(61,32,8,.95));
+  border: 2px solid var(--coop-light);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  box-shadow: 0 8px 32px var(--shadow);
+  position: sticky; top: 90px;
+}
+.facility-card h2 { font-size: 1.2rem; font-weight: 900; color: var(--yolk); margin-bottom: 1rem; }
+.facility-art {
+  width: 100%;
+  aspect-ratio: 4/3;
+  background: linear-gradient(180deg, var(--sky) 0%, var(--green-pale) 60%, var(--green) 100%);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  position: relative;
+  margin-bottom: 1rem;
+  border: 2px solid var(--coop-light);
+}
+/* SVG coop illustration */
+.facility-art svg { width: 100%; height: 100%; }
+
+.stats-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: .6rem; margin-bottom: 1rem;
+}
+.stat-box {
+  background: rgba(245,166,35,.1);
+  border: 1px solid rgba(245,166,35,.2);
+  border-radius: var(--radius-sm);
+  padding: .65rem .9rem;
+}
+.stat-box .label {
+  font-family: var(--font-mono);
+  font-size: .68rem;
+  letter-spacing: .06em;
+  color: var(--straw);
+  margin-bottom: .2rem;
+  text-transform: uppercase;
+}
+.stat-box .value { font-size: 1.05rem; font-weight: 900; color: var(--yolk); }
+
+.coop-btn {
+  width: 100%;
+  background: linear-gradient(135deg, var(--yolk), var(--yolk-deep));
+  border: none;
+  color: var(--coop-brown);
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 1rem;
+  padding: .75rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  box-shadow: 0 4px 18px var(--glow);
+  transition: transform .15s, box-shadow .15s;
+  margin-top: .4rem;
+}
+.coop-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px var(--glow); }
+.coop-btn:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+.coop-btn.secondary {
+  background: transparent;
+  border: 2px solid var(--coop-light);
+  color: var(--straw);
+  box-shadow: none;
+  margin-top: .5rem;
+}
+.coop-btn.secondary:hover { border-color: var(--yolk); color: var(--yolk); background: rgba(245,166,35,.08); }
+
+/* NFT Grid */
+.nft-section { }
+.nft-controls {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 1.2rem; gap: 1rem; flex-wrap: wrap;
+}
+.nft-count {
+  font-family: var(--font-mono);
+  font-size: .82rem;
+  color: var(--straw);
+}
+.nft-count strong { color: var(--yolk); font-size: 1.1rem; }
+
+.refresh-btn {
+  background: transparent;
+  border: 1.5px solid var(--coop-light);
+  color: var(--straw);
+  font-family: var(--font-mono);
+  font-size: .78rem;
+  padding: .35rem .85rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all .2s;
+  letter-spacing: .04em;
+}
+.refresh-btn:hover { border-color: var(--yolk); color: var(--yolk); }
+.refresh-btn.spinning { animation: spin .8s linear infinite; pointer-events: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* NFT Grid */
+.nft-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 1rem;
+}
+.nft-card {
+  background: linear-gradient(160deg, rgba(107,58,31,.7), rgba(61,32,8,.9));
+  border: 1.5px solid var(--coop-mid);
+  border-radius: var(--radius);
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform .2s, border-color .2s, box-shadow .2s;
+  position: relative;
+}
+.nft-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--yolk);
+  box-shadow: 0 8px 28px var(--glow);
+}
+.nft-card.selected {
+  border-color: var(--yolk);
+  box-shadow: 0 0 0 3px rgba(245,166,35,.4), 0 8px 28px var(--glow);
+}
+.nft-card img {
+  width: 100%; aspect-ratio: 1;
+  object-fit: cover;
+  display: block;
+  background: var(--coop-brown);
+}
+.nft-card .nft-img-placeholder {
+  width: 100%; aspect-ratio: 1;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 3rem;
+  background: linear-gradient(135deg, #4A2E10, #3D2008);
+  color: var(--yolk);
+}
+.nft-card .nft-info {
+  padding: .65rem .8rem;
+}
+.nft-card .nft-name {
+  font-weight: 700;
+  font-size: .88rem;
+  color: var(--shell);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nft-card .nft-id {
+  font-family: var(--font-mono);
+  font-size: .72rem;
+  color: var(--straw);
+  opacity: .7;
+  margin-top: .15rem;
+}
+.nft-card .nft-badge {
+  position: absolute;
+  top: .5rem; right: .5rem;
+  background: var(--green);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: .65rem;
+  padding: .15rem .45rem;
+  border-radius: 999px;
+  font-weight: 500;
+}
+.nft-card .nft-badge.placed { background: var(--yolk-deep); }
+
+/* Empty / Loading states */
+.empty-state {
+  grid-column: 1/-1;
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--straw);
+  opacity: .6;
+}
+.empty-state .big { font-size: 3.5rem; margin-bottom: .75rem; }
+.empty-state p { font-size: .95rem; }
+
+.skeleton {
+  background: linear-gradient(90deg, rgba(107,58,31,.5) 25%, rgba(160,98,42,.5) 50%, rgba(107,58,31,.5) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: var(--radius);
+  aspect-ratio: 1;
+}
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+/* ─── POWER BAR ─────────────────────────────────────────────── */
+.power-bar-wrap {
+  margin: 1rem 0;
+}
+.power-bar-label {
+  display: flex; justify-content: space-between;
+  font-family: var(--font-mono); font-size: .73rem;
+  color: var(--straw); margin-bottom: .35rem;
+}
+.power-bar-track {
+  height: 10px;
+  background: rgba(255,255,255,.1);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.power-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--green), var(--yolk));
+  transition: width .5s ease;
+}
+.power-bar-fill.warn { background: linear-gradient(90deg, var(--yolk), #e67e22); }
+.power-bar-fill.danger { background: linear-gradient(90deg, #e67e22, var(--red-warn)); }
+
+/* ─── TOKENOMICS TAB ────────────────────────────────────────── */
+.toko-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1.2rem;
+  margin-bottom: 2rem;
+}
+.toko-card {
+  background: linear-gradient(160deg, rgba(107,58,31,.7), rgba(61,32,8,.9));
+  border: 1.5px solid var(--coop-mid);
+  border-radius: var(--radius);
+  padding: 1.4rem;
+}
+.toko-card h3 {
+  font-size: .78rem;
+  font-family: var(--font-mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--straw);
+  margin-bottom: .6rem;
+}
+.toko-card .big-num {
+  font-size: 1.9rem;
+  font-weight: 900;
+  color: var(--yolk);
+  line-height: 1;
+}
+.toko-card .sub-num { font-size: .82rem; color: var(--straw); margin-top: .3rem; }
+
+.emission-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: .82rem;
+  margin-top: .5rem;
+}
+.emission-table th {
+  text-align: left;
+  color: var(--straw);
+  padding: .5rem .75rem;
+  border-bottom: 1px solid rgba(160,98,42,.4);
+  font-size: .72rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.emission-table td {
+  padding: .55rem .75rem;
+  border-bottom: 1px solid rgba(160,98,42,.15);
+  color: var(--shell);
+}
+.emission-table tr:last-child td { border-bottom: none; }
+.emission-table .highlight { color: var(--yolk); font-weight: 700; }
+.emission-table tr.current-era { background: rgba(245,166,35,.08); }
+
+/* ─── MARKET TAB ────────────────────────────────────────────── */
+.market-notice {
+  background: linear-gradient(160deg, rgba(107,58,31,.7), rgba(61,32,8,.9));
+  border: 1.5px solid var(--coop-mid);
+  border-radius: var(--radius);
+  padding: 2rem;
+  text-align: center;
+  color: var(--straw);
+}
+.market-notice .big { font-size: 3rem; margin-bottom: .5rem; }
+.market-notice h3 { font-size: 1.3rem; font-weight: 900; color: var(--yolk); margin-bottom: .5rem; }
+.market-notice p { opacity: .75; line-height: 1.7; }
+
+/* ─── NFT DETAIL MODAL ──────────────────────────────────────── */
+#modal-overlay {
+  display: none;
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(30,12,0,.8);
+  backdrop-filter: blur(8px);
+  align-items: center; justify-content: center;
+  padding: 1rem;
+}
+#modal-overlay.open { display: flex; }
+.modal {
+  background: linear-gradient(160deg, #4A2E10, #2A1500);
+  border: 2px solid var(--coop-light);
+  border-radius: var(--radius);
+  max-width: 480px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,.6);
+  animation: popIn .25s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes popIn {
+  from { transform: scale(.88); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1.2rem 1.5rem;
+  border-bottom: 1px solid var(--coop-mid);
+}
+.modal-header h3 { font-size: 1.15rem; font-weight: 900; color: var(--yolk); }
+.modal-close {
+  background: none; border: none; color: var(--straw);
+  font-size: 1.4rem; cursor: pointer; line-height: 1;
+  transition: color .15s;
+}
+.modal-close:hover { color: var(--yolk); }
+.modal-body { padding: 1.5rem; }
+.modal-img {
+  width: 100%; border-radius: var(--radius-sm);
+  margin-bottom: 1rem;
+  border: 2px solid var(--coop-mid);
+}
+.modal-img-placeholder {
+  width: 100%; aspect-ratio: 1;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 5rem;
+  background: var(--coop-brown);
+  border-radius: var(--radius-sm);
+  margin-bottom: 1rem;
+  border: 2px solid var(--coop-mid);
+}
+.modal-attrs {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: .5rem; margin-bottom: 1rem;
+}
+.attr-pill {
+  background: rgba(245,166,35,.1);
+  border: 1px solid rgba(245,166,35,.2);
+  border-radius: var(--radius-sm);
+  padding: .5rem .75rem;
+  font-family: var(--font-mono);
+}
+.attr-pill .attr-type {
+  font-size: .65rem; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--straw); margin-bottom: .2rem;
+}
+.attr-pill .attr-val { font-size: .88rem; color: var(--shell); font-weight: 700; }
+.modal-desc { font-size: .88rem; color: var(--straw); line-height: 1.7; margin-bottom: 1rem; }
+.modal-link {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: .78rem;
+  color: var(--yolk);
+  text-decoration: none;
+  border: 1px solid rgba(245,166,35,.3);
+  padding: .35rem .75rem;
+  border-radius: 999px;
+  transition: all .2s;
+  margin-top: .25rem;
+}
+.modal-link:hover { background: rgba(245,166,35,.15); border-color: var(--yolk); }
+
+/* ─── FOOTER ────────────────────────────────────────────────── */
+footer {
+  display: flex; align-items: center; justify-content: center; gap: 2rem;
+  padding: 1rem 2rem;
+  border-top: 1px solid rgba(160,98,42,.3);
+  font-family: var(--font-mono);
+  font-size: .74rem;
+  color: var(--coop-light);
+  flex-wrap: wrap;
+}
+footer a { color: var(--yolk); text-decoration: none; }
+footer a:hover { text-decoration: underline; }
+
+/* ─── CHAIN BADGE ───────────────────────────────────────────── */
+.chain-badge {
+  display: inline-flex; align-items: center; gap: .4rem;
+  background: rgba(245,166,35,.12);
+  border: 1px solid rgba(245,166,35,.25);
+  padding: .2rem .65rem;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: .72rem;
+  color: var(--straw);
+  white-space: nowrap;
+}
+.chain-badge .chain-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 5px var(--green);
+}
 </style>
 </head>
 <body>
 
-<!-- Stalactites SVG -->
-<svg class="stalactites" viewBox="0 0 1440 120" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="sg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#00e5c8" stop-opacity="0.5"/>
-      <stop offset="100%" stop-color="#00e5c8" stop-opacity="0"/>
-    </linearGradient>
-  </defs>
-  <polygon points="0,0 80,0 40,80" fill="url(#sg)"/>
-  <polygon points="60,0 140,0 100,110" fill="url(#sg)"/>
-  <polygon points="140,0 200,0 170,60" fill="url(#sg)"/>
-  <polygon points="200,0 290,0 245,95" fill="url(#sg)"/>
-  <polygon points="310,0 380,0 345,70" fill="url(#sg)"/>
-  <polygon points="390,0 450,0 420,50" fill="url(#sg)"/>
-  <polygon points="460,0 560,0 510,100" fill="url(#sg)"/>
-  <polygon points="570,0 640,0 605,75" fill="url(#sg)"/>
-  <polygon points="650,0 710,0 680,55" fill="url(#sg)"/>
-  <polygon points="720,0 820,0 770,90" fill="url(#sg)"/>
-  <polygon points="830,0 890,0 860,65" fill="url(#sg)"/>
-  <polygon points="900,0 960,0 930,45" fill="url(#sg)"/>
-  <polygon points="970,0 1060,0 1015,85" fill="url(#sg)"/>
-  <polygon points="1070,0 1140,0 1105,70" fill="url(#sg)"/>
-  <polygon points="1150,0 1220,0 1185,55" fill="url(#sg)"/>
-  <polygon points="1230,0 1320,0 1275,95" fill="url(#sg)"/>
-  <polygon points="1330,0 1400,0 1365,65" fill="url(#sg)"/>
-  <polygon points="1400,0 1440,0 1440,80 1420,50" fill="url(#sg)"/>
-</svg>
+<!-- Floating ambient feathers/eggs -->
+<div class="floaters" id="floaters"></div>
 
-<div class="container">
-  <!-- Header -->
-  <div class="header">
-    <div class="logo-glyph">
-      <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="32" cy="32" r="28" stroke="#00e5c8" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.5"/>
-        <circle cx="32" cy="32" r="20" stroke="#00e5c8" stroke-width="1" opacity="0.3"/>
-        <path d="M32 12 L40 28 L56 32 L40 36 L32 52 L24 36 L8 32 L24 28 Z" fill="none" stroke="#00e5c8" stroke-width="1.5" stroke-linejoin="round"/>
-        <circle cx="32" cy="32" r="5" fill="#00e5c8" opacity="0.8"/>
-      </svg>
+<div id="app">
+  <!-- ─── HEADER ─────────────────────────────────────────────────── -->
+  <header>
+    <div class="logo">
+      <div class="logo-egg">🥚</div>
+      <div class="logo-text">
+        <h1>HenVerse</h1>
+        <p>EGG MINING · THE GROTTO</p>
+      </div>
     </div>
-    <div class="title">The Grotto</div>
-    <div class="subtitle">Token Forge</div>
-    <div class="network-badge">
-      <div class="dot"></div>
-      Chain ID 36463 · Avalanche L1
+
+    <nav>
+      <button class="nav-btn active" onclick="switchTab('coop')">🐔 My Coop</button>
+      <button class="nav-btn" onclick="switchTab('tokenomics')">📊 Tokenomics</button>
+      <button class="nav-btn" onclick="switchTab('market')">🛒 Market</button>
+    </nav>
+
+    <div class="wallet-zone">
+      <div class="chain-badge">
+        <span class="chain-dot"></span>
+        The Grotto
+      </div>
+      <div id="wallet-badge">
+        <span class="dot"></span>
+        <span id="wallet-addr"></span>
+      </div>
+      <button id="connect-btn" onclick="connectWallet()">Connect Wallet</button>
     </div>
-  </div>
+  </header>
 
-  <!-- Wallet Bar -->
-  <div class="wallet-bar">
-    <div class="wallet-info" id="walletInfo">Not connected</div>
-    <button class="connect-btn" id="connectBtn" onclick="connectWallet()">Connect Wallet</button>
-  </div>
+  <!-- ─── STATUS BAR ─────────────────────────────────────────────── -->
+  <div id="status-bar"></div>
 
-  <!-- Main Card -->
-  <div class="card">
-    <div class="section-label">Token Identity</div>
+  <!-- ─── MAIN ──────────────────────────────────────────────────── -->
+  <main>
 
-    <div class="form-grid">
-      <div class="form-row">
-        <div class="field">
-          <label>Token Name</label>
-          <input type="text" id="tokenName" placeholder="e.g. Grotto Gold" />
+    <!-- COOP TAB -->
+    <div id="tab-coop" class="tab-panel active">
+      <div class="facility-card">
+        <h2>🏡 Your Hen Coop</h2>
+        <!-- Coop SVG illustration -->
+        <div class="facility-art">
+          <svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">
+            <!-- Sky -->
+            <rect width="400" height="300" fill="#D0EAF8"/>
+            <!-- Ground -->
+            <rect y="220" width="400" height="80" fill="#5B8C3E"/>
+            <rect y="200" width="400" height="30" fill="#7AB050"/>
+            <!-- Coop body -->
+            <rect x="60" y="100" width="260" height="130" rx="4" fill="#8B5A2B"/>
+            <rect x="65" y="105" width="250" height="120" rx="3" fill="#A0622A"/>
+            <!-- Roof -->
+            <polygon points="40,105 200,30 360,105" fill="#6B3A1F"/>
+            <polygon points="50,105 200,38 350,105" fill="#8B4513"/>
+            <!-- Roof ridge -->
+            <line x1="200" y1="32" x2="200" y2="105" stroke="#6B3A1F" stroke-width="3"/>
+            <!-- Roof tiles pattern -->
+            <g opacity="0.2">
+              <line x1="120" y1="105" x2="155" y2="60" stroke="#3D2008" stroke-width="1.5"/>
+              <line x1="160" y1="105" x2="178" y2="47" stroke="#3D2008" stroke-width="1.5"/>
+              <line x1="200" y1="105" x2="200" y2="38" stroke="#3D2008" stroke-width="1.5"/>
+              <line x1="240" y1="105" x2="222" y2="47" stroke="#3D2008" stroke-width="1.5"/>
+              <line x1="280" y1="105" x2="245" y2="60" stroke="#3D2008" stroke-width="1.5"/>
+            </g>
+            <!-- Door -->
+            <rect x="172" y="165" width="56" height="65" rx="6" fill="#3D2008"/>
+            <rect x="175" y="168" width="50" height="59" rx="4" fill="#2A1400"/>
+            <circle cx="218" cy="198" r="3" fill="#F5A623"/>
+            <!-- Windows -->
+            <rect x="82" y="122" width="60" height="50" rx="4" fill="#3D2008"/>
+            <rect x="85" y="125" width="54" height="44" rx="3" fill="#87CEEB" opacity="0.8"/>
+            <line x1="112" y1="125" x2="112" y2="169" stroke="#3D2008" stroke-width="2"/>
+            <line x1="85"  y1="147" x2="139" y2="147" stroke="#3D2008" stroke-width="2"/>
+
+            <rect x="252" y="122" width="60" height="50" rx="4" fill="#3D2008"/>
+            <rect x="255" y="125" width="54" height="44" rx="3" fill="#87CEEB" opacity="0.8"/>
+            <line x1="282" y1="125" x2="282" y2="169" stroke="#3D2008" stroke-width="2"/>
+            <line x1="255" y1="147" x2="309" y2="147" stroke="#3D2008" stroke-width="2"/>
+
+            <!-- Fence left -->
+            <rect x="10" y="195" width="55" height="8" rx="2" fill="#8B5A2B"/>
+            <rect x="15" y="175" width="8" height="30" rx="2" fill="#8B5A2B"/>
+            <rect x="35" y="175" width="8" height="30" rx="2" fill="#8B5A2B"/>
+            <rect x="55" y="175" width="8" height="30" rx="2" fill="#8B5A2B"/>
+            <!-- Fence right -->
+            <rect x="340" y="195" width="55" height="8" rx="2" fill="#8B5A2B"/>
+            <rect x="340" y="175" width="8" height="30" rx="2" fill="#8B5A2B"/>
+            <rect x="360" y="175" width="8" height="30" rx="2" fill="#8B5A2B"/>
+            <rect x="380" y="175" width="8" height="30" rx="2" fill="#8B5A2B"/>
+            <!-- Chickens -->
+            <!-- Chicken 1 -->
+            <ellipse cx="330" cy="218" rx="18" ry="14" fill="#F5F5DC"/>
+            <circle cx="346" cy="210" r="9" fill="#F5F5DC"/>
+            <ellipse cx="351" cy="208" rx="4" ry="3" fill="#FF6B6B"/>
+            <polygon points="356,210 362,212 356,214" fill="#F5A623"/>
+            <circle cx="353" cy="208" r="1.5" fill="#2A1400"/>
+            <!-- Chicken 2 -->
+            <ellipse cx="60" cy="218" rx="16" ry="13" fill="#FFF8DC"/>
+            <circle cx="44" cy="210" r="8" fill="#FFF8DC"/>
+            <ellipse cx="39" cy="208" rx="3.5" ry="2.5" fill="#FF6B6B"/>
+            <polygon points="34,210 28,212 34,214" fill="#F5A623"/>
+            <circle cx="37" cy="208" r="1.5" fill="#2A1400"/>
+            <!-- Eggs on ground -->
+            <ellipse cx="160" cy="225" rx="8" ry="6" fill="#FFF8DC" stroke="#E8C97A" stroke-width="1"/>
+            <ellipse cx="175" cy="230" rx="7" ry="5.5" fill="#F5EAC5" stroke="#E8C97A" stroke-width="1"/>
+            <ellipse cx="240" cy="227" rx="8" ry="6" fill="#FFF8DC" stroke="#E8C97A" stroke-width="1"/>
+            <!-- Sun -->
+            <circle cx="360" cy="45" r="22" fill="#F5A623" opacity="0.9"/>
+            <g stroke="#F5A623" stroke-width="2" opacity="0.6">
+              <line x1="360" y1="15" x2="360" y2="8"/>
+              <line x1="360" y1="75" x2="360" y2="82"/>
+              <line x1="330" y1="45" x2="323" y2="45"/>
+              <line x1="390" y1="45" x2="397" y2="45"/>
+              <line x1="339" y1="24" x2="334" y2="19"/>
+              <line x1="381" y1="66" x2="386" y2="71"/>
+              <line x1="381" y1="24" x2="386" y2="19"/>
+              <line x1="339" y1="66" x2="334" y2="71"/>
+            </g>
+          </svg>
         </div>
-        <div class="field">
-          <label>Symbol</label>
-          <input type="text" id="tokenSymbol" placeholder="e.g. GGD" maxlength="8"/>
+
+        <!-- Stats -->
+        <div class="stats-grid">
+          <div class="stat-box">
+            <div class="label">Hens Owned</div>
+            <div class="value" id="stat-hens">—</div>
+          </div>
+          <div class="stat-box">
+            <div class="label">Placed in Coop</div>
+            <div class="value" id="stat-placed">0</div>
+          </div>
+          <div class="stat-box">
+            <div class="label">Hashrate</div>
+            <div class="value" id="stat-hashrate">0 MH/s</div>
+          </div>
+          <div class="stat-box">
+            <div class="label">Power</div>
+            <div class="value" id="stat-power">0W</div>
+          </div>
+        </div>
+
+        <!-- Power Bar -->
+        <div class="power-bar-wrap">
+          <div class="power-bar-label">
+            <span>Power Usage</span>
+            <span id="power-label-val">0 / 2000W</span>
+          </div>
+          <div class="power-bar-track">
+            <div class="power-bar-fill" id="power-bar" style="width:0%"></div>
+          </div>
+        </div>
+
+        <div id="no-wallet-msg" style="text-align:center;color:var(--straw);font-size:.85rem;padding:.5rem 0;opacity:.7;">
+          Connect your wallet to manage your coop
+        </div>
+
+        <button class="coop-btn secondary" id="refresh-nfts-btn" style="display:none" onclick="loadNFTs()">
+          ↻ Refresh Hens
+        </button>
+      </div>
+
+      <!-- NFT Grid Panel -->
+      <div class="nft-section">
+        <div class="nft-controls">
+          <div>
+            <div class="section-title" style="margin-bottom:.25rem;">
+              <span>🐣</span> HenVerse NFTs
+            </div>
+            <div class="nft-count" id="nft-count-label">Connect wallet to see your hens</div>
+          </div>
+          <button class="refresh-btn" id="refresh-btn" onclick="loadNFTs()" style="display:none">↻ Refresh</button>
+        </div>
+
+        <div class="nft-grid" id="nft-grid">
+          <div class="empty-state">
+            <div class="big">🏚️</div>
+            <p>Connect your wallet to see your HenVerse hens</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TOKENOMICS TAB -->
+    <div id="tab-tokenomics" class="tab-panel">
+      <div class="section-title"><span>📊</span> EGG Token Tokenomics</div>
+      <div class="toko-grid">
+        <div class="toko-card">
+          <h3>Max Supply</h3>
+          <div class="big-num">21,000,000</div>
+          <div class="sub-num">EGG — fixed hard cap</div>
+        </div>
+        <div class="toko-card">
+          <h3>Premine / Team</h3>
+          <div class="big-num" style="color:var(--green)">None</div>
+          <div class="sub-num">100% gameplay emissions</div>
+        </div>
+        <div class="toko-card">
+          <h3>Base Emission Rate</h3>
+          <div class="big-num">2.5</div>
+          <div class="sub-num">EGG per block</div>
+        </div>
+        <div class="toko-card">
+          <h3>Halving Interval</h3>
+          <div class="big-num">4.2M</div>
+          <div class="sub-num">blocks ≈ 48 days</div>
+        </div>
+        <div class="toko-card">
+          <h3>Referral Fee</h3>
+          <div class="big-num">2.5%</div>
+          <div class="sub-num">of claimed rewards</div>
+        </div>
+        <div class="toko-card">
+          <h3>Network</h3>
+          <div class="big-num" style="font-size:1.2rem">The Grotto</div>
+          <div class="sub-num">Chain ID 36463 · Avalanche L1</div>
         </div>
       </div>
 
-      <div class="form-row">
-        <div class="field">
-          <label>Total Supply</label>
-          <input type="number" id="totalSupply" placeholder="1,000,000,000" min="1"/>
+      <div class="section-title" style="margin-top:1.5rem"><span>⏳</span> Emission Schedule</div>
+      <div style="background:linear-gradient(160deg,rgba(107,58,31,.7),rgba(61,32,8,.9));border:1.5px solid var(--coop-mid);border-radius:var(--radius);padding:1.2rem;overflow-x:auto;">
+        <table class="emission-table" id="emission-table">
+          <thead>
+            <tr>
+              <th>Era</th>
+              <th>Blocks</th>
+              <th>Rate (EGG/block)</th>
+              <th>Era Supply</th>
+              <th>Cumulative</th>
+              <th>≈ Days</th>
+            </tr>
+          </thead>
+          <tbody id="emission-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="section-title" style="margin-top:1.5rem"><span>🔁</span> Reward Flywheel</div>
+      <div style="background:linear-gradient(160deg,rgba(107,58,31,.7),rgba(61,32,8,.9));border:1.5px solid var(--coop-mid);border-radius:var(--radius);padding:1.4rem;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:1rem;">
+          <div style="padding:.9rem;background:rgba(245,166,35,.07);border:1px solid rgba(245,166,35,.18);border-radius:10px;">
+            <div style="font-size:1.5rem;margin-bottom:.4rem">1️⃣</div>
+            <div style="font-weight:900;color:var(--yolk);margin-bottom:.3rem">Buy a Coop</div>
+            <div style="font-size:.83rem;color:var(--straw);line-height:1.6">Purchase a starter Hen Coop facility. You must own a coop before placing hens.</div>
+          </div>
+          <div style="padding:.9rem;background:rgba(245,166,35,.07);border:1px solid rgba(245,166,35,.18);border-radius:10px;">
+            <div style="font-size:1.5rem;margin-bottom:.4rem">2️⃣</div>
+            <div style="font-weight:900;color:var(--yolk);margin-bottom:.3rem">Place Hens</div>
+            <div style="font-size:.83rem;color:var(--straw);line-height:1.6">Place HenVerse NFTs into your coop grid. Each hen adds hashrate to your total. Unplaced hens earn nothing.</div>
+          </div>
+          <div style="padding:.9rem;background:rgba(245,166,35,.07);border:1px solid rgba(245,166,35,.18);border-radius:10px;">
+            <div style="font-size:1.5rem;margin-bottom:.4rem">3️⃣</div>
+            <div style="font-weight:900;color:var(--yolk);margin-bottom:.3rem">Earn EGG</div>
+            <div style="font-size:.83rem;color:var(--straw);line-height:1.6">Your share of each block emission = your hashrate ÷ total network hashrate × 2.5 EGG.</div>
+          </div>
+          <div style="padding:.9rem;background:rgba(245,166,35,.07);border:1px solid rgba(245,166,35,.18);border-radius:10px;">
+            <div style="font-size:1.5rem;margin-bottom:.4rem">4️⃣</div>
+            <div style="font-weight:900;color:var(--yolk);margin-bottom:.3rem">Claim Rewards</div>
+            <div style="font-size:.83rem;color:var(--straw);line-height:1.6">Manually claim accrued EGG. Utility fee deducted on claim. Keep pending rewards above fee threshold.</div>
+          </div>
+          <div style="padding:.9rem;background:rgba(245,166,35,.07);border:1px solid rgba(245,166,35,.18);border-radius:10px;">
+            <div style="font-size:1.5rem;margin-bottom:.4rem">5️⃣</div>
+            <div style="font-weight:900;color:var(--yolk);margin-bottom:.3rem">Upgrade or Trade</div>
+            <div style="font-size:.83rem;color:var(--straw);line-height:1.6">Upgrade your coop for more slots & power. Trade hens on the marketplace. Refer friends for 2.5% of their claims.</div>
+          </div>
+          <div style="padding:.9rem;background:rgba(245,166,35,.07);border:1px solid rgba(245,166,35,.18);border-radius:10px;">
+            <div style="font-size:1.5rem;margin-bottom:.4rem">♻️</div>
+            <div style="font-weight:900;color:var(--yolk);margin-bottom:.3rem">The Flywheel</div>
+            <div style="font-size:.83rem;color:var(--straw);line-height:1.6">EGG earned → buy more hens / upgrades → more hashrate → more EGG. Halvings create scarcity pressure driving token value.</div>
+          </div>
         </div>
-        <div class="field">
-          <label>Decimals</label>
-          <select id="decimals">
-            <option value="18" selected>18 (Standard)</option>
-            <option value="9">9</option>
-            <option value="6">6 (USDC-style)</option>
-            <option value="0">0 (NFT-style)</option>
-          </select>
-        </div>
       </div>
     </div>
 
-    <div class="divider"></div>
-    <div class="section-label">Features & Tax</div>
+    <!-- MARKET TAB -->
+    <div id="tab-market" class="tab-panel">
+      <div class="section-title"><span>🛒</span> Hen Market</div>
+      <div class="market-notice">
+        <div class="big">🚧</div>
+        <h3>Marketplace Coming Soon</h3>
+        <p>Trade your HenVerse hens peer-to-peer.<br/>
+        The marketplace will let you list, buy, and cancel NFT listings directly onchain.<br/><br/>
+        In the meantime, you can mint your hens at the contract below and view them in your coop.</p>
+        <br/>
+        <a class="modal-link" href="https://explorer.avax.network/thegrotto/address/0x42c302FF8c34bb5D19bDA1a051bA89BD3a23b7CF" target="_blank" rel="noreferrer">View NFT Contract ↗</a>
+      </div>
 
-    <div class="toggle-row">
-      <div class="toggle-label">
-        <strong>Enable Buy/Sell Tax</strong>
-        <small>Configures tax on swaps (requires DEX integration)</small>
-      </div>
-      <label class="toggle">
-        <input type="checkbox" id="taxToggle" onchange="toggleTax()"/>
-        <span class="slider"></span>
-      </label>
-    </div>
-
-    <div class="tax-fields" id="taxFields">
-      <div class="field">
-        <label>Buy Tax %</label>
-        <input type="number" id="buyTax" placeholder="0" min="0" max="25" step="0.1"/>
-      </div>
-      <div class="field">
-        <label>Sell Tax %</label>
-        <input type="number" id="sellTax" placeholder="0" min="0" max="25" step="0.1"/>
-      </div>
-      <div class="field">
-        <label>Tax Wallet</label>
-        <input type="text" id="taxWallet" placeholder="0x..." style="grid-column: 1 / -1;"/>
-      </div>
-    </div>
-
-    <div class="toggle-row">
-      <div class="toggle-label">
-        <strong>Mintable</strong>
-        <small>Owner can mint additional tokens later</small>
-      </div>
-      <label class="toggle">
-        <input type="checkbox" id="mintable"/>
-        <span class="slider"></span>
-      </label>
-    </div>
-
-    <div class="toggle-row">
-      <div class="toggle-label">
-        <strong>Burnable</strong>
-        <small>Token holders can burn their tokens</small>
-      </div>
-      <label class="toggle">
-        <input type="checkbox" id="burnable" checked/>
-        <span class="slider"></span>
-      </label>
-    </div>
-
-    <div class="toggle-row">
-      <div class="toggle-label">
-        <strong>Pausable</strong>
-        <small>Owner can pause all transfers in emergency</small>
-      </div>
-      <label class="toggle">
-        <input type="checkbox" id="pausable"/>
-        <span class="slider"></span>
-      </label>
-    </div>
-
-    <div class="divider"></div>
-    <div class="section-label">Summary</div>
-
-    <div class="summary" id="summary">
-      <div class="summary-row">
-        <span class="key">Token</span>
-        <span class="val accent" id="s-name">—</span>
-      </div>
-      <div class="summary-row">
-        <span class="key">Symbol</span>
-        <span class="val" id="s-symbol">—</span>
-      </div>
-      <div class="summary-row">
-        <span class="key">Supply</span>
-        <span class="val" id="s-supply">—</span>
-      </div>
-      <div class="summary-row">
-        <span class="key">Decimals</span>
-        <span class="val" id="s-decimals">18</span>
-      </div>
-      <div class="summary-row">
-        <span class="key">Tax</span>
-        <span class="val" id="s-tax">None</span>
-      </div>
-      <div class="summary-row">
-        <span class="key">Features</span>
-        <span class="val" id="s-features">Burnable</span>
+      <div class="section-title" style="margin-top:2rem"><span>🐔</span> Hen Types</div>
+      <div style="background:linear-gradient(160deg,rgba(107,58,31,.7),rgba(61,32,8,.9));border:1.5px solid var(--coop-mid);border-radius:var(--radius);padding:1.2rem;overflow-x:auto;">
+        <table class="emission-table">
+          <thead>
+            <tr>
+              <th>Hen Type</th>
+              <th>Hashrate</th>
+              <th>Power</th>
+              <th>Cost (EGG)</th>
+              <th>Supply</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>🐣 Chick (Starter)</td><td class="highlight">10 MH/s</td><td>100W</td><td>500 EGG</td><td>2,000</td></tr>
+            <tr><td>🐔 Standard Hen</td><td class="highlight">24 MH/s</td><td>200W</td><td>1,500 EGG</td><td>500</td></tr>
+            <tr><td>🦅 Golden Hen</td><td class="highlight">70 MH/s</td><td>600W</td><td>4,000 EGG</td><td>30</td></tr>
+            <tr><td>🦚 Legendary Rooster</td><td class="highlight">200 MH/s</td><td>1000W</td><td>5,000 EGG</td><td>20</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
-    <button class="launch-btn" id="launchBtn" onclick="launchToken()">⬡ &nbsp; Launch Token</button>
+  </main>
 
-    <div class="status" id="status"></div>
+  <!-- ─── FOOTER ─────────────────────────────────────────────────── -->
+  <footer>
+    <span>HenVerse © 2025</span>
+    <a href="https://explorer.avax.network/thegrotto" target="_blank" rel="noreferrer">Explorer ↗</a>
+    <span>Chain ID: 36463</span>
+    <span>NFT: 0x42c3…b7CF</span>
+  </footer>
+</div>
+
+<!-- ─── NFT MODAL ──────────────────────────────────────────────────── -->
+<div id="modal-overlay" onclick="closeModal(event)">
+  <div class="modal" id="nft-modal">
+    <div class="modal-header">
+      <h3 id="modal-name">Hen #0</h3>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="modal-img-wrap"></div>
+      <p class="modal-desc" id="modal-desc"></p>
+      <div class="modal-attrs" id="modal-attrs"></div>
+      <a class="modal-link" id="modal-explorer-link" href="#" target="_blank" rel="noreferrer">View on Explorer ↗</a>
+    </div>
   </div>
 </div>
 
 <script>
-const CHAIN_ID = 36463;
-const CHAIN_ID_HEX = '0x' + CHAIN_ID.toString(16);
-const RPC_URL = 'https://subnets.avax.network/thegrotto/mainnet/rpc';
-const EXPLORER = 'https://explorer.avax.network/thegrotto';
+// ─── CONFIG ──────────────────────────────────────────────────────
+const CHAIN_ID     = 36463;
+const CHAIN_HEX    = '0x' + CHAIN_ID.toString(16); // 0x8E6F
+const RPC_URL      = 'https://subnets.avax.network/thegrotto/mainnet/rpc';
+const EXPLORER     = 'https://explorer.avax.network/thegrotto';
+const NFT_CONTRACT = '0x42c302FF8c34bb5D19bDA1a051bA89BD3a23b7CF';
 
-let provider, signer, account;
+// ─── EMISSION CONSTANTS ───────────────────────────────────────────
+const BASE_EMISSION   = 2.5;      // EGG per block
+const HALVING_INTERVAL = 4_200_000; // blocks
+const MAX_SUPPLY      = 21_000_000;
+const BLOCKS_PER_DAY  = 86400;    // ~1 block/sec on Grotto
 
-// Live summary update
-['tokenName','tokenSymbol','totalSupply','decimals','buyTax','sellTax'].forEach(id => {
-  document.getElementById(id)?.addEventListener('input', updateSummary);
-});
-['mintable','burnable','pausable','taxToggle'].forEach(id => {
-  document.getElementById(id)?.addEventListener('change', updateSummary);
-});
+// ─── STATE ───────────────────────────────────────────────────────
+let walletAddr    = null;
+let userNFTs      = [];
+let placedNFTs    = new Set();
+let isFetching    = false;
 
-function updateSummary() {
-  const name = document.getElementById('tokenName').value || '—';
-  const sym = document.getElementById('tokenSymbol').value || '—';
-  const supply = document.getElementById('totalSupply').value;
-  const dec = document.getElementById('decimals').value;
-  const taxOn = document.getElementById('taxToggle').checked;
-  const buy = document.getElementById('buyTax').value || '0';
-  const sell = document.getElementById('sellTax').value || '0';
-
-  document.getElementById('s-name').textContent = name;
-  document.getElementById('s-symbol').textContent = sym;
-  document.getElementById('s-supply').textContent = supply ? Number(supply).toLocaleString() : '—';
-  document.getElementById('s-decimals').textContent = dec;
-  document.getElementById('s-tax').textContent = taxOn ? `Buy ${buy}% / Sell ${sell}%` : 'None';
-
-  const feats = [];
-  if (document.getElementById('mintable').checked) feats.push('Mintable');
-  if (document.getElementById('burnable').checked) feats.push('Burnable');
-  if (document.getElementById('pausable').checked) feats.push('Pausable');
-  document.getElementById('s-features').textContent = feats.length ? feats.join(', ') : 'Standard';
-}
-
-function toggleTax() {
-  const on = document.getElementById('taxToggle').checked;
-  const fields = document.getElementById('taxFields');
-  fields.className = 'tax-fields' + (on ? ' visible' : '');
-  // fix grid column for tax wallet
-  if (on) {
-    const taxWalletField = document.getElementById('taxWallet').parentElement;
-    taxWalletField.style.gridColumn = '1 / -1';
+// ─── FLOATERS ────────────────────────────────────────────────────
+(function spawnFloaters() {
+  const wrap   = document.getElementById('floaters');
+  const icons  = ['🥚','🪶','🐓','🐣','🌾','✨'];
+  for (let i = 0; i < 14; i++) {
+    const el = document.createElement('div');
+    el.className = 'floater';
+    el.textContent = icons[i % icons.length];
+    el.style.left     = Math.random() * 100 + 'vw';
+    el.style.animationDuration = (14 + Math.random() * 18) + 's';
+    el.style.animationDelay   = '-' + Math.random() * 25 + 's';
+    el.style.fontSize = (.9 + Math.random() * .9) + 'rem';
+    wrap.appendChild(el);
   }
-  updateSummary();
+})();
+
+// ─── TAB SWITCH ──────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  // match button by text pattern
+  document.querySelectorAll('.nav-btn').forEach(b => {
+    if (b.getAttribute('onclick').includes(name)) b.classList.add('active');
+  });
 }
 
+// ─── STATUS ──────────────────────────────────────────────────────
+function setStatus(msg, isError = false) {
+  const bar = document.getElementById('status-bar');
+  if (!msg) { bar.classList.remove('visible','error'); bar.textContent = ''; return; }
+  bar.textContent = msg;
+  bar.classList.toggle('error', isError);
+  bar.classList.add('visible');
+}
+
+// ─── RPC CALL (no external lib) ──────────────────────────────────
+async function rpcCall(method, params = []) {
+  const res = await fetch(RPC_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method, params }),
+  });
+  const json = await res.json();
+  if (json.error) throw new Error(json.error.message || 'RPC error');
+  return json.result;
+}
+
+// ─── TINY ABI ENCODER ────────────────────────────────────────────
+// Known function selectors (keccak256 first 4 bytes)
+const SEL = {
+  'balanceOf(address)':             '70a08231',
+  'tokenOfOwnerByIndex(address,uint256)': '2f745c59',
+  'tokenURI(uint256)':              'c87b56dd',
+  'totalSupply()':                  '18160ddd',
+  'ownerOf(uint256)':               '6352211e',
+  'name()':                         '06fdde03',
+  'symbol()':                       '95d89b41',
+};
+
+function encodeFn(sig, ...args) {
+  const sel = SEL[sig];
+  if (!sel) throw new Error('Unknown selector: ' + sig);
+  let data = sel;
+  const types = (sig.match(/\(([^)]*)\)/)?.[1] || '').split(',').filter(Boolean);
+  args.forEach((arg, i) => {
+    const t = types[i]?.trim();
+    if (t === 'address') {
+      data += arg.toLowerCase().replace('0x','').padStart(64,'0');
+    } else if (t === 'uint256') {
+      data += BigInt(arg).toString(16).padStart(64,'0');
+    }
+  });
+  return '0x' + data;
+}
+
+async function ethCall(sig, ...args) {
+  const data = encodeFn(sig, ...args);
+  return rpcCall('eth_call', [{ to: NFT_CONTRACT, data }, 'latest']);
+}
+
+// ─── ABI DECODER ─────────────────────────────────────────────────
+function decodeUint256(hex) {
+  if (!hex || hex === '0x') return 0n;
+  return BigInt(hex.slice(0,2) === '0x' ? hex : '0x' + hex);
+}
+
+function decodeString(hex) {
+  try {
+    if (!hex || hex === '0x') return '';
+    const h = hex.startsWith('0x') ? hex.slice(2) : hex;
+    if (h.length < 128) return '';
+    // ABI string: slot0 = offset (usually 0x20 = 32), slot1 = length, then bytes
+    const offset = Number(BigInt('0x' + h.slice(0,64))) * 2;
+    const length = Number(BigInt('0x' + h.slice(offset, offset + 64)));
+    if (length === 0) return '';
+    const strHex = h.slice(offset + 64, offset + 64 + length * 2);
+    let str = '';
+    for (let i = 0; i < strHex.length; i += 2) {
+      str += String.fromCharCode(parseInt(strHex.slice(i, i + 2), 16));
+    }
+    return str;
+  } catch { return ''; }
+}
+
+// ─── IPFS / URI helper ───────────────────────────────────────────
+function resolveURI(uri) {
+  if (!uri) return '';
+  if (uri.startsWith('ipfs://')) return 'https://ipfs.io/ipfs/' + uri.slice(7);
+  if (uri.startsWith('ipfs/'))   return 'https://ipfs.io/ipfs/' + uri.slice(5);
+  return uri;
+}
+
+async function fetchMetadata(uri) {
+  try {
+    if (uri.startsWith('data:application/json;base64,')) {
+      return JSON.parse(atob(uri.split(',')[1]));
+    }
+    if (uri.startsWith('data:application/json,')) {
+      return JSON.parse(decodeURIComponent(uri.split(',')[1]));
+    }
+    const url = resolveURI(uri);
+    if (!url) return null;
+    const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch { return null; }
+}
+
+// ─── CONNECT WALLET ──────────────────────────────────────────────
 async function connectWallet() {
   if (!window.ethereum) {
-    showStatus('error', 'No wallet detected. Please install MetaMask or a compatible wallet.');
-    return;
+    return setStatus('No wallet detected — please install MetaMask.', true);
   }
-
+  setStatus('Connecting…');
   try {
-    showStatus('loading', 'Connecting wallet...');
-
-    // Request accounts
     const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-    account = accounts[0];
+    if (!accounts.length) { setStatus('No accounts found.', true); return; }
+    walletAddr = accounts[0];
 
-    // Switch/add network
-    try {
-      await window.ethereum.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: CHAIN_ID_HEX }]
-      });
-    } catch (switchErr) {
-      if (switchErr.code === 4902) {
+    // Ensure correct chain
+    const currentChain = await window.ethereum.request({ method: 'eth_chainId' });
+    if (parseInt(currentChain, 16) !== CHAIN_ID) {
+      setStatus('Switching to The Grotto network…');
+      try {
         await window.ethereum.request({
-          method: 'wallet_addEthereumChain',
-          params: [{
-            chainId: CHAIN_ID_HEX,
-            chainName: 'The Grotto',
-            nativeCurrency: { name: 'GRT', symbol: 'GRT', decimals: 18 },
-            rpcUrls: [RPC_URL],
-            blockExplorerUrls: [EXPLORER]
-          }]
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: CHAIN_HEX }],
         });
-      } else throw switchErr;
+      } catch (switchErr) {
+        if (switchErr.code === 4902) {
+          await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: CHAIN_HEX,
+              chainName: 'The Grotto',
+              rpcUrls: [RPC_URL],
+              blockExplorerUrls: [EXPLORER],
+              nativeCurrency: { name: 'GRT', symbol: 'GRT', decimals: 18 },
+            }],
+          });
+        } else {
+          throw switchErr;
+        }
+      }
     }
 
-    provider = new ethers.providers.Web3Provider(window.ethereum);
-    signer = provider.getSigner();
-
-    const short = account.slice(0,6) + '...' + account.slice(-4);
-    document.getElementById('walletInfo').innerHTML = `Connected: <span>${short}</span>`;
-    document.getElementById('connectBtn').textContent = 'Connected';
-    document.getElementById('connectBtn').disabled = true;
-
-    hideStatus();
-  } catch (err) {
-    showStatus('error', err.message || 'Connection failed.');
+    onWalletConnected(walletAddr);
+  } catch (e) {
+    setStatus(e.message || 'Failed to connect wallet.', true);
   }
 }
 
-// ─── REAL COMPILED BYTECODE for GrottoToken.sol ───────────────
-// Constructor signature:
-//   (string name, string symbol, uint8 decimals, uint256 totalSupply,
-//    bool mintable, bool burnable, bool pausable,
-//    bool taxEnabled, uint256 buyTaxBps, uint256 sellTaxBps, address taxWallet)
-const GROTTO_BYTECODE = '0x608060405234801561000f575f5ffd5b506040516156fc3803806156fc8339818101604052810190610031919061090a565b5f8b5111610074576040517f08c379a000000000000000000000000000000000000000000000000000000000815260040161006b90610a89565b60405180910390fd5b5f8a51116100b7576040517f08c379a00000000000000000000000000000000000000000000000000000000081526004016100ae90610af1565b60405180910390fd5b5f88116100f9576040517f08c379a00000000000000000000000000000000000000000000000000000000081526004016100f090610b59565b60405180910390fd5b60128960ff161115610140576040517f08c379a000000000000000000000000000000000000000000000000000000000815260040161013790610bc1565b60405180910390fd5b831561023f576109c483111561018b576040517f08c379a000000000000000000000000000000000000000000000000000000000815260040161018290610c29565b60405180910390fd5b6109c48211156101d0576040517f08c379a00000000000000000000000000000000000000000000000000000000081526004016101c790610c91565b60405180910390fd5b5f73ffffffffffffffffffffffffffffffffffffffff168173ffffffffffffffffffffffffffffffffffffffff160361023e576040517f08c379a000000000000000000000000000000000000000000000000000000000815260040161023590610cf9565b60405180910390fd5b5b3360065f6101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff1602179055503373ffffffffffffffffffffffffffffffffffffffff165f73ffffffffffffffffffffffffffffffffffffffff167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e060405160405180910390a38a5f90816102e79190610f1e565b5089600190816102f79190610f1e565b508860025f6101000a81548160ff021916908360ff16021790555086600660146101000a81548160ff02191690831515021790555085600660156101000a81548160ff02191690831515021790555084600660166101000a81548160ff02191690831515021790555083600660186101000a81548160ff02191690831515021790555083610385575f610387565b825b60078190555083610398575f61039a565b815b6008819055508380156103d957505f73ffffffffffffffffffffffffffffffffffffffff168173ffffffffffffffffffffffffffffffffffffffff1614155b6103e357336103e5565b805b60095f6101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff1602179055506001600a5f3373ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205f6101000a81548160ff0219169083151502179055506001600a5f60095f9054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205f6101000a81548160ff0219169083151502179055506001600a5f3073ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205f6101000a81548160ff0219169083151502179055505f8960ff16600a6105559190611149565b896105609190611193565b9050610572338261058360201b60201c565b505050505050505050505050611297565b5f73ffffffffffffffffffffffffffffffffffffffff168273ffffffffffffffffffffffffffffffffffffffff16036105f1576040517f08c379a00000000000000000000000000000000000000000000000000000000081526004016105e89061121e565b60405180910390fd5b8060035f828254610602919061123c565b925050819055508060045f8473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205f828254610655919061123c565b925050819055508173ffffffffffffffffffffffffffffffffffffffff165f73ffffffffffffffffffffffffffffffffffffffff167fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef836040516106b9919061127e565b60405180910390a35050565b5f604051905090565b5f5ffd5b5f5ffd5b5f5ffd5b5f5ffd5b5f601f19601f8301169050919050565b7f4e487b71000000000000000000000000000000000000000000000000000000005f52604160045260245ffd5b610724826106de565b810181811067ffffffffffffffff82111715610743576107426106ee565b5b80604052505050565b5f6107556106c5565b9050610761828261071b565b919050565b5f67ffffffffffffffff8211156107805761077f6106ee565b5b610789826106de565b9050602081019050919050565b8281835e5f83830152505050565b5f6107b66107b184610766565b61074c565b9050828152602081018484840111156107d2576107d16106da565b5b6107dd848285610796565b509392505050565b5f82601f8301126107f9576107f86106d6565b5b81516108098482602086016107a4565b91505092915050565b5f60ff82169050919050565b61082781610812565b8114610831575f5ffd5b50565b5f815190506108428161081e565b92915050565b5f819050919050565b61085a81610848565b8114610864575f5ffd5b50565b5f8151905061087581610851565b92915050565b5f8115159050919050565b61088f8161087b565b8114610899575f5ffd5b50565b5f815190506108aa81610886565b92915050565b5f73ffffffffffffffffffffffffffffffffffffffff82169050919050565b5f6108d9826108b0565b9050919050565b6108e9816108cf565b81146108f3575f5ffd5b50565b5f81519050610904816108e0565b92915050565b5f5f5f5f5f5f5f5f5f5f5f6101608c8e03121561092a576109296106ce565b5b5f8c015167ffffffffffffffff811115610947576109466106d2565b5b6109538e828f016107e5565b9b505060208c015167ffffffffffffffff811115610974576109736106d2565b5b6109808e828f016107e5565b9a505060406109918e828f01610834565b99505060606109a28e828f01610867565b98505060806109b38e828f0161089c565b97505060a06109c48e828f0161089c565b96505060c06109d58e828f0161089c565b95505060e06109e68e828f0161089c565b9450506101006109f88e828f01610867565b935050610120610a0a8e828f01610867565b925050610140610a1c8e828f016108f6565b9150509295989b509295989b9093969950565b5f82825260208201905092915050565b7f546f6b656e3a20656d707479206e616d650000000000000000000000000000005f82015250565b5f610a73601183610a2f565b9150610a7e82610a3f565b602082019050919050565b5f6020820190508181035f830152610aa081610a67565b9050919050565b7f546f6b656e3a20656d7074792073796d626f6c000000000000000000000000005f82015250565b5f610adb601383610a2f565b9150610ae682610aa7565b602082019050919050565b5f6020820190508181035f830152610b0881610acf565b9050919050565b7f546f6b656e3a207a65726f20737570706c7900000000000000000000000000005f82015250565b5f610b43601283610a2f565b9150610b4e82610b0f565b602082019050919050565b5f6020820190508181035f830152610b7081610b37565b9050919050565b7f546f6b656e3a20646563696d616c7320746f6f206869676800000000000000005f82015250565b5f610bab601883610a2f565b9150610bb682610b77565b602082019050919050565b5f6020820190508181035f830152610bd881610b9f565b9050919050565b7f546f6b656e3a20627579207461782065786365656473203235250000000000005f82015250565b5f610c13601a83610a2f565b9150610c1e82610bdf565b602082019050919050565b5f6020820190508181035f830152610c4081610c07565b9050919050565b7f546f6b656e3a2073656c6c2074617820657863656564732032352500000000005f82015250565b5f610c7b601b83610a2f565b9150610c8682610c47565b602082019050919050565b5f6020820190508181035f830152610ca881610c6f565b9050919050565b7f546f6b656e3a207a65726f207461782077616c6c6574000000000000000000005f82015250565b5f610ce3601683610a2f565b9150610cee82610caf565b602082019050919050565b5f6020820190508181035f830152610d1081610cd7565b9050919050565b5f81519050919050565b7f4e487b71000000000000000000000000000000000000000000000000000000005f52602260045260245ffd5b5f6002820490506001821680610d6557607f821691505b602082108103610d7857610d77610d21565b5b50919050565b5f819050815f5260205f209050919050565b5f6020601f8301049050919050565b5f82821b905092915050565b5f60088302610dda7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff82610d9f565b610de48683610d9f565b95508019841693508086168417925050509392505050565b5f819050919050565b5f610e1f610e1a610e1584610848565b610dfc565b610848565b9050919050565b5f819050919050565b610e3883610e05565b610e4c610e4482610e26565b848454610dab565b825550505050565b5f5f905090565b610e63610e54565b610e6e818484610e2f565b505050565b5b81811015610e9157610e865f82610e5b565b600181019050610e74565b5050565b601f821115610ed657610ea781610d7e565b610eb084610d90565b81016020851015610ebf578190505b610ed3610ecb85610d90565b830182610e73565b50505b505050565b5f82821c905092915050565b5f610ef65f1984600802610edb565b1980831691505092915050565b5f610f0e8383610ee7565b9150826002028217905092915050565b610f2782610d17565b67ffffffffffffffff811115610f4057610f3f6106ee565b5b610f4a8254610d4e565b610f55828285610e95565b5f60209050601f831160018114610f86575f8415610f74578287015190505b610f7e8582610f03565b865550610fe5565b601f198416610f9486610d7e565b5f5b82811015610fbb57848901518255600182019150602085019450602081019050610f96565b86831015610fd85784890151610fd4601f891682610ee7565b8355505b6001600288020188555050505b505050505050565b7f4e487b71000000000000000000000000000000000000000000000000000000005f52601160045260245ffd5b5f8160011c9050919050565b5f5f8291508390505b600185111561106f5780860481111561104b5761104a610fed565b5b600185161561105a5780820291505b80810290506110688561101a565b945061102f565b94509492505050565b5f826110875760019050611142565b81611094575f9050611142565b81600181146110aa57600281146110b4576110e3565b6001915050611142565b60ff8411156110c6576110c5610fed565b5b8360020a9150848211156110dd576110dc610fed565b5b50611142565b5060208310610133831016604e8410600b84101617156111185782820a90508381111561111357611112610fed565b5b611142565b6111258484846001611026565b9250905081840481111561113c5761113b610fed565b5b81810290505b9392505050565b5f61115382610848565b915061115e83610848565b925061118b7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff8484611078565b905092915050565b5f61119d82610848565b91506111a883610848565b92508282026111b681610848565b915082820484148315176111cd576111cc610fed565b5b5092915050565b7f45524332303a206d696e7420746f207a65726f206164647265737300000000005f82015250565b5f611208601b83610a2f565b9150611213826111d4565b602082019050919050565b5f6020820190508181035f830152611235816111fc565b9050919050565b5f61124682610848565b915061125183610848565b925082820190508082111561126957611268610fed565b5b92915050565b61127881610848565b82525050565b5f6020820190506112915f83018461126f565b92915050565b614458806112a45f395ff3fe608060405234801561000f575f5ffd5b5060043610610246575f3560e01c80638456cb5911610139578063b0249cc6116100b6578063ced695a41161007a578063ced695a414610694578063cffd129c1461069e578063dd62ed3e146106bc578063ea414b28146106ec578063f2fde38b1461070857610246565b8063b0249cc6146105de578063c2ed286b1461060e578063c4590d3f1461062a578063c473413a14610646578063cb4ca6311461066457610246565b806395d89b41116100fd57806395d89b4114610524578063a07c7ce414610542578063a457c2d714610560578063a9059cbb14610590578063aa4bde28146105c057610246565b80638456cb59146104a4578063870bd30b146104ae5780638980f11f146104cc5780638c0b5e22146104e85780638da5cb5b1461050657610246565b80633f4ba83a116101c7578063667f65261161018b578063667f65261461042857806370a0823114610444578063715018a614610474578063751039fc1461047e57806379cc67901461048857610246565b80633f4ba83a146103aa57806340c10f19146103b457806342966c68146103d05780634bf365df146103ec5780635c975abb1461040a57610246565b80632d99d32e1161020e5780632d99d32e146103045780632dc0562d14610320578063313ce5671461033e578063367758471461035c578063395093511461037a57610246565b806306fdde031461024a578063095ea7b31461026857806318160ddd1461029857806323b872dd146102b65780632c597de9146102e6575b5f5ffd5b610252610724565b60405161025f9190613094565b60405180910390f35b610282600480360381019061027d9190613145565b6107b3565b60405161028f919061319d565b60405180910390f35b6102a06107c9565b6040516102ad91906131c5565b60405180910390f35b6102d060048036038101906102cb91906131de565b6107d2565b6040516102dd919061319d565b60405180910390f35b6102ee610950565b6040516102fb91906131c5565b60405180910390f35b61031e60048036038101906103199190613258565b610956565b005b610328610ae4565b60405161033591906132a5565b60405180910390f35b610346610b09565b60405161035391906132d9565b60405180910390f35b610364610b1e565b604051610371919061319d565b60405180910390f35b610394600480360381019061038f9190613145565b610b31565b6040516103a1919061319d565b60405180910390f35b6103b2610bca565b005b6103ce60048036038101906103c99190613145565b610d4a565b005b6103ea60048036038101906103e591906132f2565b610ef2565b005b6103f4610f9c565b604051610401919061319d565b60405180910390f35b610412610faf565b60405161041f919061319d565b60405180910390f35b610442600480360381019061043d919061331d565b610fc5565b005b61045e6004803603810190610459919061335b565b611178565b60405161046b91906131c5565b60405180910390f35b61047c6111be565b005b61048661130a565b005b6104a2600480360381019061049d9190613145565b6113e2565b005b6104ac6115cc565b005b6104b661174e565b6040516104c3919061319d565b60405180910390f35b6104e660048036038101906104e19190613145565b611761565b005b6104f06119bb565b6040516104fd91906131c5565b60405180910390f35b61050e6119c1565b60405161051b91906132a5565b60405180910390f35b61052c6119e9565b6040516105399190613094565b60405180910390f35b61054a611a79565b604051610557919061319d565b60405180910390f35b61057a60048036038101906105759190613145565b611a8c565b604051610587919061319d565b60405180910390f35b6105aa60048036038101906105a59190613145565b611b64565b6040516105b7919061319d565b60405180910390f35b6105c8611b7a565b6040516105d591906131c5565b60405180910390f35b6105f860048036038101906105f3919061335b565b611b80565b604051610605919061319d565b60405180910390f35b61062860048036038101906106239190613258565b611b9d565b005b610644600480360381019061063f919061331d565b611cbd565b005b61064e611e4d565b60405161065b91906131c5565b60405180910390f35b61067e6004803603810190610679919061335b565b611e53565b60405161068b919061319d565b60405180910390f35b61069c611e70565b005b6106a6611f62565b6040516106b391906131c5565b60405180910390f35b6106d660048036038101906106d19190613386565b611f68565b6040516106e391906131c5565b60405180910390f35b6107066004803603810190610701919061335b565b611fea565b005b610722600480360381019061071d919061335b565b61227a565b005b60605f8054610732906133f1565b80601f016020809104026020016040519081016040528092919081815260200182805461075e906133f1565b80156107a95780601f10610780576101008083540402835291602001916107a9565b820191905f5260205f20905b81548152906001019060200180831161078c57829003601f168201915b5050505050905090565b5f6107bf338484612435565b6001905092915050565b5f600354905090565b5f5f60055f8673ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205f3373ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205490507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff811461093957828110156108b9576040517f08c379a00000000000000000000000000000000000000000000000000000000081526004016108b09061346b565b60405180910390fd5b82810360055f8773ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205f3373ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f20819055505b6109448585856125f8565b60019150509392505050565b6109c481565b60065f9054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff163373ffffffffffffffffffffffffffffffffffffffff16146109e5576040517f08c379a00000000000000000000000000000000000000000000000000000000081526004016109dc906134d3565b60405180910390fd5b5f73ffffffffffffffffffffffffffffffffffffffff168273ffffffffffffffffffffffffffffffffffffffff1603610a53576040517f08c379a0000000000000000000000000000000000000000000000000000000008152600401610a4a9061353b565b60405180910390fd5b80600b5f8473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205f6101000a81548160ff0219169083151502179055507ff9f3066792ece7dadd967a9482836e4b52c2f9d93bb1a3db2e245bbee91db8328282604051610ad8929190613559565b60405180910390a15050565b60095f9054906101000a900473ffffffffffffffffffffffffffffffffffffffff1681565b5f60025f9054906101000a900460ff16905090565b600660169054906101000a900460ff1681565b5f610bc033848460055f3373ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205f8873ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f2054610bbb91906135ad565b612435565b6001905092915050565b60065f9054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff163373ffffffffffffffffffffffffffffffffffffffff1614610c59576040517f08c379a0000000000000000000000000000000000000000000000000000000008152600401610c50906134d3565b60405180910390fd5b600660169054906101000a900460ff16610ca8576040517f08c379a0000000000000000000000000000000000000000000000000000000008152600401610c9f9061362a565b60405180910390fd5b600660179054906101000a900460ff16610cf7576040517f08c379a0000000000000000000000000000000000000000000000000000000008152600401610cee90613692565b60405180910390fd5b5f600660176101000a81548160ff0219169083151502179055507f5db9ee0a495bf2e6ff9c91a7834c1ba4fdd244a5e8aa4e537bd38aeae4b073aa33604051610d4091906132a5565b60405180910390a1565b60065f9054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff163373ffffffffffffffffffffffffffffffffffffffff1614610dd9576040517f08c379a0000000000000000000000000000000000000000000000000000000008152600401610dd0906134d3565b60405180910390fd5b600660149054906101000a900460ff16610e28576040517f08c379a0000000000000000000000000000000000000000000000000000000008152600401610e1f906136fa565b60405180910390fd5b5f73ffffffffffffffffffffffffffffffffffffffff168273ffffffffffffffffffffffffffffffffffffffff1603610e96576040517f08c379a0000000000000000000000000000000000000000000000000000000008152600401610e8d90613762565b60405180910390fd5b610ea08282612bb4565b8173ffffffffffffffffffffffffffffffffffffffff167f30385c845b448a36257a6a1716e6ad2e1bc2cbe333cde1e69fe849ad6511adfe82604051610ee691906131c5565b60405180910390a25050565b600660159054906101000a900460ff16610f41576040517f08c379a0000000000000000000000000000000000000000000000000000000008152600401610f38906137ca565b60405180910390fd5b610f4b3382612cf6565b3373ffffffffffffffffffffffffffffffffffffffff167f696de425f79f4a40bc6d2122ca50507f0efbeabbff86a84871b7196ab8ea8df782604051610f9191906131c5565b60405180910390a250565b600660149054906101000a900460ff1681565b5f600660179054906101000a900460ff16905090565b60065f9054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff163373ffffffffffffffffffffffffffffffffffffffff1614611054576040517f08c379a000000000000000000000000000000000000000000000000000000000815260040161104b906134d3565b60405180910390fd5b600660189054906101000a900460ff166110a3576040517f08c379a000000000000000000000000000000000000000000000000000000000815260040161109a90613832565b60405180910390fd5b6109c48211156110e8576040517f08c379a00000000000000000000000000000000000000000000000000000000081526004016110df9061389a565b60405180910390fd5b6109c481111561112d576040517f08c379a000000000000000000000000000000000000000000000000000000000815260040161112490613902565b60405180910390fd5b81600781905550806008819055507fb841faf0d1b32571f4ef966a2f35e3ae51f3cdda45318c3da5570a5b2ad85605828260405161116c929190613920565b60405180910390a15050565b5f60045f8373ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f20549050919050565b60065f9054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff163373ffffffffffffffffffffffffffffffffffffffff161461124d576040517f08c379a0000000000000000000000000000000000000000000000000000000008152600401611244906134d3565b60405180910390fd5b5f73ffffffffffffffffffffffffffffffffffffffff1660065f9054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e060405160405180910390a35f60065f6101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff160217905550565b60065f9054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff163373ffffffffffffffffffffffffffffffffffffffff1614611399576040517f08c379a0000000000000000000000000000000000000000000000000000000008152600401611390906134d3565b60405180910390fd5b5f600c819055505f600d819055507f4d4981437d0211f9e6843eb024d9ada1fa3a99514d4343d4aece106dd11524bb5f5f6040516113d8929190613989565b60405180910390a1565b600660159054906101000a900460ff16611431576040517f08c379a0000000000000000000000000000000000000000000000000000000008152600401611428906137ca565b60405180910390fd5b5f60055f8473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205f3373ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f20549050818110156114f0576040517f08c379a00000000000000000000000000000000000000000000000000000000081526004016114e790613a20565b60405180910390fd5b81810360055f8573ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205f3373ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f20819055506115798383612cf6565b8273ffffffffffffffffffffffffffffffffffffffff167f696de425f79f4a40bc6d2122ca50507f0efbeabbff86a84871b7196ab8ea8df7836040516115bf91906131c5565b60405180910390a2505050565b60065f9054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff163373ffffffffffffffffffffffffffffffffffffffff161461165b576040517f08c379a0000000000000000000000000000000000000000000000000000000008152600401611652906134d3565b60405180910390fd5b600660169054906101000a900460ff166116aa576040517f08c379a00000000000000000000000000000000000000000000000000000000081526004016116a19061362a565b60405180910390fd5b600660179054906101000a900460ff16156116fa576040517f08c379a00000000000000000000000000000000000000000000000000000000081526004016116f190613a88565b60405180910390fd5b6001600660176101000a81548160ff0219169083151502179055507f62e78cea01bee320cd4e420270b5ea74000d11b0c9f74754ebdbfc544b05a2583360405161174491906132a5565b60405180910390a1565b600660189054906101000a900460ff1681565b60065f9054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff163373ffffffffffffffffffffffffffffffffffffffff16146117f0576040517f08c379a00000000000000000000000000000000000000000000000000000000081526004016117e7906134d3565b60405180910390fd5b3073ffffffffffffffffffffffffffffffffffffffff168273ffffffffffffffffffffffffffffffffffffffff160361185e576040517f08c379a000000000000000000000000000000000000000000000000000000000815260040161185590613af0565b60405180910390fd5b5f8273ffffffffffffffffffffffffffffffffffffffff1660065f9054906101000a900473ffffffffffffffffffffffffffffffffffffffff16836040516024016118aa929190613b0e565b6040516020818303038152906040527fa9059cbb000000000000000000000000000000000000000000000000000000007bffffffffffffffffffffffffffffffffffffffffffffffffffffffff19166020820180517bffffffffffffffffffffffffffffffffffffffffffffffffffffffff83818316178352505050506040516119349190613b79565b5f604051808303815f865af19150503d805f811461196d576040519150601f19603f3d011682016040523d82523d5f602084013e611972565b606091505b50509050806119b6576040517f08c379a00000000000000000000000000000000000000000000000000000000081526004016119ad90613bd9565b60405180910390fd5b505050565b600d5481565b5f60065f9054906101000a900473ffffffffffffffffffffffffffffffffffffffff16905090565b6060600180546119f8906133f1565b80601f0160208091040260200160405190810160405280929190818152602001828054611a24906133f1565b8015611a6f5780601f10611a4657610100808354040283529160200191611a6f565b820191905f5260205f20905b815481529060010190602001808311611a5257829003601f168201915b5050505050905090565b600660159054906101000a900460ff1681565b5f5f60055f3373ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205f8573ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f2054905082811015611b4c576040517f08c379a0000000000000000000000000000000000000000000000000000000008152600401611b4390613c41565b60405180910390fd5b611b593385858403612435565b600191505092915050565b5f611b703384846125f8565b6001905092915050565b600c5481565b600b602052805f5260405f205f915054906101000a900460ff1681565b60065f9054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff163373ffffffffffffffffffffffffffffffffffffffff1614611c2c576040517f08c379a0000000000000000000000000000000000000000000000000000000008152600401611c23906134d3565b60405180910390fd5b80600a5f8473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205f6101000a81548160ff0219169083151502179055507fea5814d1cf99e5f6aee98da410ea4adcdbe5ded97855de3b25144b0898d0be4a8282604051611cb1929190613559565b60405180910390a15050565b60065f9054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff163373ffffffffffffffffffffffffffffffffffffffff1614611d4c576040517f08c379a0000000000000000000000000000000000000000000000000000000008152600401611d43906134d3565b60405180910390fd5b5f821115611da7576103e8600354611d649190613c8c565b821015611da6576040517f08c379a0000000000000000000000000000000000000000000000000000000008152600401611d9d90613d06565b60405180910390fd5b5b5f811115611e02576103e8600354611dbf9190613c8c565b811015611e01576040517f08c379a0000000000000000000000000000000000000000000000000000000008152600401611df890613d6e565b60405180910390fd5b5b81600c8190555080600d819055507f4d4981437d0211f9e6843eb024d9ada1fa3a99514d4343d4aece106dd11524bb8282604051611e41929190613920565b60405180910390a15050565b60075481565b600a602052805f5260405f205f915054906101000a900460ff1681565b60065f9054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff163373ffffffffffffffffffffffffffffffffffffffff1614611eff576040517f08c379a0000000000000000000000000000000000000000000000000000000008152600401611ef6906134d3565b60405180910390fd5b5f600660186101000a81548160ff0219169083151502179055505f6007819055505f6008819055507fb841faf0d1b32571f4ef966a2f35e3ae51f3cdda45318c3da5570a5b2ad856055f5f604051611f58929190613989565b60405180910390a1565b60085481565b5f60055f8473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205f8373ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f2054905092915050565b60065f9054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff163373ffffffffffffffffffffffffffffffffffffffff1614612079576040517f08c379a0000000000000000000000000000000000000000000000000000000008152600401612070906134d3565b60405180910390fd5b600660189054906101000a900460ff166120c8576040517f08c379a00000000000000000000000000000000000000000000000000000000081526004016120bf90613832565b60405180910390fd5b5f73ffffffffffffffffffffffffffffffffffffffff168173ffffffffffffffffffffffffffffffffffffffff1603612136576040517f08c379a000000000000000000000000000000000000000000000000000000000815260040161212d90613dd6565b60405180910390fd5b5f600a5f60095f9054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205f6101000a81548160ff0219169083151502179055508060095f6101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff1602179055506001600a5f8373ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205f6101000a81548160ff0219169083151502179055507f1797049ec5d8ec17fdce2660fb55e33695fd7ebbdb65726cc6d171c0e1c312c78160405161226f91906132a5565b60405180910390a150565b60065f9054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff163373ffffffffffffffffffffffffffffffffffffffff1614612309576040517f08c379a0000000000000000000000000000000000000000000000000000000008152600401612300906134d3565b60405180910390fd5b5f73ffffffffffffffffffffffffffffffffffffffff168173ffffffffffffffffffffffffffffffffffffffff1603612377576040517f08c379a000000000000000000000000000000000000000000000000000000000815260040161236e90613e64565b60405180910390fd5b8073ffffffffffffffffffffffffffffffffffffffff1660065f9054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e060405160405180910390a38060065f6101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff16021790555050565b5f73ffffffffffffffffffffffffffffffffffffffff168373ffffffffffffffffffffffffffffffffffffffff16036124a3576040517f08c379a000000000000000000000000000000000000000000000000000000000815260040161249a90613ecc565b60405180910390fd5b5f73ffffffffffffffffffffffffffffffffffffffff168273ffffffffffffffffffffffffffffffffffffffff1603612511576040517f08c379a000000000000000000000000000000000000000000000000000000000815260040161250890613f34565b60405180910390fd5b8060055f8573ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205f8473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f20819055508173ffffffffffffffffffffffffffffffffffffffff168373ffffffffffffffffffffffffffffffffffffffff167f8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925836040516125eb91906131c5565b60405180910390a3505050565b600660179054906101000a900460ff1615612648576040517f08c379a000000000000000000000000000000000000000000000000000000000815260040161263f90613f9c565b60405180910390fd5b5f73ffffffffffffffffffffffffffffffffffffffff168373ffffffffffffffffffffffffffffffffffffffff16036126b6576040517f08c379a00000000000000000000000000000000000000000000000000000000081526004016126ad9061402a565b60405180910390fd5b5f73ffffffffffffffffffffffffffffffffffffffff168273ffffffffffffffffffffffffffffffffffffffff1603612724576040517f08c379a000000000000000000000000000000000000000000000000000000000815260040161271b90614092565b60405180910390fd5b5f8111612766576040517f08c379a000000000000000000000000000000000000000000000000000000000815260040161275d906140fa565b60405180910390fd5b5f600d541180156127be5750600a5f8473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205f9054906101000a900460ff16155b80156128115750600a5f8373ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205f9054906101000a900460ff16155b1561285c57600d5481111561285b576040517f08c379a000000000000000000000000000000000000000000000000000000000815260040161285290614162565b60405180910390fd5b5b5f600c541180156128b45750600b5f8373ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205f9054906101000a900460ff16155b80156129075750600a5f8373ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205f9054906101000a900460ff16155b1561299a57600c548160045f8573ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205461295891906135ad565b1115612999576040517f08c379a0000000000000000000000000000000000000000000000000000000008152600401612990906141ca565b60405180910390fd5b5b5f5f9050600660189054906101000a900460ff168015612a015750600a5f8573ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205f9054906101000a900460ff16155b8015612a545750600a5f8473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205f9054906101000a900460ff16155b15612b5357600b5f8573ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205f9054906101000a900460ff168015612ab057505f600754115b15612ad75761271060075483612ac691906141e8565b612ad09190613c8c565b9050612b52565b600b5f8473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205f9054906101000a900460ff168015612b2e57505f600854115b15612b515761271060085483612b4491906141e8565b612b4e9190613c8c565b90505b5b5b5f811115612ba257612b878460095f9054906101000a900473ffffffffffffffffffffffffffffffffffffffff1683612ea6565b612b9d84848385612b989190614229565b612ea6565b612bae565b612bad848484612ea6565b5b50505050565b5f73ffffffffffffffffffffffffffffffffffffffff168273ffffffffffffffffffffffffffffffffffffffff1603612c22576040517f08c379a0000000000000000000000000000000000000000000000000000000008152600401612c19906142a6565b60405180910390fd5b8060035f828254612c3391906135ad565b925050819055508060045f8473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205f828254612c8691906135ad565b925050819055508173ffffffffffffffffffffffffffffffffffffffff165f73ffffffffffffffffffffffffffffffffffffffff167fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef83604051612cea91906131c5565b60405180910390a35050565b5f73ffffffffffffffffffffffffffffffffffffffff168273ffffffffffffffffffffffffffffffffffffffff1603612d64576040517f08c379a0000000000000000000000000000000000000000000000000000000008152600401612d5b9061430e565b60405180910390fd5b8060045f8473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f20541015612de4576040517f08c379a0000000000000000000000000000000000000000000000000000000008152600401612ddb9061439c565b60405180910390fd5b8060045f8473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205f82825403925050819055508060035f82825403925050819055505f73ffffffffffffffffffffffffffffffffffffffff168273ffffffffffffffffffffffffffffffffffffffff167fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef83604051612e9a91906131c5565b60405180910390a35050565b8060045f8573ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f20541015612f26576040517f08c379a0000000000000000000000000000000000000000000000000000000008152600401612f1d90614404565b60405180910390fd5b8060045f8573ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205f82825403925050819055508060045f8473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020015f205f82825401925050819055508173ffffffffffffffffffffffffffffffffffffffff168373ffffffffffffffffffffffffffffffffffffffff167fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef8360405161301791906131c5565b60405180910390a3505050565b5f81519050919050565b5f82825260208201905092915050565b8281835e5f83830152505050565b5f601f19601f8301169050919050565b5f61306682613024565b613070818561302e565b935061308081856020860161303e565b6130898161304c565b840191505092915050565b5f6020820190508181035f8301526130ac818461305c565b905092915050565b5f5ffd5b5f73ffffffffffffffffffffffffffffffffffffffff82169050919050565b5f6130e1826130b8565b9050919050565b6130f1816130d7565b81146130fb575f5ffd5b50565b5f8135905061310c816130e8565b92915050565b5f819050919050565b61312481613112565b811461312e575f5ffd5b50565b5f8135905061313f8161311b565b92915050565b5f5f6040838503121561315b5761315a6130b4565b5b5f613168858286016130fe565b925050602061317985828601613131565b9150509250929050565b5f8115159050919050565b61319781613183565b82525050565b5f6020820190506131b05f83018461318e565b92915050565b6131bf81613112565b82525050565b5f6020820190506131d85f8301846131b6565b92915050565b5f5f5f606084860312156131f5576131f46130b4565b5b5f613202868287016130fe565b9350506020613213868287016130fe565b925050604061322486828701613131565b9150509250925092565b61323781613183565b8114613241575f5ffd5b50565b5f813590506132528161322e565b92915050565b5f5f6040838503121561326e5761326d6130b4565b5b5f61327b858286016130fe565b925050602061328c85828601613244565b9150509250929050565b61329f816130d7565b82525050565b5f6020820190506132b85f830184613296565b92915050565b5f60ff82169050919050565b6132d3816132be565b82525050565b5f6020820190506132ec5f8301846132ca565b92915050565b5f60208284031215613307576133066130b4565b5b5f61331484828501613131565b91505092915050565b5f5f60408385031215613333576133326130b4565b5b5f61334085828601613131565b925050602061335185828601613131565b9150509250929050565b5f602082840312156133705761336f6130b4565b5b5f61337d848285016130fe565b91505092915050565b5f5f6040838503121561339c5761339b6130b4565b5b5f6133a9858286016130fe565b92505060206133ba858286016130fe565b9150509250929050565b7f4e487b71000000000000000000000000000000000000000000000000000000005f52602260045260245ffd5b5f600282049050600182168061340857607f821691505b60208210810361341b5761341a6133c4565b5b50919050565b7f45524332303a20696e73756666696369656e7420616c6c6f77616e63650000005f82015250565b5f613455601d8361302e565b915061346082613421565b602082019050919050565b5f6020820190508181035f83015261348281613449565b9050919050565b7f4f776e61626c653a2063616c6c6572206973206e6f74206f776e6572000000005f82015250565b5f6134bd601c8361302e565b91506134c882613489565b602082019050919050565b5f6020820190508181035f8301526134ea816134b1565b9050919050565b7f546f6b656e3a207a65726f2070616972206164647265737300000000000000005f82015250565b5f61352560188361302e565b9150613530826134f1565b602082019050919050565b5f6020820190508181035f83015261355281613519565b9050919050565b5f60408201905061356c5f830185613296565b613579602083018461318e565b9392505050565b7f4e487b71000000000000000000000000000000000000000000000000000000005f52601160045260245ffd5b5f6135b782613112565b91506135c283613112565b925082820190508082111561135da576135d9613580565b5b92915050565b7f546f6b656e3a207061757365206e6f7420656e61626c656400000000000000005f82015250565b5f61361460188361302e565b915061361f826135e0565b602082019050919050565b5f6020820190508181035f83015261364181613608565b9050919050565b7f546f6b656e3a206e6f74207061757365640000000000000000000000000000005f82015250565b5f61367c60118361302e565b915061368782613648565b602082019050919050565b5f6020820190508181035f8301526136a981613670565b9050919050565b7f546f6b656e3a206d696e74206e6f7420656e61626c65640000000000000000005f82015250565b5f6136e460178361302e565b91506136ef826136b0565b602082019050919050565b5f6020820190508181035f830152613711816136d8565b9050919050565b7f546f6b656e3a206d696e7420746f207a65726f206164647265737300000000005f82015250565b5f61374c601b8361302e565b915061375782613718565b602082019050919050565b5f6020820190508181035f83015261377981613740565b9050919050565b7f546f6b656e3a206275726e206e6f7420656e61626c65640000000000000000005f82015250565b5f6137b460178361302e565b91506137bf82613780565b602082019050919050565b5f6020820190508181035f8301526137e1816137a8565b9050919050565b7f546f6b656e3a20746178206e6f7420656e61626c6564000000000000000000005f82015250565b5f61381c60168361302e565b9150613827826137e8565b602082019050919050565b5f6020820190508181035f83015261384981613810565b9050919050565b7f546f6b656e3a20627579207461782065786365656473203235250000000000005f82015250565b5f613884601a8361302e565b915061388f82613850565b602082019050919050565b5f6020820190508181035f8301526138b181613878565b9050919050565b7f546f6b656e3a2073656c6c2074617820657863656564732032352500000000005f82015250565b5f6138ec601b8361302e565b91506138f7826138b8565b602082019050919050565b5f6020820190508181035f830152613919816138e0565b9050919050565b5f6040820190506139335f8301856131b6565b61394060208301846131b6565b9392505050565b5f819050919050565b5f819050919050565b5f61397361396e61396984613947565b613950565b613112565b9050919050565b61398381613959565b82525050565b5f60408201905061399c5f83018561397a565b6139a9602083018461397a565b9392505050565b7f45524332303a20696e73756666696369656e7420616c6c6f77616e636520666f5f8201527f72206275726e0000000000000000000000000000000000000000000000000000602082015250565b5f613a0a60268361302e565b9150613a15826139b0565b604082019050919050565b5f6020820190508181035f830152613a37816139fe565b9050919050565b7f546f6b656e3a20616c72656164792070617573656400000000000000000000005f82015250565b5f613a7260158361302e565b9150613a7d82613a3e565b602082019050919050565b5f6020820190508181035f830152613a9f81613a66565b9050919050565b7f546f6b656e3a2063616e6e6f74207265636f7665722073656c660000000000005f82015250565b5f613ada601a8361302e565b9150613ae582613aa6565b602082019050919050565b5f6020820190508181035f830152613b0781613ace565b9050919050565b5f604082019050613b215f830185613296565b613b2e60208301846131b6565b9392505050565b5f81519050919050565b5f81905092915050565b5f613b5382613b35565b613b5d8185613b3f565b9350613b6d81856020860161303e565b80840191505092915050565b5f613b848284613b49565b915081905092915050565b7f546f6b656e3a207265636f76657279206661696c6564000000000000000000005f82015250565b5f613bc360168361302e565b9150613bce82613b8f565b602082019050919050565b5f6020820190508181035f830152613bf081613bb7565b9050919050565b7f45524332303a206465637265617365642062656c6f77207a65726f00000000005f82015250565b5f613c2b601b8361302e565b9150613c3682613bf7565b602082019050919050565b5f6020820190508181035f830152613c5881613c1f565b9050919050565b7f4e487b71000000000000000000000000000000000000000000000000000000005f52601260045260245ffd5b5f613c9682613112565b9150613ca183613112565b925082613cb157613cb0613c5f565b5b828204905092915050565b7f546f6b656e3a206d617857616c6c65742062656c6f7720302e312500000000005f82015250565b5f613cf0601b8361302e565b9150613cfb82613cbc565b602082019050919050565b5f6020820190508181035f830152613d1d81613ce4565b9050919050565b7f546f6b656e3a206d617854782062656c6f7720302e31250000000000000000005f82015250565b5f613d5860178361302e565b9150613d6382613d24565b602082019050919050565b5f6020820190508181035f830152613d8581613d4c565b9050919050565b7f546f6b656e3a207a65726f2061646472657373000000000000000000000000005f82015250565b5f613dc060138361302e565b9150613dcb82613d8c565b602082019050919050565b5f6020820190508181035f830152613ded81613db4565b9050919050565b7f4f776e61626c653a206e6577206f776e6572206973207a65726f2061646472655f8201527f7373000000000000000000000000000000000000000000000000000000000000602082015250565b5f613e4e60228361302e565b9150613e5982613df4565b604082019050919050565b5f6020820190508181035f830152613e7b81613e42565b9050919050565b7f45524332303a20617070726f76652066726f6d207a65726f20616464726573735f82015250565b5f613eb660208361302e565b9150613ec182613e82565b602082019050919050565b5f6020820190508181035f830152613ee381613eaa565b9050919050565b7f45524332303a20617070726f766520746f207a65726f206164647265737300005f82015250565b5f613f1e601e8361302e565b9150613f2982613eea565b602082019050919050565b5f6020820190508181035f830152613f4b81613f12565b9050919050565b7f546f6b656e3a207472616e7366657273207061757365640000000000000000005f82015250565b5f613f8660178361302e565b9150613f9182613f52565b602082019050919050565b5f6020820190508181035f830152613fb381613f7a565b9050919050565b7f45524332303a207472616e736665722066726f6d207a65726f206164647265735f8201527f7300000000000000000000000000000000000000000000000000000000000000602082015250565b5f61401460218361302e565b915061401f82613fba565b604082019050919050565b5f6020820190508181035f83015261404181614008565b9050919050565b7f45524332303a207472616e7366657220746f207a65726f2061646472657373005f82015250565b5f61407c601f8361302e565b915061408782614048565b602082019050919050565b5f6020820190508181035f8301526140a981614070565b9050919050565b7f45524332303a20616d6f756e74206d757374206265203e2030000000000000005f82015250565b5f6140e460198361302e565b91506140ef826140b0565b602082019050919050565b5f6020820190508181035f830152614111816140d8565b9050919050565b7f546f6b656e3a2065786365656473206d617820747820616d6f756e74000000005f82015250565b5f61414c601c8361302e565b915061415782614118565b602082019050919050565b5f6020820190508181035f83015261417981614140565b9050919050565b7f546f6b656e3a2065786365656473206d61782077616c6c6574000000000000005f82015250565b5f6141b460198361302e565b91506141bf82614180565b602082019050919050565b5f6020820190508181035f8301526141e1816141a8565b9050919050565b5f6141f282613112565b91506141fd83613112565b925082820261420b81613112565b9150828204841483151761422257614221613580565b5b5092915050565b5f61423382613112565b915061423e83613112565b925082820390508181111561425657614255613580565b5b92915050565b7f45524332303a206d696e7420746f207a65726f206164647265737300000000005f82015250565b5f614290601b8361302e565b915061429b8261425c565b602082019050919050565b5f6020820190508181035f8301526142bd81614284565b9050919050565b7f45524332303a206275726e2066726f6d207a65726f20616464726573730000005f82015250565b5f6142f8601d8361302e565b9150614303826142c4565b602082019050919050565b5f6020820190508181035f830152614325816142ec565b9050919050565b7f45524332303a20696e73756666696369656e742062616c616e636520746f20625f8201527f75726e0000000000000000000000000000000000000000000000000000000000602082015250565b5f61438660238361302e565b91506143918261432c565b604082019050919050565b5f6020820190508181035f8301526143b38161437a565b9050919050565b7f45524332303a20696e73756666696369656e742062616c616e636500000000005f82015250565b5f6143ee601b8361302e565b91506143f9826143ba565b602082019050919050565b5f6020820190508181035f83015261441b816143e2565b905091905056fea26469706673582212202afdee1ae13a6986a7afd72bf73133d4813c96953687e393f974364f4e9ffa6164736f6c634300081f0033';
+function onWalletConnected(addr) {
+  walletAddr = addr;
+  // Update UI
+  document.getElementById('connect-btn').style.display = 'none';
+  const badge = document.getElementById('wallet-badge');
+  badge.style.display = 'flex';
+  document.getElementById('wallet-addr').textContent =
+    addr.slice(0,6) + '…' + addr.slice(-4);
+  document.getElementById('no-wallet-msg').style.display = 'none';
+  document.getElementById('refresh-nfts-btn').style.display = 'block';
+  document.getElementById('refresh-btn').style.display = 'inline-block';
+  setStatus('');
+  loadNFTs();
+}
 
-async function launchToken() {
-  const name     = document.getElementById('tokenName').value.trim();
-  const symbol   = document.getElementById('tokenSymbol').value.trim().toUpperCase();
-  const supply   = document.getElementById('totalSupply').value;
-  const decimals = parseInt(document.getElementById('decimals').value);
-  const mintable = document.getElementById('mintable').checked;
-  const burnable = document.getElementById('burnable').checked;
-  const pausable = document.getElementById('pausable').checked;
-  const taxOn    = document.getElementById('taxToggle').checked;
-  const buyTax   = parseFloat(document.getElementById('buyTax').value  || 0);
-  const sellTax  = parseFloat(document.getElementById('sellTax').value || 0);
-  const taxWallet = document.getElementById('taxWallet').value.trim();
+// Handle chain / account changes
+if (window.ethereum) {
+  window.ethereum.on('accountsChanged', (accs) => {
+    if (accs.length) onWalletConnected(accs[0]);
+    else window.location.reload();
+  });
+  window.ethereum.on('chainChanged', () => window.location.reload());
+}
 
-  // ── Validation ──────────────────────────────────────────────
-  if (!name || !symbol || !supply) {
-    showStatus('error', 'Please fill in Token Name, Symbol, and Total Supply.');
-    return;
-  }
-  if (!signer) {
-    showStatus('error', 'Please connect your wallet first.');
-    return;
-  }
-  if (taxOn && !ethers.utils.isAddress(taxWallet)) {
-    showStatus('error', 'Tax is enabled — please enter a valid tax wallet address.');
-    return;
-  }
-  if (buyTax > 25 || sellTax > 25) {
-    showStatus('error', 'Tax cannot exceed 25%.');
-    return;
-  }
+// ─── LOAD NFTS ───────────────────────────────────────────────────
+async function loadNFTs() {
+  if (!walletAddr || isFetching) return;
+  isFetching = true;
+  setStatus('Fetching your HenVerse hens from The Grotto…');
 
-  document.getElementById('launchBtn').disabled = true;
-  showStatus('loading', 'Preparing deployment...');
+  // Spinner
+  const refreshBtn = document.getElementById('refresh-btn');
+  const refreshBtn2 = document.getElementById('refresh-nfts-btn');
+  refreshBtn.classList.add('spinning');
+
+  const grid = document.getElementById('nft-grid');
+  grid.innerHTML = '';
+
+  // Skeleton placeholders
+  for (let i = 0; i < 4; i++) {
+    const sk = document.createElement('div');
+    sk.className = 'skeleton';
+    grid.appendChild(sk);
+  }
 
   try {
-    // Convert % → basis points (e.g. 3% → 300)
-    const buyTaxBps  = Math.round(buyTax  * 100);
-    const sellTaxBps = Math.round(sellTax * 100);
+    // 1. Total supply
+    const tsHex = await ethCall('totalSupply()');
+    const totalSupply = Number(decodeUint256(tsHex));
 
-    // Resolve taxWallet: use entered address if tax enabled, else zero address
-    const resolvedTaxWallet = taxOn && ethers.utils.isAddress(taxWallet)
-      ? taxWallet
-      : ethers.constants.AddressZero;
+    // 2. User balance
+    const balHex = await ethCall('balanceOf(address)', walletAddr);
+    const balance = Number(decodeUint256(balHex));
 
-    // ABI-encode constructor arguments to match GrottoToken constructor:
-    // (string name_, string symbol_, uint8 decimals_, uint256 totalSupply_,
-    //  bool mintable_, bool burnable_, bool pausable_,
-    //  bool taxEnabled_, uint256 buyTaxBps_, uint256 sellTaxBps_, address taxWallet_)
-    const abiCoder = new ethers.utils.AbiCoder();
-    const encodedArgs = abiCoder.encode(
-      ['string','string','uint8','uint256','bool','bool','bool','bool','uint256','uint256','address'],
-      [
-        name,
-        symbol,
-        decimals,
-        ethers.BigNumber.from(supply),   // whole token count — contract multiplies by 10^decimals
-        mintable,
-        burnable,
-        pausable,
-        taxOn,
-        ethers.BigNumber.from(buyTaxBps),
-        ethers.BigNumber.from(sellTaxBps),
-        resolvedTaxWallet
-      ]
-    );
+    document.getElementById('stat-hens').textContent = balance;
+    document.getElementById('nft-count-label').innerHTML =
+      `You own <strong>${balance}</strong> hen${balance !== 1 ? 's' : ''}
+       &nbsp;·&nbsp; <span style="opacity:.6">${totalSupply} total minted</span>`;
 
-    // Final deployment data = bytecode + encoded constructor args
-    const deployData = GROTTO_BYTECODE + encodedArgs.slice(2);
+    userNFTs = [];
 
-    showStatus('loading', 'Confirm the transaction in your wallet...');
+    if (balance === 0) {
+      grid.innerHTML = '';
+      const empty = document.createElement('div');
+      empty.className = 'empty-state';
+      empty.innerHTML = '<div class="big">🐣</div><p>No HenVerse hens in this wallet yet.<br/>Mint some to get started!</p>';
+      grid.appendChild(empty);
+      setStatus('');
+      updateCoopStats();
+      return;
+    }
 
-    const tx = await signer.sendTransaction({ data: deployData });
+    // 3. Fetch token IDs
+    const tokenPromises = [];
+    for (let i = 0; i < balance; i++) {
+      tokenPromises.push(
+        ethCall('tokenOfOwnerByIndex(address,uint256)', walletAddr, i)
+          .then(hex => Number(decodeUint256(hex)))
+      );
+    }
+    const tokenIds = await Promise.all(tokenPromises);
 
-    showStatus('loading',
-      `Transaction sent! Waiting for confirmation...<br>
-       <small style="font-family:monospace;font-size:11px;word-break:break-all">${tx.hash}</small>`
-    );
+    // 4. Fetch tokenURIs + metadata (parallel, with concurrency limit)
+    const CONCURRENCY = 4;
+    const nfts = [];
+    for (let i = 0; i < tokenIds.length; i += CONCURRENCY) {
+      const batch = tokenIds.slice(i, i + CONCURRENCY);
+      const results = await Promise.all(batch.map(async (id) => {
+        let metadata = null;
+        try {
+          const uriHex = await ethCall('tokenURI(uint256)', id);
+          const uri    = decodeString(uriHex);
+          metadata     = await fetchMetadata(uri);
+        } catch {}
+        return { tokenId: id, metadata };
+      }));
+      nfts.push(...results);
+    }
+    userNFTs = nfts;
 
-    const receipt = await tx.wait();
-    const tokenAddress = receipt.contractAddress;
+    // 5. Render grid
+    grid.innerHTML = '';
+    nfts.forEach(nft => {
+      grid.appendChild(createNFTCard(nft));
+    });
 
-    showStatus('success',
-      `🎉 Token launched successfully!<br>
-       <div class="token-address">${tokenAddress}</div>
-       <a class="explorer-link" href="${EXPLORER}/address/${tokenAddress}" target="_blank">View on Grotto Explorer →</a>
-       <br><small style="color:var(--muted);font-size:11px;display:block;margin-top:8px">
-         Add to MetaMask: <strong>${symbol}</strong> · ${decimals} decimals · ${Number(supply).toLocaleString()} total supply
-       </small>`
-    );
-    document.getElementById('launchBtn').disabled = false;
-
-  } catch (err) {
-    showStatus('error', err.reason || err.data?.message || err.message || 'Deployment failed.');
-    document.getElementById('launchBtn').disabled = false;
+    updateCoopStats();
+    setStatus('');
+  } catch (e) {
+    grid.innerHTML = '';
+    const errEl = document.createElement('div');
+    errEl.className = 'empty-state';
+    errEl.innerHTML = '<div class="big">⚠️</div><p>Failed to load hens: ' + escHtml(e.message) + '</p>';
+    grid.appendChild(errEl);
+    setStatus('Error loading NFTs: ' + e.message, true);
+  } finally {
+    isFetching = false;
+    refreshBtn.classList.remove('spinning');
   }
 }
 
-function showStatus(type, msg) {
-  const el = document.getElementById('status');
-  el.className = 'status ' + type;
-  if (type === 'loading') {
-    el.innerHTML = `<div class="spinner"></div><span>${msg}</span>`;
+// ─── CREATE NFT CARD ─────────────────────────────────────────────
+function createNFTCard(nft) {
+  const { tokenId, metadata } = nft;
+  const card = document.createElement('div');
+  card.className = 'nft-card' + (placedNFTs.has(tokenId) ? ' selected' : '');
+  card.onclick = () => openModal(nft);
+
+  const name  = metadata?.name  || `Hen #${tokenId}`;
+  const image = resolveURI(metadata?.image || metadata?.image_url || '');
+
+  let imgHtml;
+  if (image) {
+    imgHtml = `<img src="${escAttr(image)}" alt="${escAttr(name)}"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/>
+      <div class="nft-img-placeholder" style="display:none;aspect-ratio:1">🐔</div>`;
   } else {
-    el.innerHTML = msg;
+    imgHtml = `<div class="nft-img-placeholder">🐔</div>`;
   }
+
+  const badge = placedNFTs.has(tokenId)
+    ? '<div class="nft-badge placed">In Coop</div>'
+    : '<div class="nft-badge">Wallet</div>';
+
+  card.innerHTML = `
+    ${badge}
+    ${imgHtml}
+    <div class="nft-info">
+      <div class="nft-name">${escHtml(name)}</div>
+      <div class="nft-id">#${tokenId}</div>
+    </div>
+  `;
+  return card;
 }
 
-function hideStatus() {
-  document.getElementById('status').className = 'status';
+// ─── OPEN NFT MODAL ──────────────────────────────────────────────
+function openModal(nft) {
+  const { tokenId, metadata } = nft;
+  const name  = metadata?.name  || `Hen #${tokenId}`;
+  const image = resolveURI(metadata?.image || metadata?.image_url || '');
+  const desc  = metadata?.description || '';
+  const attrs = metadata?.attributes || metadata?.traits || [];
+
+  document.getElementById('modal-name').textContent = name;
+
+  // Image
+  const imgWrap = document.getElementById('modal-img-wrap');
+  if (image) {
+    imgWrap.innerHTML = `<img class="modal-img" src="${escAttr(image)}" alt="${escAttr(name)}"
+      onerror="this.outerHTML='<div class=\\'modal-img-placeholder\\'>🐔</div>'"/>`;
+  } else {
+    imgWrap.innerHTML = `<div class="modal-img-placeholder">🐔</div>`;
+  }
+
+  // Description
+  document.getElementById('modal-desc').textContent = desc;
+
+  // Attributes
+  const attrsEl = document.getElementById('modal-attrs');
+  if (Array.isArray(attrs) && attrs.length) {
+    attrsEl.innerHTML = attrs.slice(0,8).map(a => `
+      <div class="attr-pill">
+        <div class="attr-type">${escHtml(String(a.trait_type || a.name || ''))}</div>
+        <div class="attr-val">${escHtml(String(a.value || ''))}</div>
+      </div>
+    `).join('');
+  } else {
+    attrsEl.innerHTML = '';
+  }
+
+  // Explorer link
+  document.getElementById('modal-explorer-link').href =
+    `${EXPLORER}/token/${NFT_CONTRACT}?tokenId=${tokenId}`;
+
+  document.getElementById('modal-overlay').classList.add('open');
 }
 
-// Init summary
-updateSummary();
+function closeModal(e) {
+  if (e && e.target !== document.getElementById('modal-overlay')) return;
+  document.getElementById('modal-overlay').classList.remove('open');
+}
+
+// ─── COOP STATS ──────────────────────────────────────────────────
+// Approximate hen stats — will be driven by contract later
+const HEN_STATS = {
+  default: { hashrate: 10, power: 100 }  // MH/s, W per hen NFT
+};
+
+function updateCoopStats() {
+  const placed = placedNFTs.size;
+  const hashrate = placed * HEN_STATS.default.hashrate;
+  const power    = placed * HEN_STATS.default.power;
+  const capacity = 2000; // W starter coop
+
+  document.getElementById('stat-placed').textContent   = placed;
+  document.getElementById('stat-hashrate').textContent = hashrate + ' MH/s';
+  document.getElementById('stat-power').textContent    = power + 'W';
+  document.getElementById('power-label-val').textContent = power + ' / ' + capacity + 'W';
+
+  const pct = Math.min(100, (power / capacity) * 100);
+  const bar = document.getElementById('power-bar');
+  bar.style.width = pct + '%';
+  bar.className = 'power-bar-fill' +
+    (pct > 85 ? ' danger' : pct > 60 ? ' warn' : '');
+}
+
+// ─── EMISSION SCHEDULE TABLE ─────────────────────────────────────
+(function buildEmissionTable() {
+  const tbody = document.getElementById('emission-tbody');
+  let cumulative = 0;
+  let rate = BASE_EMISSION;
+  let rows = '';
+
+  for (let era = 1; era <= 8; era++) {
+    if (cumulative >= MAX_SUPPLY) break;
+    const eraSupply = Math.min(rate * HALVING_INTERVAL, MAX_SUPPLY - cumulative);
+    cumulative += eraSupply;
+    const days = Math.round((HALVING_INTERVAL / BLOCKS_PER_DAY));
+
+    // Estimate if this is the current era (just mark era 1 as current for now)
+    const isCurrentEra = era === 1;
+    rows += `<tr class="${isCurrentEra ? 'current-era' : ''}">
+      <td>${isCurrentEra ? '⚡ ' : ''}Era ${era}</td>
+      <td class="highlight">${(HALVING_INTERVAL * (era-1)).toLocaleString()} – ${(HALVING_INTERVAL * era).toLocaleString()}</td>
+      <td>${rate.toFixed(4)} EGG/block</td>
+      <td>${eraSupply.toLocaleString(undefined, {maximumFractionDigits:0})} EGG</td>
+      <td>${cumulative.toLocaleString(undefined, {maximumFractionDigits:0})} EGG</td>
+      <td>~${days}d</td>
+    </tr>`;
+    rate /= 2;
+  }
+  tbody.innerHTML = rows;
+})();
+
+// ─── UTILS ───────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escAttr(s) {
+  return String(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 </script>
 </body>
 </html>
