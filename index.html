@@ -1,2195 +1,1726 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
+<meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>HenVerse — Egg Mining on The Grotto</title>
+<title>ClipDAO — The Decentralized Clipping Economy</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,700;0,9..144,900;1,9..144,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=Barlow:wght@400;500;600;700;900&display=swap" rel="stylesheet"/>
+
+<!-- Ethers + Supabase -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+
 <style>
-/* ─── DESIGN TOKENS ─────────────────────────────────────────── */
 :root {
-  --yolk:       #F5A623;
-  --yolk-deep:  #C8781A;
-  --shell:      #FFF8E8;
-  --coop-brown: #3D2008;
-  --coop-mid:   #6B3A1F;
-  --coop-light: #A0622A;
-  --straw:      #E8C97A;
-  --straw-pale: #F5EAC5;
-  --green:      #5B8C3E;
-  --green-pale: #C5DFB3;
-  --red-warn:   #C0392B;
-  --sky:        #D0EAF8;
-  --ink:        #1A0D00;
-  --ink-mid:    #4A2E10;
-  --shadow:     rgba(61,32,8,.18);
-  --glow:       rgba(245,166,35,.35);
-  --radius:     14px;
-  --radius-sm:  8px;
-  --font-display: 'Fraunces', Georgia, serif;
+  --red:    #E8350A;
+  --orange: #FF6B1A;
+  --amber:  #FF9500;
+  --black:  #0A0A0A;
+  --dark:   #111111;
+  --card:   #181818;
+  --border: #2A2A2A;
+  --text:   #F0F0F0;
+  --muted:  #888888;
+  --success:#22C55E;
+  --font-display: 'Bebas Neue', sans-serif;
+  --font-body:    'Barlow', sans-serif;
   --font-mono:    'DM Mono', monospace;
 }
 
-/* ─── RESET ─────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
 html { scroll-behavior: smooth; }
+
 body {
-  font-family: var(--font-display);
-  background: var(--coop-brown);
-  color: var(--shell);
+  background: var(--black);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.6;
   min-height: 100vh;
   overflow-x: hidden;
-  position: relative;
 }
 
-/* ─── BACKGROUND TEXTURE ────────────────────────────────────── */
-body::before {
-  content: '';
-  position: fixed; inset: 0; z-index: 0;
-  background:
-    radial-gradient(ellipse 80% 60% at 50% -10%, #6B3A1F 0%, transparent 70%),
-    radial-gradient(ellipse 60% 40% at 100% 100%, #A0622A22 0%, transparent 60%),
-    repeating-linear-gradient(
-      45deg,
-      transparent,
-      transparent 18px,
-      rgba(160,98,42,.07) 18px,
-      rgba(160,98,42,.07) 19px
-    );
-  pointer-events: none;
-}
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--dark); }
+::-webkit-scrollbar-thumb { background: var(--red); border-radius: 3px; }
 
-/* Grain overlay */
-body::after {
-  content: '';
-  position: fixed; inset: 0; z-index: 0;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
-  pointer-events: none;
-  opacity: .5;
-}
+/* ── Typography ── */
+h1,h2,h3,h4 { font-family: var(--font-display); letter-spacing: 1px; line-height: 1.1; }
+h1 { font-size: clamp(2.5rem, 6vw, 5rem); }
+h2 { font-size: clamp(1.8rem, 4vw, 3rem); }
+h3 { font-size: 1.4rem; }
+.mono { font-family: var(--font-mono); font-size: 0.8rem; }
 
-/* ─── FLOATING BITS ─────────────────────────────────────────── */
-.floaters { position: fixed; inset: 0; pointer-events: none; z-index: 1; overflow: hidden; }
-.floater {
-  position: absolute;
-  font-size: 1.4rem;
-  opacity: .18;
-  animation: drift linear infinite;
-}
-@keyframes drift {
-  0%   { transform: translateY(110vh) rotate(0deg);   opacity: .0; }
-  10%  { opacity: .18; }
-  90%  { opacity: .18; }
-  100% { transform: translateY(-10vh)  rotate(360deg); opacity: .0; }
-}
+/* ── Layout ── */
+.container { max-width: 1100px; margin: 0 auto; padding: 0 20px; }
 
-/* ─── LAYOUT ────────────────────────────────────────────────── */
-#app { position: relative; z-index: 2; min-height: 100vh; display: flex; flex-direction: column; }
-
-/* ─── HEADER ────────────────────────────────────────────────── */
-header {
-  display: flex; align-items: center; gap: 1.5rem;
-  padding: 1.1rem 2rem;
-  background: rgba(61,32,8,.78);
-  backdrop-filter: blur(14px);
-  border-bottom: 2px solid var(--coop-light);
-  position: sticky; top: 0; z-index: 100;
-  flex-wrap: wrap;
+/* ── NAV ── */
+nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  background: rgba(10,10,10,0.95);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(12px);
+  padding: 0 24px;
+  height: 60px;
+  display: flex; align-items: center; justify-content: space-between;
 }
-.logo {
-  display: flex; align-items: center; gap: .75rem;
-  flex-shrink: 0;
-}
-.logo-egg {
-  font-size: 2.2rem;
-  filter: drop-shadow(0 0 12px var(--yolk));
-  animation: pulse-egg 3s ease-in-out infinite;
-}
-@keyframes pulse-egg {
-  0%,100% { filter: drop-shadow(0 0 10px var(--yolk)); transform: scale(1); }
-  50%      { filter: drop-shadow(0 0 22px var(--yolk)); transform: scale(1.07); }
-}
-.logo-text h1 {
+.nav-logo {
   font-family: var(--font-display);
-  font-weight: 900;
-  font-size: 1.55rem;
-  color: var(--yolk);
-  letter-spacing: -.02em;
-  line-height: 1;
-}
-.logo-text p {
-  font-size: .72rem;
-  font-family: var(--font-mono);
-  color: var(--straw);
-  letter-spacing: .08em;
-  opacity: .8;
-}
-
-nav { display: flex; gap: .5rem; flex: 1; justify-content: center; flex-wrap: wrap; }
-.nav-btn {
-  background: none;
-  border: 1.5px solid transparent;
-  color: var(--straw-pale);
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: .9rem;
-  padding: .45rem 1.1rem;
-  border-radius: 999px;
+  font-size: 1.8rem;
+  letter-spacing: 3px;
   cursor: pointer;
-  transition: all .2s;
-  letter-spacing: .01em;
 }
-.nav-btn:hover { border-color: var(--straw); color: var(--shell); }
-.nav-btn.active {
-  background: var(--yolk);
-  border-color: var(--yolk);
-  color: var(--coop-brown);
-}
-
-.wallet-zone { display: flex; align-items: center; gap: .75rem; flex-shrink: 0; }
-#connect-btn {
-  background: linear-gradient(135deg, var(--yolk), var(--yolk-deep));
-  border: none;
-  color: var(--coop-brown);
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: .9rem;
-  padding: .5rem 1.4rem;
-  border-radius: 999px;
-  cursor: pointer;
-  box-shadow: 0 3px 14px var(--glow);
-  transition: transform .15s, box-shadow .15s;
-}
-#connect-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px var(--glow); }
-#connect-btn:active { transform: translateY(0); }
-#wallet-badge {
-  display: none;
-  align-items: center; gap: .5rem;
-  background: rgba(245,166,35,.15);
-  border: 1.5px solid var(--yolk);
-  border-radius: 999px;
-  padding: .35rem .9rem;
+.nav-logo span { color: var(--red); }
+.nav-right { display: flex; align-items: center; gap: 12px; }
+.nav-addr {
   font-family: var(--font-mono);
-  font-size: .82rem;
-  color: var(--yolk);
-}
-#wallet-badge .dot {
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  background: #4CAF50;
-  box-shadow: 0 0 6px #4CAF50;
-  flex-shrink: 0;
+  font-size: 0.75rem;
+  color: var(--orange);
+  background: rgba(255,107,26,0.1);
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(255,107,26,0.3);
 }
 
-/* ─── STATUS BAR ────────────────────────────────────────────── */
-#status-bar {
-  display: none;
-  background: rgba(200,120,26,.25);
-  border-bottom: 1px solid var(--yolk-deep);
-  padding: .55rem 2rem;
-  font-family: var(--font-mono);
-  font-size: .82rem;
-  color: var(--straw);
-  text-align: center;
-  z-index: 99;
-}
-#status-bar.error { background: rgba(192,57,43,.25); border-color: var(--red-warn); color: #f8a5a0; }
-#status-bar.visible { display: block; }
-
-/* ─── MAIN ──────────────────────────────────────────────────── */
-main { flex: 1; padding: 2rem; max-width: 1300px; margin: 0 auto; width: 100%; }
-
-/* Tabs */
-.tab-panel { display: none; animation: fadeIn .3s ease; }
-.tab-panel.active { display: block; }
-@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-
-/* ─── SECTION TITLES ────────────────────────────────────────── */
-.section-title {
-  font-size: 1.6rem;
-  font-weight: 900;
-  color: var(--yolk);
-  margin-bottom: 1.5rem;
-  display: flex; align-items: center; gap: .6rem;
-}
-.section-title span { font-size: 1.8rem; }
-
-/* ─── COOP TAB ──────────────────────────────────────────────── */
-#tab-coop { display: grid; grid-template-columns: 320px 1fr; gap: 2rem; align-items: start; }
-@media(max-width:900px) { #tab-coop { grid-template-columns: 1fr; } }
-
-/* Facility Card */
-.facility-card {
-  background: linear-gradient(160deg, rgba(107,58,31,.85), rgba(61,32,8,.95));
-  border: 2px solid var(--coop-light);
-  border-radius: var(--radius);
-  padding: 1.5rem;
-  box-shadow: 0 8px 32px var(--shadow);
-  position: sticky; top: 90px;
-}
-.facility-card h2 { font-size: 1.2rem; font-weight: 900; color: var(--yolk); margin-bottom: 1rem; }
-.facility-art {
-  width: 100%;
-  aspect-ratio: 4/3;
-  background: linear-gradient(180deg, var(--sky) 0%, var(--green-pale) 60%, var(--green) 100%);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-  position: relative;
-  margin-bottom: 1rem;
-  border: 2px solid var(--coop-light);
-}
-/* SVG coop illustration */
-.facility-art svg { width: 100%; height: 100%; }
-
-.stats-grid {
-  display: grid; grid-template-columns: 1fr 1fr;
-  gap: .6rem; margin-bottom: 1rem;
-}
-.stat-box {
-  background: rgba(245,166,35,.1);
-  border: 1px solid rgba(245,166,35,.2);
-  border-radius: var(--radius-sm);
-  padding: .65rem .9rem;
-}
-.stat-box .label {
-  font-family: var(--font-mono);
-  font-size: .68rem;
-  letter-spacing: .06em;
-  color: var(--straw);
-  margin-bottom: .2rem;
+/* ── Buttons ── */
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 10px 20px;
+  border: none; border-radius: 4px;
+  font-family: var(--font-body); font-weight: 700;
+  font-size: 0.85rem; letter-spacing: 0.5px;
+  cursor: pointer; transition: all 0.15s;
   text-transform: uppercase;
 }
-.stat-box .value { font-size: 1.05rem; font-weight: 900; color: var(--yolk); }
+.btn-primary {
+  background: var(--red); color: white;
+}
+.btn-primary:hover { background: #c42d08; transform: translateY(-1px); }
+.btn-orange {
+  background: var(--orange); color: white;
+}
+.btn-orange:hover { background: #e05a10; }
+.btn-ghost {
+  background: transparent; color: var(--text);
+  border: 1px solid var(--border);
+}
+.btn-ghost:hover { border-color: var(--red); color: var(--red); }
+.btn-sm { padding: 6px 14px; font-size: 0.78rem; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
 
-.coop-btn {
-  width: 100%;
-  background: linear-gradient(135deg, var(--yolk), var(--yolk-deep));
-  border: none;
-  color: var(--coop-brown);
-  font-family: var(--font-display);
-  font-weight: 900;
-  font-size: 1rem;
-  padding: .75rem;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  box-shadow: 0 4px 18px var(--glow);
-  transition: transform .15s, box-shadow .15s;
-  margin-top: .4rem;
+/* ── Cards ── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 24px;
 }
-.coop-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px var(--glow); }
-.coop-btn:disabled {
-  opacity: .5;
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
-}
-.coop-btn.secondary {
-  background: transparent;
-  border: 2px solid var(--coop-light);
-  color: var(--straw);
-  box-shadow: none;
-  margin-top: .5rem;
-}
-.coop-btn.secondary:hover { border-color: var(--yolk); color: var(--yolk); background: rgba(245,166,35,.08); }
+.card-hover { transition: border-color 0.2s, transform 0.2s; cursor: pointer; }
+.card-hover:hover { border-color: var(--red); transform: translateY(-2px); }
 
-/* NFT Grid */
-.nft-section { }
-.nft-controls {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 1.2rem; gap: 1rem; flex-wrap: wrap;
+/* ── Forms ── */
+.form-group { margin-bottom: 16px; }
+label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+input, textarea, select {
+  width: 100%; padding: 10px 14px;
+  background: var(--dark); border: 1px solid var(--border);
+  border-radius: 4px; color: var(--text);
+  font-family: var(--font-body); font-size: 0.9rem;
+  transition: border-color 0.15s;
 }
-.nft-count {
-  font-family: var(--font-mono);
-  font-size: .82rem;
-  color: var(--straw);
+input:focus, textarea:focus, select:focus {
+  outline: none; border-color: var(--orange);
 }
-.nft-count strong { color: var(--yolk); font-size: 1.1rem; }
+select option { background: var(--dark); }
+textarea { resize: vertical; min-height: 80px; }
 
-.refresh-btn {
-  background: transparent;
-  border: 1.5px solid var(--coop-light);
-  color: var(--straw);
-  font-family: var(--font-mono);
-  font-size: .78rem;
-  padding: .35rem .85rem;
-  border-radius: 999px;
-  cursor: pointer;
-  transition: all .2s;
-  letter-spacing: .04em;
+/* ── Badges ── */
+.badge {
+  display: inline-block; padding: 2px 10px;
+  border-radius: 3px; font-size: 0.72rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.5px;
 }
-.refresh-btn:hover { border-color: var(--yolk); color: var(--yolk); }
-.refresh-btn.spinning { animation: spin .8s linear infinite; pointer-events: none; }
+.badge-red    { background: rgba(232,53,10,0.2); color: var(--red); border: 1px solid rgba(232,53,10,0.4); }
+.badge-orange { background: rgba(255,107,26,0.2); color: var(--orange); border: 1px solid rgba(255,107,26,0.4); }
+.badge-amber  { background: rgba(255,149,0,0.2); color: var(--amber); border: 1px solid rgba(255,149,0,0.4); }
+.badge-green  { background: rgba(34,197,94,0.2); color: var(--success); border: 1px solid rgba(34,197,94,0.4); }
+.badge-muted  { background: rgba(136,136,136,0.15); color: var(--muted); border: 1px solid rgba(136,136,136,0.25); }
+
+/* ── Toast ── */
+#toast-container {
+  position: fixed; bottom: 24px; right: 24px;
+  display: flex; flex-direction: column; gap: 8px;
+  z-index: 9999;
+}
+.toast {
+  padding: 12px 18px; border-radius: 6px;
+  font-size: 0.85rem; font-weight: 600;
+  max-width: 320px;
+  animation: slideIn 0.3s ease;
+  border-left: 3px solid;
+}
+.toast-success { background: #0a1f12; color: var(--success); border-color: var(--success); }
+.toast-error   { background: #1f0a0a; color: var(--red); border-color: var(--red); }
+.toast-info    { background: #111827; color: var(--orange); border-color: var(--orange); }
+@keyframes slideIn { from { transform: translateX(100px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+/* ── Modal ── */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.85);
+  display: none; align-items: center; justify-content: center;
+  z-index: 200; padding: 20px;
+}
+.modal-overlay.active { display: flex; }
+.modal {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 32px;
+  width: 100%; max-width: 480px;
+  max-height: 90vh; overflow-y: auto;
+  position: relative;
+}
+.modal h2 { margin-bottom: 20px; color: var(--orange); }
+.modal-close {
+  position: absolute; top: 16px; right: 16px;
+  background: none; border: none; color: var(--muted);
+  font-size: 1.3rem; cursor: pointer;
+}
+.modal-close:hover { color: var(--red); }
+
+/* ── Sections / Pages ── */
+.page { display: none; padding-top: 60px; min-height: 100vh; }
+.page.active { display: block; }
+
+/* ── Hero ── */
+#page-home {
+  background:
+    radial-gradient(ellipse at 10% 50%, rgba(232,53,10,0.12) 0%, transparent 60%),
+    radial-gradient(ellipse at 90% 20%, rgba(255,107,26,0.08) 0%, transparent 50%),
+    var(--black);
+}
+.hero {
+  min-height: calc(100vh - 60px);
+  display: flex; align-items: center;
+}
+.hero-inner { padding: 80px 0; }
+.hero-eyebrow {
+  font-family: var(--font-mono); font-size: 0.78rem;
+  color: var(--orange); letter-spacing: 2px;
+  text-transform: uppercase; margin-bottom: 16px;
+  display: flex; align-items: center; gap: 8px;
+}
+.hero-eyebrow::before {
+  content: ''; display: block;
+  width: 32px; height: 2px; background: var(--orange);
+}
+.hero h1 { margin-bottom: 20px; }
+.hero h1 em { color: var(--red); font-style: normal; }
+.hero p { font-size: 1.05rem; color: var(--muted); max-width: 520px; margin-bottom: 36px; }
+.hero-stats {
+  display: flex; gap: 40px; margin-top: 60px;
+  border-top: 1px solid var(--border); padding-top: 32px;
+}
+.stat-item { }
+.stat-num { font-family: var(--font-display); font-size: 2rem; color: var(--orange); }
+.stat-label { font-size: 0.78rem; color: var(--muted); text-transform: uppercase; }
+
+/* ── Dashboard ── */
+.dashboard-grid {
+  display: grid; grid-template-columns: 240px 1fr;
+  gap: 0; min-height: calc(100vh - 60px);
+}
+.sidebar {
+  background: var(--dark); border-right: 1px solid var(--border);
+  padding: 24px 0; position: sticky; top: 60px;
+  height: calc(100vh - 60px); overflow-y: auto;
+}
+.sidebar-section { padding: 8px 16px; margin-bottom: 4px; }
+.sidebar-label { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; padding: 0 8px; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 16px; border-radius: 6px;
+  cursor: pointer; transition: all 0.15s;
+  font-weight: 600; font-size: 0.88rem;
+  color: var(--muted);
+}
+.nav-item:hover { background: rgba(255,107,26,0.08); color: var(--text); }
+.nav-item.active { background: rgba(232,53,10,0.15); color: var(--red); }
+.nav-item .icon { font-size: 1rem; width: 20px; text-align: center; }
+.main-content { padding: 32px; }
+.page-header { margin-bottom: 28px; }
+.page-header h2 { margin-bottom: 4px; }
+.page-header p { color: var(--muted); font-size: 0.9rem; }
+
+/* ── Bounty Cards ── */
+.bounty-grid { display: grid; gap: 16px; }
+.bounty-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 20px;
+  transition: border-color 0.2s, transform 0.2s;
+}
+.bounty-card:hover { border-color: rgba(232,53,10,0.5); transform: translateY(-2px); cursor: pointer; }
+.bounty-card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+.bounty-title { font-size: 1rem; font-weight: 700; margin-bottom: 4px; }
+.bounty-desc { color: var(--muted); font-size: 0.85rem; margin-bottom: 12px; line-height: 1.4; }
+.bounty-meta { display: flex; gap: 16px; flex-wrap: wrap; }
+.bounty-meta-item { display: flex; align-items: center; gap: 5px; font-size: 0.8rem; color: var(--muted); }
+.bounty-reward { font-family: var(--font-display); font-size: 1.5rem; color: var(--orange); }
+.bounty-reward span { font-size: 0.85rem; color: var(--muted); font-family: var(--font-body); }
+
+/* ── NFT Mint Cards ── */
+.mint-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.mint-card {
+  border-radius: 10px; padding: 32px;
+  position: relative; overflow: hidden;
+}
+.mint-card.genesis {
+  background: linear-gradient(135deg, #1a0a00 0%, #2a1000 100%);
+  border: 1px solid rgba(255,149,0,0.4);
+}
+.mint-card.early {
+  background: linear-gradient(135deg, #0a0a1a 0%, #100a1a 100%);
+  border: 1px solid rgba(232,53,10,0.4);
+}
+.mint-card::before {
+  content: '';
+  position: absolute; top: -40px; right: -40px;
+  width: 150px; height: 150px; border-radius: 50%;
+  opacity: 0.08;
+}
+.mint-card.genesis::before { background: var(--amber); }
+.mint-card.early::before { background: var(--red); }
+.mint-tier-badge {
+  font-family: var(--font-mono); font-size: 0.7rem;
+  text-transform: uppercase; letter-spacing: 2px;
+  margin-bottom: 12px;
+}
+.mint-price { font-family: var(--font-display); font-size: 2.5rem; margin: 16px 0; }
+.mint-supply { font-size: 0.82rem; color: var(--muted); margin-bottom: 20px; }
+.mint-perks { list-style: none; margin-bottom: 24px; }
+.mint-perks li {
+  font-size: 0.85rem; padding: 5px 0;
+  display: flex; align-items: center; gap: 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.mint-perks li::before { content: '✓'; color: var(--orange); font-weight: 700; }
+.supply-bar {
+  height: 4px; background: var(--border); border-radius: 2px; margin-bottom: 6px;
+}
+.supply-fill { height: 100%; background: linear-gradient(90deg, var(--red), var(--orange)); border-radius: 2px; transition: width 0.5s; }
+
+/* ── Submission cards ── */
+.submission-card {
+  background: var(--dark); border: 1px solid var(--border);
+  border-radius: 6px; padding: 16px;
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 12px; margin-bottom: 10px;
+}
+.submission-card.winner { border-color: var(--amber); background: rgba(255,149,0,0.05); }
+.sub-link { font-family: var(--font-mono); font-size: 0.78rem; color: var(--orange); }
+.sub-meta { font-size: 0.78rem; color: var(--muted); }
+.vote-count { font-family: var(--font-display); font-size: 1.2rem; color: var(--orange); }
+
+/* ── Profile ── */
+.profile-header {
+  background: linear-gradient(135deg, #1a0a00, #0a0a0a);
+  border: 1px solid var(--border);
+  border-radius: 10px; padding: 32px;
+  margin-bottom: 24px;
+  display: flex; gap: 24px; align-items: center;
+}
+.profile-avatar {
+  width: 72px; height: 72px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--red), var(--orange));
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display); font-size: 2rem; flex-shrink: 0;
+}
+.rep-bar-wrap { margin-top: 8px; }
+.rep-bar { height: 6px; background: var(--border); border-radius: 3px; }
+.rep-fill { height: 100%; background: linear-gradient(90deg, var(--red), var(--orange)); border-radius: 3px; }
+
+/* ── Tx Status ── */
+.tx-status {
+  padding: 12px 16px; border-radius: 6px;
+  font-size: 0.85rem; margin-top: 12px;
+  display: none;
+}
+.tx-status.show { display: block; }
+.tx-pending { background: rgba(255,149,0,0.1); color: var(--amber); border: 1px solid rgba(255,149,0,0.3); }
+.tx-success { background: rgba(34,197,94,0.1); color: var(--success); border: 1px solid rgba(34,197,94,0.3); }
+.tx-error   { background: rgba(232,53,10,0.1); color: var(--red); border: 1px solid rgba(232,53,10,0.3); }
+
+/* ── Filters ── */
+.filter-row { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+.filter-btn {
+  padding: 6px 14px; border-radius: 4px;
+  background: var(--dark); border: 1px solid var(--border);
+  color: var(--muted); font-size: 0.8rem; font-weight: 600;
+  cursor: pointer; transition: all 0.15s;
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.filter-btn.active, .filter-btn:hover { border-color: var(--red); color: var(--red); background: rgba(232,53,10,0.08); }
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .dashboard-grid { grid-template-columns: 1fr; }
+  .sidebar { position: static; height: auto; display: flex; flex-wrap: wrap; padding: 12px; border-right: none; border-bottom: 1px solid var(--border); }
+  .sidebar-section { flex: 1; min-width: 120px; }
+  .mint-grid { grid-template-columns: 1fr; }
+  .hero-stats { gap: 24px; flex-wrap: wrap; }
+  .main-content { padding: 20px; }
+  .profile-header { flex-direction: column; text-align: center; }
+}
+
+/* ── Divider ── */
+.divider { height: 1px; background: var(--border); margin: 24px 0; }
+
+/* ── Empty State ── */
+.empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
+.empty-state .icon { font-size: 3rem; margin-bottom: 12px; }
+.empty-state p { font-size: 0.9rem; }
+
+/* ── Loading spinner ── */
+.spinner {
+  width: 18px; height: 18px;
+  border: 2px solid rgba(255,255,255,0.2);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* NFT Grid */
-.nft-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  gap: 1rem;
+/* ── Onboarding Modal specific ── */
+.role-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+.role-card {
+  border: 2px solid var(--border); border-radius: 8px;
+  padding: 20px; cursor: pointer; transition: all 0.2s; text-align: center;
 }
-.nft-card {
-  background: linear-gradient(160deg, rgba(107,58,31,.7), rgba(61,32,8,.9));
-  border: 1.5px solid var(--coop-mid);
-  border-radius: var(--radius);
-  overflow: hidden;
-  cursor: pointer;
-  transition: transform .2s, border-color .2s, box-shadow .2s;
-  position: relative;
-}
-.nft-card:hover {
-  transform: translateY(-4px);
-  border-color: var(--yolk);
-  box-shadow: 0 8px 28px var(--glow);
-}
-.nft-card.selected {
-  border-color: var(--yolk);
-  box-shadow: 0 0 0 3px rgba(245,166,35,.4), 0 8px 28px var(--glow);
-}
-.nft-card img {
-  width: 100%; aspect-ratio: 1;
-  object-fit: cover;
-  display: block;
-  background: var(--coop-brown);
-}
-.nft-card .nft-img-placeholder {
-  width: 100%; aspect-ratio: 1;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 3rem;
-  background: linear-gradient(135deg, #4A2E10, #3D2008);
-  color: var(--yolk);
-}
-.nft-card .nft-info {
-  padding: .65rem .8rem;
-}
-.nft-card .nft-name {
-  font-weight: 700;
-  font-size: .88rem;
-  color: var(--shell);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.nft-card .nft-id {
-  font-family: var(--font-mono);
-  font-size: .72rem;
-  color: var(--straw);
-  opacity: .7;
-  margin-top: .15rem;
-}
-.nft-card .nft-badge {
-  position: absolute;
-  top: .5rem; right: .5rem;
-  background: var(--green);
-  color: #fff;
-  font-family: var(--font-mono);
-  font-size: .65rem;
-  padding: .15rem .45rem;
-  border-radius: 999px;
-  font-weight: 500;
-}
-.nft-card .nft-badge.placed { background: var(--yolk-deep); }
+.role-card:hover { border-color: var(--orange); }
+.role-card.selected { border-color: var(--red); background: rgba(232,53,10,0.08); }
+.role-card .role-icon { font-size: 2rem; margin-bottom: 8px; }
+.role-card h4 { font-size: 1rem; margin-bottom: 4px; }
+.role-card p { font-size: 0.78rem; color: var(--muted); }
 
-/* Empty / Loading states */
-.empty-state {
-  grid-column: 1/-1;
-  text-align: center;
-  padding: 3rem 1rem;
-  color: var(--straw);
-  opacity: .6;
-}
-.empty-state .big { font-size: 3.5rem; margin-bottom: .75rem; }
-.empty-state p { font-size: .95rem; }
+/* ── Steps ── */
+.step-indicator { display: flex; gap: 8px; margin-bottom: 24px; }
+.step-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); transition: background 0.3s; }
+.step-dot.active { background: var(--red); }
+.step-dot.done { background: var(--orange); }
 
-.skeleton {
-  background: linear-gradient(90deg, rgba(107,58,31,.5) 25%, rgba(160,98,42,.5) 50%, rgba(107,58,31,.5) 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.4s infinite;
-  border-radius: var(--radius);
-  aspect-ratio: 1;
-}
-@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-
-/* ─── POWER BAR ─────────────────────────────────────────────── */
-.power-bar-wrap {
-  margin: 1rem 0;
-}
-.power-bar-label {
-  display: flex; justify-content: space-between;
-  font-family: var(--font-mono); font-size: .73rem;
-  color: var(--straw); margin-bottom: .35rem;
-}
-.power-bar-track {
-  height: 10px;
-  background: rgba(255,255,255,.1);
-  border-radius: 999px;
-  overflow: hidden;
-}
-.power-bar-fill {
-  height: 100%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, var(--green), var(--yolk));
-  transition: width .5s ease;
-}
-.power-bar-fill.warn { background: linear-gradient(90deg, var(--yolk), #e67e22); }
-.power-bar-fill.danger { background: linear-gradient(90deg, #e67e22, var(--red-warn)); }
-
-/* ─── HOLDERS TAB ──────────────────────────────────────────── */
-.holders-header {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;
-}
-.holders-meta {
-  display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem;
-}
-.holders-meta-card {
-  background: linear-gradient(160deg, rgba(107,58,31,.7), rgba(61,32,8,.9));
-  border: 1.5px solid var(--coop-mid);
-  border-radius: var(--radius-sm);
-  padding: .9rem 1.2rem;
-  flex: 1; min-width: 140px;
-}
-.holders-meta-card .label {
-  font-family: var(--font-mono); font-size: .68rem;
-  letter-spacing: .07em; text-transform: uppercase;
-  color: var(--straw); margin-bottom: .3rem;
-}
-.holders-meta-card .value {
-  font-size: 1.6rem; font-weight: 900; color: var(--yolk); line-height: 1;
-}
-
-.holders-table-wrap {
-  background: linear-gradient(160deg, rgba(107,58,31,.7), rgba(61,32,8,.9));
-  border: 1.5px solid var(--coop-mid);
-  border-radius: var(--radius);
-  overflow: hidden;
-}
-.holders-search {
-  display: flex; align-items: center; gap: .75rem;
-  padding: 1rem 1.2rem;
-  border-bottom: 1px solid rgba(160,98,42,.3);
-}
-.holders-search input {
-  flex: 1;
-  background: rgba(0,0,0,.25);
-  border: 1.5px solid var(--coop-mid);
-  border-radius: var(--radius-sm);
-  color: var(--shell);
-  font-family: var(--font-mono);
-  font-size: .82rem;
-  padding: .5rem .85rem;
-  outline: none;
-  transition: border-color .2s;
-}
-.holders-search input::placeholder { color: var(--coop-light); }
-.holders-search input:focus { border-color: var(--yolk); }
-.holders-search .search-icon { color: var(--straw); font-size: 1rem; flex-shrink: 0; }
-
-.holders-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-.holders-table th {
-  text-align: left;
-  font-family: var(--font-mono);
-  font-size: .7rem;
-  letter-spacing: .07em;
-  text-transform: uppercase;
-  color: var(--straw);
-  padding: .75rem 1.2rem;
-  border-bottom: 1px solid rgba(160,98,42,.3);
-  background: rgba(61,32,8,.4);
-  cursor: pointer;
-  user-select: none;
-  white-space: nowrap;
-}
-.holders-table th:hover { color: var(--yolk); }
-.holders-table th .sort-arrow { opacity: .4; margin-left: .3rem; }
-.holders-table th.sorted .sort-arrow { opacity: 1; color: var(--yolk); }
-
-.holders-table td {
-  padding: .7rem 1.2rem;
-  border-bottom: 1px solid rgba(160,98,42,.12);
-  font-family: var(--font-mono);
-  font-size: .82rem;
-  color: var(--shell);
-  vertical-align: middle;
-}
-.holders-table tr:last-child td { border-bottom: none; }
-.holders-table tr:hover td { background: rgba(245,166,35,.05); }
-.holders-table tr.is-connected td { background: rgba(245,166,35,.08); }
-.holders-table tr.is-connected td:first-child { border-left: 3px solid var(--yolk); }
-
-.rank-num {
-  color: var(--straw); opacity: .5; font-size: .75rem; min-width: 28px; display: inline-block;
-}
-.rank-num.top3 { color: var(--yolk); opacity: 1; font-weight: 700; font-size: .85rem; }
-
-.addr-cell { display: flex; align-items: center; gap: .6rem; }
-.addr-avatar {
-  width: 28px; height: 28px; border-radius: 50%;
-  flex-shrink: 0; font-size: 1rem;
-  display: flex; align-items: center; justify-content: center;
-  background: linear-gradient(135deg, var(--coop-mid), var(--coop-brown));
-  border: 1.5px solid var(--coop-light);
-}
-.addr-text { display: flex; flex-direction: column; gap: .1rem; }
-.addr-full {
-  font-size: .78rem;
-  color: var(--shell);
-  letter-spacing: .02em;
-}
-.addr-short { display: none; }
-.you-tag {
-  font-size: .6rem; background: var(--yolk); color: var(--coop-brown);
-  padding: .05rem .35rem; border-radius: 999px; font-weight: 700;
-  letter-spacing: .04em; align-self: flex-start;
-}
-.copy-btn {
-  background: none; border: none; cursor: pointer;
-  color: var(--coop-light); font-size: .85rem;
-  transition: color .15s; padding: .1rem;
-}
-.copy-btn:hover { color: var(--yolk); }
-
-.token-chips {
-  display: flex; flex-wrap: wrap; gap: .3rem; max-width: 320px;
-}
-.token-chip {
-  background: rgba(245,166,35,.12);
-  border: 1px solid rgba(245,166,35,.22);
-  border-radius: 5px;
-  padding: .12rem .4rem;
-  font-size: .7rem;
-  color: var(--straw);
-  white-space: nowrap;
-  cursor: pointer;
-  transition: all .15s;
-}
-.token-chip:hover { background: rgba(245,166,35,.25); color: var(--yolk); }
-
-.holders-count-badge {
-  display: inline-flex; align-items: center; justify-content: center;
-  background: rgba(245,166,35,.18);
-  border: 1px solid rgba(245,166,35,.3);
-  color: var(--yolk);
-  font-family: var(--font-mono);
-  font-size: .82rem;
-  font-weight: 700;
-  border-radius: 999px;
-  padding: .25rem .85rem;
-  min-width: 60px;
-}
-
-.scan-progress {
-  padding: 1.5rem;
-  text-align: center;
-}
-.scan-progress .progress-label {
-  font-family: var(--font-mono);
-  font-size: .82rem;
-  color: var(--straw);
-  margin-bottom: .75rem;
-}
-.progress-track {
-  height: 8px;
-  background: rgba(255,255,255,.1);
-  border-radius: 999px;
-  overflow: hidden;
-  margin-bottom: .5rem;
-}
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--yolk-deep), var(--yolk));
-  border-radius: 999px;
-  transition: width .3s ease;
-}
-.scan-sub { font-family: var(--font-mono); font-size: .72rem; color: var(--coop-light); }
-
-.holders-load-btn {
-  background: linear-gradient(135deg, var(--yolk), var(--yolk-deep));
-  border: none;
-  color: var(--coop-brown);
-  font-family: var(--font-display);
-  font-weight: 900;
-  font-size: .95rem;
-  padding: .65rem 1.8rem;
-  border-radius: 999px;
-  cursor: pointer;
-  box-shadow: 0 4px 18px var(--glow);
-  transition: transform .15s, box-shadow .15s;
-}
-.holders-load-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px var(--glow); }
-.holders-load-btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
-
-.pagination {
-  display: flex; align-items: center; justify-content: center;
-  gap: .5rem; padding: 1rem;
-  border-top: 1px solid rgba(160,98,42,.2);
-  flex-wrap: wrap;
-}
-.page-btn {
-  background: transparent;
-  border: 1.5px solid var(--coop-mid);
-  color: var(--straw);
-  font-family: var(--font-mono);
-  font-size: .78rem;
-  padding: .35rem .75rem;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all .15s;
-}
-.page-btn:hover { border-color: var(--yolk); color: var(--yolk); }
-.page-btn.active { background: var(--yolk); border-color: var(--yolk); color: var(--coop-brown); font-weight: 700; }
-.page-btn:disabled { opacity: .3; cursor: not-allowed; }
-
-@media(max-width: 700px) {
-  .addr-full { display: none; }
-  .addr-short { display: block; font-size: .78rem; color: var(--shell); }
-  .token-chips { display: none; }
-}
-
-/* ─── TOKENOMICS TAB ────────────────────────────────────────── */
-.toko-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 1.2rem;
-  margin-bottom: 2rem;
-}
-.toko-card {
-  background: linear-gradient(160deg, rgba(107,58,31,.7), rgba(61,32,8,.9));
-  border: 1.5px solid var(--coop-mid);
-  border-radius: var(--radius);
-  padding: 1.4rem;
-}
-.toko-card h3 {
-  font-size: .78rem;
-  font-family: var(--font-mono);
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  color: var(--straw);
-  margin-bottom: .6rem;
-}
-.toko-card .big-num {
-  font-size: 1.9rem;
-  font-weight: 900;
-  color: var(--yolk);
-  line-height: 1;
-}
-.toko-card .sub-num { font-size: .82rem; color: var(--straw); margin-top: .3rem; }
-
-.emission-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-family: var(--font-mono);
-  font-size: .82rem;
-  margin-top: .5rem;
-}
-.emission-table th {
-  text-align: left;
-  color: var(--straw);
-  padding: .5rem .75rem;
-  border-bottom: 1px solid rgba(160,98,42,.4);
-  font-size: .72rem;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-}
-.emission-table td {
-  padding: .55rem .75rem;
-  border-bottom: 1px solid rgba(160,98,42,.15);
-  color: var(--shell);
-}
-.emission-table tr:last-child td { border-bottom: none; }
-.emission-table .highlight { color: var(--yolk); font-weight: 700; }
-.emission-table tr.current-era { background: rgba(245,166,35,.08); }
-
-/* ─── MARKET TAB ────────────────────────────────────────────── */
-.market-notice {
-  background: linear-gradient(160deg, rgba(107,58,31,.7), rgba(61,32,8,.9));
-  border: 1.5px solid var(--coop-mid);
-  border-radius: var(--radius);
-  padding: 2rem;
-  text-align: center;
-  color: var(--straw);
-}
-.market-notice .big { font-size: 3rem; margin-bottom: .5rem; }
-.market-notice h3 { font-size: 1.3rem; font-weight: 900; color: var(--yolk); margin-bottom: .5rem; }
-.market-notice p { opacity: .75; line-height: 1.7; }
-
-/* ─── NFT DETAIL MODAL ──────────────────────────────────────── */
-#modal-overlay {
-  display: none;
-  position: fixed; inset: 0; z-index: 200;
-  background: rgba(30,12,0,.8);
-  backdrop-filter: blur(8px);
-  align-items: center; justify-content: center;
-  padding: 1rem;
-}
-#modal-overlay.open { display: flex; }
-.modal {
-  background: linear-gradient(160deg, #4A2E10, #2A1500);
-  border: 2px solid var(--coop-light);
-  border-radius: var(--radius);
-  max-width: 480px;
-  width: 100%;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 20px 60px rgba(0,0,0,.6);
-  animation: popIn .25s cubic-bezier(.34,1.56,.64,1);
-}
-@keyframes popIn {
-  from { transform: scale(.88); opacity: 0; }
-  to   { transform: scale(1);   opacity: 1; }
-}
-.modal-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 1.2rem 1.5rem;
-  border-bottom: 1px solid var(--coop-mid);
-}
-.modal-header h3 { font-size: 1.15rem; font-weight: 900; color: var(--yolk); }
-.modal-close {
-  background: none; border: none; color: var(--straw);
-  font-size: 1.4rem; cursor: pointer; line-height: 1;
-  transition: color .15s;
-}
-.modal-close:hover { color: var(--yolk); }
-.modal-body { padding: 1.5rem; }
-.modal-img {
-  width: 100%; border-radius: var(--radius-sm);
-  margin-bottom: 1rem;
-  border: 2px solid var(--coop-mid);
-}
-.modal-img-placeholder {
-  width: 100%; aspect-ratio: 1;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 5rem;
-  background: var(--coop-brown);
-  border-radius: var(--radius-sm);
-  margin-bottom: 1rem;
-  border: 2px solid var(--coop-mid);
-}
-.modal-attrs {
-  display: grid; grid-template-columns: 1fr 1fr;
-  gap: .5rem; margin-bottom: 1rem;
-}
-.attr-pill {
-  background: rgba(245,166,35,.1);
-  border: 1px solid rgba(245,166,35,.2);
-  border-radius: var(--radius-sm);
-  padding: .5rem .75rem;
-  font-family: var(--font-mono);
-}
-.attr-pill .attr-type {
-  font-size: .65rem; letter-spacing: .06em; text-transform: uppercase;
-  color: var(--straw); margin-bottom: .2rem;
-}
-.attr-pill .attr-val { font-size: .88rem; color: var(--shell); font-weight: 700; }
-.modal-desc { font-size: .88rem; color: var(--straw); line-height: 1.7; margin-bottom: 1rem; }
-.modal-link {
-  display: inline-block;
-  font-family: var(--font-mono);
-  font-size: .78rem;
-  color: var(--yolk);
-  text-decoration: none;
-  border: 1px solid rgba(245,166,35,.3);
-  padding: .35rem .75rem;
-  border-radius: 999px;
-  transition: all .2s;
-  margin-top: .25rem;
-}
-.modal-link:hover { background: rgba(245,166,35,.15); border-color: var(--yolk); }
-
-/* ─── FOOTER ────────────────────────────────────────────────── */
-footer {
-  display: flex; align-items: center; justify-content: center; gap: 2rem;
-  padding: 1rem 2rem;
-  border-top: 1px solid rgba(160,98,42,.3);
-  font-family: var(--font-mono);
-  font-size: .74rem;
-  color: var(--coop-light);
-  flex-wrap: wrap;
-}
-footer a { color: var(--yolk); text-decoration: none; }
-footer a:hover { text-decoration: underline; }
-
-/* ─── CHAIN BADGE ───────────────────────────────────────────── */
-.chain-badge {
-  display: inline-flex; align-items: center; gap: .4rem;
-  background: rgba(245,166,35,.12);
-  border: 1px solid rgba(245,166,35,.25);
-  padding: .2rem .65rem;
-  border-radius: 999px;
-  font-family: var(--font-mono);
-  font-size: .72rem;
-  color: var(--straw);
-  white-space: nowrap;
-}
-.chain-badge .chain-dot {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: var(--green);
-  box-shadow: 0 0 5px var(--green);
-}
+/* ── Tag row ── */
+.tag-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag { padding: 3px 10px; background: var(--dark); border: 1px solid var(--border); border-radius: 3px; font-size: 0.75rem; color: var(--muted); }
 </style>
 </head>
 <body>
 
-<!-- Floating ambient feathers/eggs -->
-<div class="floaters" id="floaters"></div>
+<!-- TOAST CONTAINER -->
+<div id="toast-container"></div>
 
-<div id="app">
-  <!-- ─── HEADER ─────────────────────────────────────────────────── -->
-  <header>
-    <div class="logo">
-      <div class="logo-egg">🥚</div>
-      <div class="logo-text">
-        <h1>HenVerse</h1>
-        <p>EGG MINING · THE GROTTO</p>
+<!-- NAV -->
+<nav>
+  <div class="nav-logo" onclick="showPage('home')">CLIP<span>DAO</span></div>
+  <div class="nav-right">
+    <span id="nav-addr" class="nav-addr" style="display:none"></span>
+    <button id="btn-connect" class="btn btn-primary btn-sm" onclick="connectWallet()">Connect Wallet</button>
+    <button id="btn-dashboard" class="btn btn-ghost btn-sm" style="display:none" onclick="showPage('dashboard')">Dashboard</button>
+    <button id="btn-disconnect" class="btn btn-ghost btn-sm" style="display:none" onclick="disconnectWallet()">Disconnect</button>
+  </div>
+</nav>
+
+<!-- ===================== PAGE: HOME ===================== -->
+<div id="page-home" class="page active">
+  <div class="container">
+    <div class="hero">
+      <div class="hero-inner">
+        <div class="hero-eyebrow">Built on Avalanche Fuji Testnet</div>
+        <h1>Clip.<br>Submit.<br><em>Get Paid.</em></h1>
+        <p>The first decentralized marketplace connecting streamers and clippers through trustless smart contracts. No middlemen. Automatic payouts. On-chain reputation.</p>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+          <button class="btn btn-primary" onclick="connectWallet()">🔥 Connect & Start</button>
+          <button class="btn btn-ghost" onclick="showPage('mint')">Mint NFT</button>
+          <button class="btn btn-ghost" onclick="showPage('bounties')">Browse Bounties</button>
+        </div>
+        <div class="hero-stats">
+          <div class="stat-item">
+            <div class="stat-num" id="stat-bounties">0</div>
+            <div class="stat-label">Open Bounties</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-num" id="stat-genesis">500</div>
+            <div class="stat-label">Genesis Supply</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-num" id="stat-paid">0</div>
+            <div class="stat-label">AVAX Paid Out</div>
+          </div>
+        </div>
       </div>
     </div>
+  </div>
+</div>
 
-    <nav>
-      <button class="nav-btn active" onclick="switchTab('coop')">🐔 My Coop</button>
-      <button class="nav-btn" onclick="switchTab('holders')">👥 Holders</button>
-      <button class="nav-btn" onclick="switchTab('tokenomics')">📊 Tokenomics</button>
-      <button class="nav-btn" onclick="switchTab('market')">🛒 Market</button>
-    </nav>
+<!-- ===================== PAGE: DASHBOARD ===================== -->
+<div id="page-dashboard" class="page">
+  <div class="dashboard-grid">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-label">Main</div>
+        <div class="nav-item active" onclick="switchTab('tab-overview')" id="nav-overview">
+          <span class="icon">⚡</span> Overview
+        </div>
+        <div class="nav-item" onclick="switchTab('tab-bounties-dash')" id="nav-bounties-dash">
+          <span class="icon">🎯</span> Bounty Board
+        </div>
+        <div class="nav-item" onclick="switchTab('tab-submissions')" id="nav-submissions">
+          <span class="icon">📎</span> My Submissions
+        </div>
+        <div class="nav-item" onclick="switchTab('tab-post')" id="nav-post">
+          <span class="icon">➕</span> Post Bounty
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Account</div>
+        <div class="nav-item" onclick="switchTab('tab-profile')" id="nav-profile">
+          <span class="icon">👤</span> Profile
+        </div>
+        <div class="nav-item" onclick="showPage('mint')" id="nav-mint">
+          <span class="icon">🔑</span> NFT Mint
+        </div>
+      </div>
+      <div class="sidebar-section" style="margin-top:auto;padding-top:20px;">
+        <div class="nav-item" style="color:var(--red);" onclick="disconnectWallet()">
+          <span class="icon">🚪</span> Disconnect
+        </div>
+      </div>
+    </aside>
 
-    <div class="wallet-zone">
-      <div class="chain-badge">
-        <span class="chain-dot"></span>
-        The Grotto
+    <!-- Main content -->
+    <main class="main-content">
+
+      <!-- TAB: Overview -->
+      <div id="tab-overview" class="dash-tab">
+        <div class="page-header">
+          <h2>Overview</h2>
+          <p id="dash-welcome">Welcome back</p>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:28px;">
+          <div class="card">
+            <div style="color:var(--muted);font-size:0.78rem;text-transform:uppercase;margin-bottom:6px;">NFT Tier</div>
+            <div id="overview-tier" style="font-family:var(--font-display);font-size:1.5rem;color:var(--orange);">—</div>
+          </div>
+          <div class="card">
+            <div style="color:var(--muted);font-size:0.78rem;text-transform:uppercase;margin-bottom:6px;">Reputation</div>
+            <div id="overview-rep" style="font-family:var(--font-display);font-size:1.5rem;color:var(--red);">0</div>
+          </div>
+          <div class="card">
+            <div style="color:var(--muted);font-size:0.78rem;text-transform:uppercase;margin-bottom:6px;">Bounties Won</div>
+            <div id="overview-won" style="font-family:var(--font-display);font-size:1.5rem;color:var(--orange);">0</div>
+          </div>
+          <div class="card">
+            <div style="color:var(--muted);font-size:0.78rem;text-transform:uppercase;margin-bottom:6px;">Role</div>
+            <div id="overview-role" style="font-family:var(--font-display);font-size:1.5rem;color:var(--amber);">—</div>
+          </div>
+        </div>
+        <div class="card">
+          <h3 style="margin-bottom:16px;color:var(--orange);">Recent Activity</h3>
+          <div id="recent-activity">
+            <div class="empty-state"><div class="icon">📋</div><p>No activity yet</p></div>
+          </div>
+        </div>
       </div>
-      <div id="wallet-badge">
-        <span class="dot"></span>
-        <span id="wallet-addr"></span>
+
+      <!-- TAB: Bounty Board (dashboard) -->
+      <div id="tab-bounties-dash" class="dash-tab" style="display:none">
+        <div class="page-header">
+          <h2>Bounty Board</h2>
+          <p>Find open bounties and submit your clips</p>
+        </div>
+        <div class="filter-row">
+          <button class="filter-btn active" onclick="filterBounties('open',this)">Open</button>
+          <button class="filter-btn" onclick="filterBounties('closed',this)">Closed</button>
+          <button class="filter-btn" onclick="filterBounties('all',this)">All</button>
+        </div>
+        <div id="bounty-list-dash" class="bounty-grid">
+          <div class="empty-state"><div class="spinner"></div><p>Loading bounties...</p></div>
+        </div>
       </div>
-      <button id="connect-btn" onclick="connectWallet()">Connect Wallet</button>
+
+      <!-- TAB: My Submissions -->
+      <div id="tab-submissions" class="dash-tab" style="display:none">
+        <div class="page-header">
+          <h2>My Submissions</h2>
+          <p>Track your clip submissions and earnings</p>
+        </div>
+        <div id="my-submissions-list">
+          <div class="empty-state"><div class="icon">📎</div><p>No submissions yet</p></div>
+        </div>
+      </div>
+
+      <!-- TAB: Post Bounty -->
+      <div id="tab-post" class="dash-tab" style="display:none">
+        <div class="page-header">
+          <h2>Post a Bounty</h2>
+          <p>Lock AVAX in escrow and get clips made</p>
+        </div>
+        <div class="card" style="max-width:560px;">
+          <div class="form-group">
+            <label>Bounty Title</label>
+            <input type="text" id="post-title" placeholder="e.g. Best hype clip from tonight's stream"/>
+          </div>
+          <div class="form-group">
+            <label>Description</label>
+            <textarea id="post-desc" placeholder="Describe what kind of clips you want..."></textarea>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div class="form-group">
+              <label>Reward (AVAX)</label>
+              <input type="number" id="post-reward" placeholder="0.5" min="0.01" step="0.01"/>
+            </div>
+            <div class="form-group">
+              <label>Duration (hours)</label>
+              <select id="post-duration">
+                <option value="24">24 hours</option>
+                <option value="48" selected>48 hours</option>
+                <option value="72">72 hours</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div class="form-group">
+              <label>Resolution Mode</label>
+              <select id="post-mode">
+                <option value="0">Streamer Picks</option>
+                <option value="1">Community Vote</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Number of Winners</label>
+              <select id="post-winners">
+                <option value="1">1 Winner</option>
+                <option value="2">2 Winners</option>
+                <option value="3">3 Winners</option>
+              </select>
+            </div>
+          </div>
+          <div id="tx-post" class="tx-status"></div>
+          <button class="btn btn-primary" onclick="postBounty()" style="width:100%;">🔒 Lock AVAX & Post Bounty</button>
+        </div>
+      </div>
+
+      <!-- TAB: Profile -->
+      <div id="tab-profile" class="dash-tab" style="display:none">
+        <div class="page-header">
+          <h2>My Profile</h2>
+        </div>
+        <div class="profile-header">
+          <div class="profile-avatar" id="profile-avatar-letter">?</div>
+          <div>
+            <h3 id="profile-username" style="margin-bottom:4px;">—</h3>
+            <div class="mono" style="color:var(--muted);margin-bottom:8px;" id="profile-wallet-short">—</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;" id="profile-badges"></div>
+            <div class="rep-bar-wrap" style="margin-top:12px;">
+              <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                <span style="font-size:0.78rem;color:var(--muted);">Reputation</span>
+                <span style="font-size:0.78rem;color:var(--orange);" id="profile-rep-num">0</span>
+              </div>
+              <div class="rep-bar"><div class="rep-fill" id="profile-rep-bar" style="width:0%"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="max-width:480px;">
+          <h3 style="margin-bottom:16px;color:var(--orange);">Update Profile</h3>
+          <div class="form-group">
+            <label>Username</label>
+            <input type="text" id="edit-username" placeholder="Your name"/>
+          </div>
+          <div class="form-group">
+            <label>X (Twitter) Handle</label>
+            <input type="text" id="edit-xhandle" placeholder="@yourhandle"/>
+          </div>
+          <div class="form-group">
+            <label>Platform</label>
+            <select id="edit-platform">
+              <option value="blaze">Blaze</option>
+              <option value="arena">Arena</option>
+              <option value="twitch">Twitch</option>
+              <option value="youtube">YouTube</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Channel / Profile Link</label>
+            <input type="text" id="edit-channel" placeholder="https://..."/>
+          </div>
+          <div id="tx-profile" class="tx-status"></div>
+          <button class="btn btn-orange" onclick="saveProfile()" style="width:100%;">Save Profile</button>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- ===================== PAGE: MINT ===================== -->
+<div id="page-mint" class="page">
+  <div class="container" style="padding-top:40px;padding-bottom:60px;">
+    <div class="page-header" style="margin-bottom:40px;">
+      <h2>Mint Your NFT</h2>
+      <p style="color:var(--muted);">Your key to the ClipDAO ecosystem. One per wallet.</p>
     </div>
-  </header>
-
-  <!-- ─── STATUS BAR ─────────────────────────────────────────────── -->
-  <div id="status-bar"></div>
-
-  <!-- ─── MAIN ──────────────────────────────────────────────────── -->
-  <main>
-
-    <!-- COOP TAB -->
-    <div id="tab-coop" class="tab-panel active">
-      <div class="facility-card">
-        <h2>🏡 Your Hen Coop</h2>
-        <!-- Coop SVG illustration -->
-        <div class="facility-art">
-          <svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">
-            <!-- Sky -->
-            <rect width="400" height="300" fill="#D0EAF8"/>
-            <!-- Ground -->
-            <rect y="220" width="400" height="80" fill="#5B8C3E"/>
-            <rect y="200" width="400" height="30" fill="#7AB050"/>
-            <!-- Coop body -->
-            <rect x="60" y="100" width="260" height="130" rx="4" fill="#8B5A2B"/>
-            <rect x="65" y="105" width="250" height="120" rx="3" fill="#A0622A"/>
-            <!-- Roof -->
-            <polygon points="40,105 200,30 360,105" fill="#6B3A1F"/>
-            <polygon points="50,105 200,38 350,105" fill="#8B4513"/>
-            <!-- Roof ridge -->
-            <line x1="200" y1="32" x2="200" y2="105" stroke="#6B3A1F" stroke-width="3"/>
-            <!-- Roof tiles pattern -->
-            <g opacity="0.2">
-              <line x1="120" y1="105" x2="155" y2="60" stroke="#3D2008" stroke-width="1.5"/>
-              <line x1="160" y1="105" x2="178" y2="47" stroke="#3D2008" stroke-width="1.5"/>
-              <line x1="200" y1="105" x2="200" y2="38" stroke="#3D2008" stroke-width="1.5"/>
-              <line x1="240" y1="105" x2="222" y2="47" stroke="#3D2008" stroke-width="1.5"/>
-              <line x1="280" y1="105" x2="245" y2="60" stroke="#3D2008" stroke-width="1.5"/>
-            </g>
-            <!-- Door -->
-            <rect x="172" y="165" width="56" height="65" rx="6" fill="#3D2008"/>
-            <rect x="175" y="168" width="50" height="59" rx="4" fill="#2A1400"/>
-            <circle cx="218" cy="198" r="3" fill="#F5A623"/>
-            <!-- Windows -->
-            <rect x="82" y="122" width="60" height="50" rx="4" fill="#3D2008"/>
-            <rect x="85" y="125" width="54" height="44" rx="3" fill="#87CEEB" opacity="0.8"/>
-            <line x1="112" y1="125" x2="112" y2="169" stroke="#3D2008" stroke-width="2"/>
-            <line x1="85"  y1="147" x2="139" y2="147" stroke="#3D2008" stroke-width="2"/>
-
-            <rect x="252" y="122" width="60" height="50" rx="4" fill="#3D2008"/>
-            <rect x="255" y="125" width="54" height="44" rx="3" fill="#87CEEB" opacity="0.8"/>
-            <line x1="282" y1="125" x2="282" y2="169" stroke="#3D2008" stroke-width="2"/>
-            <line x1="255" y1="147" x2="309" y2="147" stroke="#3D2008" stroke-width="2"/>
-
-            <!-- Fence left -->
-            <rect x="10" y="195" width="55" height="8" rx="2" fill="#8B5A2B"/>
-            <rect x="15" y="175" width="8" height="30" rx="2" fill="#8B5A2B"/>
-            <rect x="35" y="175" width="8" height="30" rx="2" fill="#8B5A2B"/>
-            <rect x="55" y="175" width="8" height="30" rx="2" fill="#8B5A2B"/>
-            <!-- Fence right -->
-            <rect x="340" y="195" width="55" height="8" rx="2" fill="#8B5A2B"/>
-            <rect x="340" y="175" width="8" height="30" rx="2" fill="#8B5A2B"/>
-            <rect x="360" y="175" width="8" height="30" rx="2" fill="#8B5A2B"/>
-            <rect x="380" y="175" width="8" height="30" rx="2" fill="#8B5A2B"/>
-            <!-- Chickens -->
-            <!-- Chicken 1 -->
-            <ellipse cx="330" cy="218" rx="18" ry="14" fill="#F5F5DC"/>
-            <circle cx="346" cy="210" r="9" fill="#F5F5DC"/>
-            <ellipse cx="351" cy="208" rx="4" ry="3" fill="#FF6B6B"/>
-            <polygon points="356,210 362,212 356,214" fill="#F5A623"/>
-            <circle cx="353" cy="208" r="1.5" fill="#2A1400"/>
-            <!-- Chicken 2 -->
-            <ellipse cx="60" cy="218" rx="16" ry="13" fill="#FFF8DC"/>
-            <circle cx="44" cy="210" r="8" fill="#FFF8DC"/>
-            <ellipse cx="39" cy="208" rx="3.5" ry="2.5" fill="#FF6B6B"/>
-            <polygon points="34,210 28,212 34,214" fill="#F5A623"/>
-            <circle cx="37" cy="208" r="1.5" fill="#2A1400"/>
-            <!-- Eggs on ground -->
-            <ellipse cx="160" cy="225" rx="8" ry="6" fill="#FFF8DC" stroke="#E8C97A" stroke-width="1"/>
-            <ellipse cx="175" cy="230" rx="7" ry="5.5" fill="#F5EAC5" stroke="#E8C97A" stroke-width="1"/>
-            <ellipse cx="240" cy="227" rx="8" ry="6" fill="#FFF8DC" stroke="#E8C97A" stroke-width="1"/>
-            <!-- Sun -->
-            <circle cx="360" cy="45" r="22" fill="#F5A623" opacity="0.9"/>
-            <g stroke="#F5A623" stroke-width="2" opacity="0.6">
-              <line x1="360" y1="15" x2="360" y2="8"/>
-              <line x1="360" y1="75" x2="360" y2="82"/>
-              <line x1="330" y1="45" x2="323" y2="45"/>
-              <line x1="390" y1="45" x2="397" y2="45"/>
-              <line x1="339" y1="24" x2="334" y2="19"/>
-              <line x1="381" y1="66" x2="386" y2="71"/>
-              <line x1="381" y1="24" x2="386" y2="19"/>
-              <line x1="339" y1="66" x2="334" y2="71"/>
-            </g>
-          </svg>
+    <div class="mint-grid">
+      <!-- Genesis -->
+      <div class="mint-card genesis">
+        <div class="mint-tier-badge" style="color:var(--amber);">⭐ Genesis Tier</div>
+        <h3 style="color:var(--amber);">Genesis NFT</h3>
+        <div class="mint-price" style="color:var(--amber);">0.5 <span style="font-size:1rem;color:var(--muted);">AVAX</span></div>
+        <div class="supply-bar">
+          <div class="supply-fill" id="genesis-bar" style="width:0%"></div>
         </div>
-
-        <!-- Stats -->
-        <div class="stats-grid">
-          <div class="stat-box">
-            <div class="label">Hens Owned</div>
-            <div class="value" id="stat-hens">—</div>
-          </div>
-          <div class="stat-box">
-            <div class="label">Placed in Coop</div>
-            <div class="value" id="stat-placed">0</div>
-          </div>
-          <div class="stat-box">
-            <div class="label">Hashrate</div>
-            <div class="value" id="stat-hashrate">0 MH/s</div>
-          </div>
-          <div class="stat-box">
-            <div class="label">Power</div>
-            <div class="value" id="stat-power">0W</div>
-          </div>
+        <div class="mint-supply"><span id="genesis-minted">0</span> / 500 minted</div>
+        <ul class="mint-perks">
+          <li>Lifetime 1% platform fee</li>
+          <li>3x community voting power</li>
+          <li>Monthly revenue share</li>
+          <li>Exclusive Genesis bounties</li>
+          <li>First access to brand campaigns</li>
+          <li>Gold badge + evolving NFT</li>
+        </ul>
+        <div class="form-group">
+          <label>Username</label>
+          <input type="text" id="gen-username" placeholder="Your name"/>
         </div>
-
-        <!-- Power Bar -->
-        <div class="power-bar-wrap">
-          <div class="power-bar-label">
-            <span>Power Usage</span>
-            <span id="power-label-val">0 / 2000W</span>
-          </div>
-          <div class="power-bar-track">
-            <div class="power-bar-fill" id="power-bar" style="width:0%"></div>
-          </div>
+        <div class="form-group">
+          <label>X Handle</label>
+          <input type="text" id="gen-xhandle" placeholder="@handle"/>
         </div>
-
-        <div id="no-wallet-msg" style="text-align:center;color:var(--straw);font-size:.85rem;padding:.5rem 0;opacity:.7;">
-          Connect your wallet to manage your coop
+        <div class="form-group">
+          <label>Platform</label>
+          <select id="gen-platform">
+            <option value="blaze">Blaze</option>
+            <option value="arena">Arena</option>
+            <option value="twitch">Twitch</option>
+            <option value="youtube">YouTube</option>
+          </select>
         </div>
-
-        <button class="coop-btn secondary" id="refresh-nfts-btn" style="display:none" onclick="loadNFTs()">
-          ↻ Refresh Hens
+        <div class="form-group">
+          <label>Role</label>
+          <select id="gen-role">
+            <option value="1">Clipper</option>
+            <option value="2">Streamer</option>
+          </select>
+        </div>
+        <div id="tx-genesis" class="tx-status"></div>
+        <button class="btn btn-orange" onclick="mintGenesis()" style="width:100%;margin-top:8px;" id="btn-mint-genesis">
+          Mint Genesis NFT
         </button>
       </div>
 
-      <!-- NFT Grid Panel -->
-      <div class="nft-section">
-        <div class="nft-controls">
-          <div>
-            <div class="section-title" style="margin-bottom:.25rem;">
-              <span>🐣</span> HenVerse NFTs
-            </div>
-            <div class="nft-count" id="nft-count-label">Connect wallet to see your hens</div>
-          </div>
-          <button class="refresh-btn" id="refresh-btn" onclick="loadNFTs()" style="display:none">↻ Refresh</button>
+      <!-- Early Access -->
+      <div class="mint-card early">
+        <div class="mint-tier-badge" style="color:var(--red);">🔥 Early Access</div>
+        <h3>Early Access NFT</h3>
+        <div class="mint-price" style="color:var(--red);">0.1 <span style="font-size:1rem;color:var(--muted);">AVAX</span></div>
+        <div class="mint-supply" style="margin-top:20px;">Open mint window</div>
+        <ul class="mint-perks">
+          <li>Reduced 2.5% platform fee</li>
+          <li>1.5x voting power</li>
+          <li>Early campaign access</li>
+          <li>Early adopter badge</li>
+          <li>Evolving NFT</li>
+        </ul>
+        <div class="form-group">
+          <label>Username</label>
+          <input type="text" id="ea-username" placeholder="Your name"/>
         </div>
-
-        <div class="nft-grid" id="nft-grid">
-          <div class="empty-state">
-            <div class="big">🏚️</div>
-            <p>Connect your wallet to see your HenVerse hens</p>
-          </div>
+        <div class="form-group">
+          <label>X Handle</label>
+          <input type="text" id="ea-xhandle" placeholder="@handle"/>
         </div>
+        <div class="form-group">
+          <label>Platform</label>
+          <select id="ea-platform">
+            <option value="blaze">Blaze</option>
+            <option value="arena">Arena</option>
+            <option value="twitch">Twitch</option>
+            <option value="youtube">YouTube</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Role</label>
+          <select id="ea-role">
+            <option value="1">Clipper</option>
+            <option value="2">Streamer</option>
+          </select>
+        </div>
+        <div id="tx-early" class="tx-status"></div>
+        <button class="btn btn-primary" onclick="mintEarlyAccess()" style="width:100%;margin-top:8px;" id="btn-mint-early">
+          Mint Early Access NFT
+        </button>
       </div>
     </div>
-
-    <!-- TOKENOMICS TAB -->
-    <div id="tab-tokenomics" class="tab-panel">
-      <div class="section-title"><span>📊</span> EGG Token Tokenomics</div>
-      <div class="toko-grid">
-        <div class="toko-card">
-          <h3>Max Supply</h3>
-          <div class="big-num">21,000,000</div>
-          <div class="sub-num">EGG — fixed hard cap</div>
-        </div>
-        <div class="toko-card">
-          <h3>Premine / Team</h3>
-          <div class="big-num" style="color:var(--green)">None</div>
-          <div class="sub-num">100% gameplay emissions</div>
-        </div>
-        <div class="toko-card">
-          <h3>Base Emission Rate</h3>
-          <div class="big-num">2.5</div>
-          <div class="sub-num">EGG per block</div>
-        </div>
-        <div class="toko-card">
-          <h3>Halving Interval</h3>
-          <div class="big-num">4.2M</div>
-          <div class="sub-num">blocks ≈ 48 days</div>
-        </div>
-        <div class="toko-card">
-          <h3>Referral Fee</h3>
-          <div class="big-num">2.5%</div>
-          <div class="sub-num">of claimed rewards</div>
-        </div>
-        <div class="toko-card">
-          <h3>Network</h3>
-          <div class="big-num" style="font-size:1.2rem">The Grotto</div>
-          <div class="sub-num">Chain ID 36463 · Avalanche L1</div>
-        </div>
-      </div>
-
-      <div class="section-title" style="margin-top:1.5rem"><span>⏳</span> Emission Schedule</div>
-      <div style="background:linear-gradient(160deg,rgba(107,58,31,.7),rgba(61,32,8,.9));border:1.5px solid var(--coop-mid);border-radius:var(--radius);padding:1.2rem;overflow-x:auto;">
-        <table class="emission-table" id="emission-table">
-          <thead>
-            <tr>
-              <th>Era</th>
-              <th>Blocks</th>
-              <th>Rate (EGG/block)</th>
-              <th>Era Supply</th>
-              <th>Cumulative</th>
-              <th>≈ Days</th>
-            </tr>
-          </thead>
-          <tbody id="emission-tbody"></tbody>
-        </table>
-      </div>
-
-      <div class="section-title" style="margin-top:1.5rem"><span>🔁</span> Reward Flywheel</div>
-      <div style="background:linear-gradient(160deg,rgba(107,58,31,.7),rgba(61,32,8,.9));border:1.5px solid var(--coop-mid);border-radius:var(--radius);padding:1.4rem;">
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:1rem;">
-          <div style="padding:.9rem;background:rgba(245,166,35,.07);border:1px solid rgba(245,166,35,.18);border-radius:10px;">
-            <div style="font-size:1.5rem;margin-bottom:.4rem">1️⃣</div>
-            <div style="font-weight:900;color:var(--yolk);margin-bottom:.3rem">Buy a Coop</div>
-            <div style="font-size:.83rem;color:var(--straw);line-height:1.6">Purchase a starter Hen Coop facility. You must own a coop before placing hens.</div>
-          </div>
-          <div style="padding:.9rem;background:rgba(245,166,35,.07);border:1px solid rgba(245,166,35,.18);border-radius:10px;">
-            <div style="font-size:1.5rem;margin-bottom:.4rem">2️⃣</div>
-            <div style="font-weight:900;color:var(--yolk);margin-bottom:.3rem">Place Hens</div>
-            <div style="font-size:.83rem;color:var(--straw);line-height:1.6">Place HenVerse NFTs into your coop grid. Each hen adds hashrate to your total. Unplaced hens earn nothing.</div>
-          </div>
-          <div style="padding:.9rem;background:rgba(245,166,35,.07);border:1px solid rgba(245,166,35,.18);border-radius:10px;">
-            <div style="font-size:1.5rem;margin-bottom:.4rem">3️⃣</div>
-            <div style="font-weight:900;color:var(--yolk);margin-bottom:.3rem">Earn EGG</div>
-            <div style="font-size:.83rem;color:var(--straw);line-height:1.6">Your share of each block emission = your hashrate ÷ total network hashrate × 2.5 EGG.</div>
-          </div>
-          <div style="padding:.9rem;background:rgba(245,166,35,.07);border:1px solid rgba(245,166,35,.18);border-radius:10px;">
-            <div style="font-size:1.5rem;margin-bottom:.4rem">4️⃣</div>
-            <div style="font-weight:900;color:var(--yolk);margin-bottom:.3rem">Claim Rewards</div>
-            <div style="font-size:.83rem;color:var(--straw);line-height:1.6">Manually claim accrued EGG. Utility fee deducted on claim. Keep pending rewards above fee threshold.</div>
-          </div>
-          <div style="padding:.9rem;background:rgba(245,166,35,.07);border:1px solid rgba(245,166,35,.18);border-radius:10px;">
-            <div style="font-size:1.5rem;margin-bottom:.4rem">5️⃣</div>
-            <div style="font-weight:900;color:var(--yolk);margin-bottom:.3rem">Upgrade or Trade</div>
-            <div style="font-size:.83rem;color:var(--straw);line-height:1.6">Upgrade your coop for more slots & power. Trade hens on the marketplace. Refer friends for 2.5% of their claims.</div>
-          </div>
-          <div style="padding:.9rem;background:rgba(245,166,35,.07);border:1px solid rgba(245,166,35,.18);border-radius:10px;">
-            <div style="font-size:1.5rem;margin-bottom:.4rem">♻️</div>
-            <div style="font-weight:900;color:var(--yolk);margin-bottom:.3rem">The Flywheel</div>
-            <div style="font-size:.83rem;color:var(--straw);line-height:1.6">EGG earned → buy more hens / upgrades → more hashrate → more EGG. Halvings create scarcity pressure driving token value.</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- HOLDERS TAB -->
-    <div id="tab-holders" class="tab-panel">
-      <div class="holders-header">
-        <div class="section-title" style="margin-bottom:0"><span>👥</span> HenVerse Holders</div>
-        <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;">
-          <span id="holders-count-badge" class="holders-count-badge" style="display:none">—</span>
-          <button class="holders-load-btn" id="holders-load-btn" onclick="startHolderScan()">
-            🔍 Scan All Holders
-          </button>
-          <button class="refresh-btn" id="holders-refresh-btn" onclick="startHolderScan()" style="display:none">
-            ↻ Re-scan
-          </button>
-        </div>
-      </div>
-
-      <div class="holders-meta" id="holders-meta" style="display:none">
-        <div class="holders-meta-card">
-          <div class="label">Unique Holders</div>
-          <div class="value" id="meta-holders">—</div>
-        </div>
-        <div class="holders-meta-card">
-          <div class="label">Total Minted</div>
-          <div class="value" id="meta-minted">—</div>
-        </div>
-        <div class="holders-meta-card">
-          <div class="label">Avg per Wallet</div>
-          <div class="value" id="meta-avg">—</div>
-        </div>
-        <div class="holders-meta-card">
-          <div class="label">Contract</div>
-          <div class="value" style="font-size:.75rem;word-break:break-all;color:var(--straw)">0x42c3…b7CF</div>
-        </div>
-      </div>
-
-      <div class="holders-table-wrap" id="holders-table-wrap">
-        <!-- Idle state -->
-        <div id="holders-idle" style="text-align:center;padding:3rem 1.5rem;color:var(--straw);opacity:.65;">
-          <div style="font-size:3rem;margin-bottom:.75rem">🔍</div>
-          <p style="font-size:.95rem">Click <strong style="color:var(--yolk)">Scan All Holders</strong> to enumerate every wallet<br/>holding a HenVerse NFT from The Grotto chain.</p>
-          <p style="font-size:.78rem;margin-top:.75rem;font-family:var(--font-mono);opacity:.6">Scans Transfer events from block 0 → latest · No API key needed</p>
-        </div>
-
-        <!-- Progress -->
-        <div id="holders-progress" style="display:none" class="scan-progress">
-          <div class="progress-label" id="progress-label">Scanning Transfer events…</div>
-          <div class="progress-track">
-            <div class="progress-fill" id="progress-fill" style="width:0%"></div>
-          </div>
-          <div class="scan-sub" id="progress-sub">Starting…</div>
-        </div>
-
-        <!-- Search bar (shown after load) -->
-        <div class="holders-search" id="holders-search-bar" style="display:none">
-          <span class="search-icon">🔎</span>
-          <input type="text" id="holders-search-input"
-            placeholder="Search by address or token ID…"
-            oninput="filterHolders(this.value)"/>
-          <span id="holders-filter-count" style="font-family:var(--font-mono);font-size:.75rem;color:var(--straw);white-space:nowrap;"></span>
-        </div>
-
-        <!-- Table -->
-        <div style="overflow-x:auto;" id="holders-table-container" style="display:none">
-          <table class="holders-table" id="holders-table">
-            <thead>
-              <tr>
-                <th onclick="sortHolders('rank')">#<span class="sort-arrow">↕</span></th>
-                <th onclick="sortHolders('address')">Wallet<span class="sort-arrow">↕</span></th>
-                <th onclick="sortHolders('count')" class="sorted">Hens<span class="sort-arrow">↓</span></th>
-                <th>Token IDs</th>
-                <th>Explorer</th>
-              </tr>
-            </thead>
-            <tbody id="holders-tbody"></tbody>
-          </table>
-        </div>
-
-        <!-- Pagination -->
-        <div class="pagination" id="holders-pagination" style="display:none"></div>
-      </div>
-    </div>
-
-    <!-- MARKET TAB -->
-    <div id="tab-market" class="tab-panel">
-      <div class="section-title"><span>🛒</span> Hen Market</div>
-      <div class="market-notice">
-        <div class="big">🚧</div>
-        <h3>Marketplace Coming Soon</h3>
-        <p>Trade your HenVerse hens peer-to-peer.<br/>
-        The marketplace will let you list, buy, and cancel NFT listings directly onchain.<br/><br/>
-        In the meantime, you can mint your hens at the contract below and view them in your coop.</p>
-        <br/>
-        <a class="modal-link" href="https://explorer.avax.network/thegrotto/address/0x42c302FF8c34bb5D19bDA1a051bA89BD3a23b7CF" target="_blank" rel="noreferrer">View NFT Contract ↗</a>
-      </div>
-
-      <div class="section-title" style="margin-top:2rem"><span>🐔</span> Hen Types</div>
-      <div style="background:linear-gradient(160deg,rgba(107,58,31,.7),rgba(61,32,8,.9));border:1.5px solid var(--coop-mid);border-radius:var(--radius);padding:1.2rem;overflow-x:auto;">
-        <table class="emission-table">
-          <thead>
-            <tr>
-              <th>Hen Type</th>
-              <th>Hashrate</th>
-              <th>Power</th>
-              <th>Cost (EGG)</th>
-              <th>Supply</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr><td>🐣 Chick (Starter)</td><td class="highlight">10 MH/s</td><td>100W</td><td>500 EGG</td><td>2,000</td></tr>
-            <tr><td>🐔 Standard Hen</td><td class="highlight">24 MH/s</td><td>200W</td><td>1,500 EGG</td><td>500</td></tr>
-            <tr><td>🦅 Golden Hen</td><td class="highlight">70 MH/s</td><td>600W</td><td>4,000 EGG</td><td>30</td></tr>
-            <tr><td>🦚 Legendary Rooster</td><td class="highlight">200 MH/s</td><td>1000W</td><td>5,000 EGG</td><td>20</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-  </main>
-
-  <!-- ─── FOOTER ─────────────────────────────────────────────────── -->
-  <footer>
-    <span>HenVerse © 2025</span>
-    <a href="https://explorer.avax.network/thegrotto" target="_blank" rel="noreferrer">Explorer ↗</a>
-    <span>Chain ID: 36463</span>
-    <span>NFT: 0x42c3…b7CF</span>
-  </footer>
+  </div>
 </div>
 
-<!-- ─── NFT MODAL ──────────────────────────────────────────────────── -->
-<div id="modal-overlay" onclick="closeModal(event)">
-  <div class="modal" id="nft-modal">
-    <div class="modal-header">
-      <h3 id="modal-name">Hen #0</h3>
-      <button class="modal-close" onclick="closeModal()">✕</button>
+<!-- ===================== PAGE: BOUNTIES (public) ===================== -->
+<div id="page-bounties" class="page">
+  <div class="container" style="padding-top:40px;padding-bottom:60px;">
+    <div class="page-header" style="margin-bottom:28px;">
+      <h2>Bounty Board</h2>
+      <p style="color:var(--muted);">Open clip bounties with AVAX locked in escrow</p>
     </div>
-    <div class="modal-body">
-      <div id="modal-img-wrap"></div>
-      <p class="modal-desc" id="modal-desc"></p>
-      <div class="modal-attrs" id="modal-attrs"></div>
-      <a class="modal-link" id="modal-explorer-link" href="#" target="_blank" rel="noreferrer">View on Explorer ↗</a>
+    <div class="filter-row">
+      <button class="filter-btn active" onclick="filterBounties('open',this)">Open</button>
+      <button class="filter-btn" onclick="filterBounties('closed',this)">Closed</button>
+      <button class="filter-btn" onclick="filterBounties('all',this)">All</button>
+    </div>
+    <div id="bounty-list-public" class="bounty-grid">
+      <div class="empty-state"><div class="spinner"></div><p>Loading...</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: Bounty Detail ===================== -->
+<div class="modal-overlay" id="modal-bounty">
+  <div class="modal" style="max-width:620px;">
+    <button class="modal-close" onclick="closeModal('modal-bounty')">✕</button>
+    <div id="modal-bounty-content"></div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: Onboarding ===================== -->
+<div class="modal-overlay" id="modal-onboard">
+  <div class="modal">
+    <h2>Welcome to ClipDAO</h2>
+    <div class="step-indicator">
+      <div class="step-dot active" id="step-dot-1"></div>
+      <div class="step-dot" id="step-dot-2"></div>
+      <div class="step-dot" id="step-dot-3"></div>
+    </div>
+
+    <!-- Step 1: Role -->
+    <div id="onboard-step-1">
+      <p style="color:var(--muted);margin-bottom:20px;font-size:0.9rem;">Choose your primary role on ClipDAO</p>
+      <div class="role-cards">
+        <div class="role-card" onclick="selectRole('clipper',this)" id="role-clipper">
+          <div class="role-icon">✂️</div>
+          <h4>Clipper</h4>
+          <p>Submit clips, win bounties, earn AVAX</p>
+        </div>
+        <div class="role-card" onclick="selectRole('streamer',this)" id="role-streamer">
+          <div class="role-icon">📡</div>
+          <h4>Streamer</h4>
+          <p>Post bounties, get clips made, pay winners</p>
+        </div>
+      </div>
+      <button class="btn btn-primary" style="width:100%" onclick="onboardNext(2)">Continue →</button>
+    </div>
+
+    <!-- Step 2: Profile -->
+    <div id="onboard-step-2" style="display:none">
+      <p style="color:var(--muted);margin-bottom:20px;font-size:0.9rem;">Set up your profile</p>
+      <div class="form-group">
+        <label>Username</label>
+        <input type="text" id="ob-username" placeholder="Your name"/>
+      </div>
+      <div class="form-group">
+        <label>X (Twitter) Handle</label>
+        <input type="text" id="ob-xhandle" placeholder="@yourhandle"/>
+      </div>
+      <div class="form-group">
+        <label>Platform</label>
+        <select id="ob-platform">
+          <option value="blaze">Blaze</option>
+          <option value="arena">Arena</option>
+          <option value="twitch">Twitch</option>
+          <option value="youtube">YouTube</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Channel / Profile Link</label>
+        <input type="text" id="ob-channel" placeholder="https://..."/>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-ghost" onclick="onboardNext(1)" style="flex:1">← Back</button>
+        <button class="btn btn-primary" onclick="onboardNext(3)" style="flex:2">Continue →</button>
+      </div>
+    </div>
+
+    <!-- Step 3: NFT check -->
+    <div id="onboard-step-3" style="display:none">
+      <div id="ob-has-nft" style="display:none">
+        <div style="text-align:center;padding:20px 0;">
+          <div style="font-size:3rem;margin-bottom:12px;">✅</div>
+          <h3 style="color:var(--success);margin-bottom:8px;">NFT Detected!</h3>
+          <p style="color:var(--muted);font-size:0.9rem;">You already have a ClipDAO NFT.</p>
+          <button class="btn btn-primary" style="width:100%;margin-top:20px;" onclick="finishOnboarding()">Enter ClipDAO →</button>
+        </div>
+      </div>
+      <div id="ob-no-nft">
+        <div style="text-align:center;padding:20px 0;">
+          <div style="font-size:3rem;margin-bottom:12px;">🔑</div>
+          <h3 style="color:var(--orange);margin-bottom:8px;">Mint Your NFT</h3>
+          <p style="color:var(--muted);font-size:0.9rem;margin-bottom:20px;">You need a ClipDAO NFT to post bounties, submit clips, and vote.</p>
+          <button class="btn btn-primary" style="width:100%" onclick="closeModal('modal-onboard');showPage('mint')">Go to Mint Page →</button>
+          <button class="btn btn-ghost" style="width:100%;margin-top:8px;" onclick="finishOnboarding()">Browse First</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
 
 <script>
-// ─── CONFIG ──────────────────────────────────────────────────────
-const CHAIN_ID     = 36463;
-const CHAIN_HEX    = '0x' + CHAIN_ID.toString(16); // 0x8E6F
-const RPC_URL      = 'https://subnets.avax.network/thegrotto/mainnet/rpc';
-const EXPLORER     = 'https://explorer.avax.network/thegrotto';
-const NFT_CONTRACT = '0x42c302FF8c34bb5D19bDA1a051bA89BD3a23b7CF';
+// =====================================================================
+// CONFIG
+// =====================================================================
+const SUPABASE_URL = 'https://cfndhpcumlxgdhfxaxkz.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNmbmRocGN1bWx4Z2RoZnhheGt6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4NzI0NDEsImV4cCI6MjA4NzQ0ODQ0MX0.kQaFiJh6HCj39lMoiZgy4y5HO26YqbZm1DnXIOiJAGk';
 
-// ─── EMISSION CONSTANTS ───────────────────────────────────────────
-const BASE_EMISSION   = 2.5;      // EGG per block
-const HALVING_INTERVAL = 4_200_000; // blocks
-const MAX_SUPPLY      = 21_000_000;
-const BLOCKS_PER_DAY  = 86400;    // ~1 block/sec on Grotto
+const NFT_ADDRESS      = '0xa1bc0bfEdF7Ec1411C8769840EB80af1bcBa02e3';
+const ESCROW_ADDRESS   = '0xD68Fb3D68278c7792f17fd72a29775d2Fb28040c';
+const TREASURY_ADDRESS = '0xcA6c8F853E0E3D05FC63B49A80C4C19c193abF45';
 
-// ─── STATE ───────────────────────────────────────────────────────
-let walletAddr    = null;
-let userNFTs      = [];
-let placedNFTs    = new Set();
-let isFetching    = false;
+const FUJI_CHAIN_ID = 43113;
+const FUJI_RPC      = 'https://api.avax-test.network/ext/bc/C/rpc';
 
-// ─── FLOATERS ────────────────────────────────────────────────────
-(function spawnFloaters() {
-  const wrap   = document.getElementById('floaters');
-  const icons  = ['🥚','🪶','🐓','🐣','🌾','✨'];
-  for (let i = 0; i < 14; i++) {
-    const el = document.createElement('div');
-    el.className = 'floater';
-    el.textContent = icons[i % icons.length];
-    el.style.left     = Math.random() * 100 + 'vw';
-    el.style.animationDuration = (14 + Math.random() * 18) + 's';
-    el.style.animationDelay   = '-' + Math.random() * 25 + 's';
-    el.style.fontSize = (.9 + Math.random() * .9) + 'rem';
-    wrap.appendChild(el);
-  }
-})();
+// =====================================================================
+// ABIs (minimal)
+// =====================================================================
+const NFT_ABI = [
+  "function mintGenesis(uint8 _role, string _username, string _xHandle, string _platform) payable",
+  "function mintEarlyAccess(uint8 _role, string _username, string _xHandle, string _platform) payable",
+  "function hasNFT(address wallet) view returns (bool)",
+  "function getTier(address wallet) view returns (uint8)",
+  "function votingPower(address wallet) view returns (uint256)",
+  "function walletToToken(address) view returns (uint256)",
+  "function getTokenData(uint256 tokenId) view returns (tuple(uint8 tier, uint8 role, uint256 level, uint256 bountiesWon, uint256 bountiesPosted, uint256 votesReceived, uint256 mintedAt, string username, string platform, string xHandle))",
+  "function updateProfile(string _username, string _xHandle, string _platform) nonpayable",
+  "function genesisMinted() view returns (uint256)",
+  "function GENESIS_MAX() view returns (uint256)",
+  "function GENESIS_PRICE() view returns (uint256)",
+  "function EARLY_ACCESS_PRICE() view returns (uint256)",
+  "event Minted(address indexed to, uint256 tokenId, uint8 tier)"
+];
 
-// ─── TAB SWITCH ──────────────────────────────────────────────────
-function switchTab(name) {
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-' + name).classList.add('active');
-  // match button by text pattern
-  document.querySelectorAll('.nav-btn').forEach(b => {
-    if (b.getAttribute('onclick').includes(name)) b.classList.add('active');
-  });
-}
+const ESCROW_ABI = [
+  "function postBounty(string _title, string _description, uint256 _durationHrs, uint8 _mode, uint256 _winnerCount) payable",
+  "function submitClip(uint256 _bountyId, string _clipLink)",
+  "function vote(uint256 _bountyId, uint256 _submissionId)",
+  "function streamerPicksWinners(uint256 _bountyId, uint256[] _winnerIds, uint256[] _splits)",
+  "function resolveVote(uint256 _bountyId)",
+  "function cancelBounty(uint256 _bountyId)",
+  "function getBounty(uint256 _id) view returns (tuple(uint256 id, address streamer, string title, string description, uint256 reward, uint256 deadline, uint8 mode, uint8 status, uint256 winnerCount, uint256[] winnerIds, uint256 createdAt))",
+  "function getSubmissions(uint256 _bountyId) view returns (tuple(address clipper, string clipLink, uint256 timestamp, uint256 voteCount, bool isWinner)[])",
+  "function getOpenBounties() view returns (uint256[])",
+  "function totalBounties() view returns (uint256)",
+  "function hasVoted(uint256, address) view returns (bool)",
+  "event BountyPosted(uint256 indexed bountyId, address indexed streamer, uint256 reward, uint8 mode)",
+  "event ClipSubmitted(uint256 indexed bountyId, uint256 submissionId, address indexed clipper, string link)",
+  "event Voted(uint256 indexed bountyId, uint256 indexed submissionId, address indexed voter, uint256 weight)",
+  "event WinnersSelected(uint256 indexed bountyId, uint256[] winnerIds)",
+  "event Payout(uint256 indexed bountyId, address indexed clipper, uint256 amount)"
+];
 
-// ─── STATUS ──────────────────────────────────────────────────────
-function setStatus(msg, isError = false) {
-  const bar = document.getElementById('status-bar');
-  if (!msg) { bar.classList.remove('visible','error'); bar.textContent = ''; return; }
-  bar.textContent = msg;
-  bar.classList.toggle('error', isError);
-  bar.classList.add('visible');
-}
+const TREASURY_ABI = [
+  "function getReputation(address _wallet) view returns (uint256 clipperRep, uint256 streamerRep, uint256 disputes)",
+  "function treasuryBalance() view returns (uint256)"
+];
 
-// ─── RPC CALL ────────────────────────────────────────────────────
-// ALL reads go DIRECTLY to The Grotto RPC via fetch — completely
-// bypasses MetaMask. Works regardless of what chain the wallet is on.
-async function rpcCall(method, params = []) {
-  let res;
+// =====================================================================
+// STATE
+// =====================================================================
+let provider, signer, account;
+let nftContract, escrowContract, treasuryContract;
+let supabase;
+let userProfile   = null;
+let selectedRole  = null;
+let currentBountyFilter = 'open';
+let allBounties   = [];
+
+// =====================================================================
+// SUPABASE INIT
+// =====================================================================
+function initSupabase() {
   try {
-    res = await fetch(RPC_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method, params }),
-    });
-  } catch (netErr) {
-    throw new Error('Cannot reach The Grotto RPC: ' + netErr.message);
-  }
-  if (!res.ok) throw new Error('RPC HTTP error ' + res.status);
-  const json = await res.json();
-  if (json.error) {
-    const code = json.error.code || '';
-    const msg  = json.error.message || JSON.stringify(json.error);
-    throw new Error(msg + (code ? ' (code ' + code + ')' : ''));
-  }
-  return json.result;
-}
-
-// Soft version — returns null on revert instead of throwing
-async function ethCallSafe(sig, ...args) {
-  try { return await ethCall(sig, ...args); } catch { return null; }
-}
-
-// ─── TINY ABI ENCODER ────────────────────────────────────────────
-// Known function selectors (keccak256 first 4 bytes)
-const SEL = {
-  'balanceOf(address)':             '70a08231',
-  'tokenOfOwnerByIndex(address,uint256)': '2f745c59',
-  'tokenURI(uint256)':              'c87b56dd',
-  'totalSupply()':                  '18160ddd',
-  'ownerOf(uint256)':               '6352211e',
-  'name()':                         '06fdde03',
-  'symbol()':                       '95d89b41',
-};
-
-function encodeFn(sig, ...args) {
-  const sel = SEL[sig];
-  if (!sel) throw new Error('Unknown selector: ' + sig);
-  let data = sel;
-  const types = (sig.match(/\(([^)]*)\)/)?.[1] || '').split(',').filter(Boolean);
-  args.forEach((arg, i) => {
-    const t = types[i]?.trim();
-    if (t === 'address') {
-      data += arg.toLowerCase().replace('0x','').padStart(64,'0');
-    } else if (t === 'uint256') {
-      data += BigInt(arg).toString(16).padStart(64,'0');
+    if (SUPABASE_URL === 'YOUR_SUPABASE_URL') {
+      console.warn('Supabase not configured — running on-chain only');
+      return;
     }
-  });
-  return '0x' + data;
+    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  } catch(e) { console.warn('Supabase init failed', e); }
 }
 
-async function ethCall(sig, ...args) {
-  const data = encodeFn(sig, ...args);
-  return rpcCall('eth_call', [{ to: NFT_CONTRACT, data }, 'latest']);
+// =====================================================================
+// TOAST
+// =====================================================================
+function toast(msg, type='info') {
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.textContent = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), 4000);
 }
 
-// ─── ABI DECODER ─────────────────────────────────────────────────
-function decodeUint256(hex) {
-  if (!hex || hex === '0x') return 0n;
-  return BigInt(hex.slice(0,2) === '0x' ? hex : '0x' + hex);
+// =====================================================================
+// TX STATUS
+// =====================================================================
+function setTxStatus(id, msg, type) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.className = `tx-status show tx-${type}`;
+  el.textContent = msg;
+}
+function clearTxStatus(id) {
+  const el = document.getElementById(id);
+  if (el) { el.className = 'tx-status'; el.textContent = ''; }
 }
 
-function decodeString(hex) {
-  try {
-    if (!hex || hex === '0x') return '';
-    const h = hex.startsWith('0x') ? hex.slice(2) : hex;
-    if (h.length < 128) return '';
-    // ABI string: slot0 = offset (usually 0x20 = 32), slot1 = length, then bytes
-    const offset = Number(BigInt('0x' + h.slice(0,64))) * 2;
-    const length = Number(BigInt('0x' + h.slice(offset, offset + 64)));
-    if (length === 0) return '';
-    const strHex = h.slice(offset + 64, offset + 64 + length * 2);
-    let str = '';
-    for (let i = 0; i < strHex.length; i += 2) {
-      str += String.fromCharCode(parseInt(strHex.slice(i, i + 2), 16));
-    }
-    return str;
-  } catch { return ''; }
-}
-
-// ─── IPFS / URI helper ───────────────────────────────────────────
-function resolveURI(uri) {
-  if (!uri) return '';
-  if (uri.startsWith('ipfs://')) return 'https://ipfs.io/ipfs/' + uri.slice(7);
-  if (uri.startsWith('ipfs/'))   return 'https://ipfs.io/ipfs/' + uri.slice(5);
-  return uri;
-}
-
-async function fetchMetadata(uri) {
-  try {
-    if (uri.startsWith('data:application/json;base64,')) {
-      return JSON.parse(atob(uri.split(',')[1]));
-    }
-    if (uri.startsWith('data:application/json,')) {
-      return JSON.parse(decodeURIComponent(uri.split(',')[1]));
-    }
-    const url = resolveURI(uri);
-    if (!url) return null;
-    const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    if (!r.ok) return null;
-    return await r.json();
-  } catch { return null; }
-}
-
-// ─── CONNECT WALLET ──────────────────────────────────────────────
+// =====================================================================
+// WALLET CONNECTION
+// =====================================================================
 async function connectWallet() {
   if (!window.ethereum) {
-    return setStatus('No wallet detected — please install MetaMask.', true);
+    toast('No wallet detected. Install MetaMask or Core Wallet.', 'error');
+    return;
   }
-  setStatus('Connecting…');
   try {
-    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-    if (!accounts.length) { setStatus('No accounts found.', true); return; }
-    walletAddr = accounts[0];
+    provider = new ethers.BrowserProvider(window.ethereum);
+    await switchToFuji();
+    const accounts = await provider.send('eth_requestAccounts', []);
+    account = accounts[0];
+    signer  = await provider.getSigner();
+    initContracts();
+    updateNavWallet();
+    await loadUserData();
+    toast('Wallet connected!', 'success');
+  } catch(e) {
+    toast(e.message || 'Connection failed', 'error');
+  }
+}
 
-    // Ensure correct chain
-    const currentChain = await window.ethereum.request({ method: 'eth_chainId' });
-    if (parseInt(currentChain, 16) !== CHAIN_ID) {
-      setStatus('Switching to The Grotto network…');
-      try {
-        await window.ethereum.request({
-          method: 'wallet_switchEthereumChain',
-          params: [{ chainId: CHAIN_HEX }],
-        });
-      } catch (switchErr) {
-        if (switchErr.code === 4902) {
-          await window.ethereum.request({
-            method: 'wallet_addEthereumChain',
-            params: [{
-              chainId: CHAIN_HEX,
-              chainName: 'The Grotto',
-              rpcUrls: [RPC_URL],
-              blockExplorerUrls: [EXPLORER],
-              nativeCurrency: { name: 'GRT', symbol: 'GRT', decimals: 18 },
-            }],
-          });
-        } else {
-          throw switchErr;
-        }
+async function switchToFuji() {
+  try {
+    await window.ethereum.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: '0xA869' }]
+    });
+  } catch(e) {
+    if (e.code === 4902) {
+      await window.ethereum.request({
+        method: 'wallet_addEthereumChain',
+        params: [{
+          chainId: '0xA869',
+          chainName: 'Avalanche Fuji Testnet',
+          nativeCurrency: { name: 'AVAX', symbol: 'AVAX', decimals: 18 },
+          rpcUrls: [FUJI_RPC],
+          blockExplorerUrls: ['https://testnet.snowtrace.io/']
+        }]
+      });
+    }
+  }
+}
+
+function disconnectWallet() {
+  account = null; signer = null; provider = null;
+  userProfile = null;
+  document.getElementById('btn-connect').style.display = 'inline-flex';
+  document.getElementById('btn-dashboard').style.display = 'none';
+  document.getElementById('btn-disconnect').style.display = 'none';
+  document.getElementById('nav-addr').style.display = 'none';
+  showPage('home');
+  toast('Disconnected', 'info');
+}
+
+function initContracts() {
+  nftContract      = new ethers.Contract(NFT_ADDRESS, NFT_ABI, signer);
+  escrowContract   = new ethers.Contract(ESCROW_ADDRESS, ESCROW_ABI, signer);
+  treasuryContract = new ethers.Contract(TREASURY_ADDRESS, TREASURY_ABI, signer);
+}
+
+function updateNavWallet() {
+  const short = account.slice(0,6) + '...' + account.slice(-4);
+  document.getElementById('nav-addr').textContent = short;
+  document.getElementById('nav-addr').style.display = 'inline-block';
+  document.getElementById('btn-connect').style.display = 'none';
+  document.getElementById('btn-dashboard').style.display = 'inline-flex';
+  document.getElementById('btn-disconnect').style.display = 'inline-flex';
+}
+
+async function loadUserData() {
+  try {
+    // Load from Supabase first
+    if (supabase) {
+      const { data } = await supabase.from('profiles').select('*').eq('wallet', account.toLowerCase()).single();
+      if (data) {
+        userProfile = data;
+        updateProfileUI();
+        await checkAndShowDashboard();
+        return;
       }
     }
-
-    onWalletConnected(walletAddr);
-  } catch (e) {
-    setStatus(e.message || 'Failed to connect wallet.', true);
+    // Check NFT on-chain
+    const hasNft = await nftContract.hasNFT(account);
+    if (hasNft) {
+      const tokenId = await nftContract.walletToToken(account);
+      const data    = await nftContract.getTokenData(tokenId);
+      userProfile = {
+        wallet: account.toLowerCase(),
+        username: data.username,
+        x_handle: data.xHandle,
+        platform: data.platform,
+        tier: Number(data.tier),
+        role: Number(data.role)
+      };
+      await saveProfileToSupabase();
+      updateProfileUI();
+      await checkAndShowDashboard();
+    } else {
+      openModal('modal-onboard');
+    }
+  } catch(e) {
+    console.error('loadUserData', e);
+    openModal('modal-onboard');
   }
 }
 
-function onWalletConnected(addr) {
-  walletAddr = addr;
-  // Update UI
-  document.getElementById('connect-btn').style.display = 'none';
-  const badge = document.getElementById('wallet-badge');
-  badge.style.display = 'flex';
-  document.getElementById('wallet-addr').textContent =
-    addr.slice(0,6) + '…' + addr.slice(-4);
-  document.getElementById('no-wallet-msg').style.display = 'none';
-  document.getElementById('refresh-nfts-btn').style.display = 'block';
-  document.getElementById('refresh-btn').style.display = 'inline-block';
-  setStatus('');
-  loadNFTs();
+async function checkAndShowDashboard() {
+  const hasNft = await nftContract.hasNFT(account);
+  if (hasNft) {
+    showPage('dashboard');
+    loadDashboard();
+  } else {
+    openModal('modal-onboard');
+  }
 }
 
-// Handle chain / account changes
+// =====================================================================
+// ONBOARDING
+// =====================================================================
+function selectRole(role, el) {
+  selectedRole = role;
+  document.querySelectorAll('.role-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+function onboardNext(step) {
+  [1,2,3].forEach(i => {
+    document.getElementById(`onboard-step-${i}`).style.display = i===step?'block':'none';
+    document.getElementById(`step-dot-${i}`).className = 'step-dot' + (i<step?' done':i===step?' active':'');
+  });
+  if (step === 3) {
+    // Save profile info from step 2 to local state
+    userProfile = {
+      wallet:   account.toLowerCase(),
+      username: document.getElementById('ob-username').value,
+      x_handle: document.getElementById('ob-xhandle').value,
+      platform: document.getElementById('ob-platform').value,
+      channel:  document.getElementById('ob-channel').value,
+      role_str: selectedRole
+    };
+    nftContract.hasNFT(account).then(has => {
+      document.getElementById('ob-has-nft').style.display = has ? 'block' : 'none';
+      document.getElementById('ob-no-nft').style.display  = has ? 'none' : 'block';
+    });
+  }
+}
+
+async function finishOnboarding() {
+  closeModal('modal-onboard');
+  if (supabase && userProfile) await saveProfileToSupabase();
+  const hasNft = await nftContract.hasNFT(account);
+  if (hasNft) { showPage('dashboard'); loadDashboard(); }
+  else { showPage('mint'); }
+}
+
+async function saveProfileToSupabase() {
+  if (!supabase || !userProfile) return;
+  try {
+    await supabase.from('profiles').upsert({
+      wallet:    account.toLowerCase(),
+      username:  userProfile.username || '',
+      x_handle:  userProfile.x_handle || '',
+      platform:  userProfile.platform || '',
+      channel:   userProfile.channel  || '',
+      tier:      userProfile.tier || 0,
+      role:      userProfile.role || 0,
+      updated_at: new Date().toISOString()
+    });
+  } catch(e) { console.warn('Supabase save failed', e); }
+}
+
+// =====================================================================
+// NFT MINT
+// =====================================================================
+async function mintGenesis() {
+  if (!signer) { toast('Connect wallet first', 'error'); return; }
+  const username = document.getElementById('gen-username').value.trim();
+  const xhandle  = document.getElementById('gen-xhandle').value.trim();
+  const platform = document.getElementById('gen-platform').value;
+  const role     = document.getElementById('gen-role').value;
+  if (!username || !xhandle) { toast('Fill in username and X handle', 'error'); return; }
+
+  try {
+    setTxStatus('tx-genesis', '⏳ Minting Genesis NFT...', 'pending');
+    const price = await nftContract.GENESIS_PRICE();
+    const tx    = await nftContract.mintGenesis(role, username, xhandle, platform, { value: price });
+    setTxStatus('tx-genesis', '⏳ Transaction pending...', 'pending');
+    await tx.wait();
+    setTxStatus('tx-genesis', '✅ Genesis NFT minted!', 'success');
+    toast('Genesis NFT minted! Welcome to ClipDAO.', 'success');
+    await logActivity('mint_genesis', { username, xhandle });
+    await loadMintStats();
+    setTimeout(() => { showPage('dashboard'); loadDashboard(); }, 1500);
+  } catch(e) {
+    setTxStatus('tx-genesis', '❌ ' + (e.reason || e.message || 'Error'), 'error');
+    toast('Mint failed: ' + (e.reason || e.message), 'error');
+  }
+}
+
+async function mintEarlyAccess() {
+  if (!signer) { toast('Connect wallet first', 'error'); return; }
+  const username = document.getElementById('ea-username').value.trim();
+  const xhandle  = document.getElementById('ea-xhandle').value.trim();
+  const platform = document.getElementById('ea-platform').value;
+  const role     = document.getElementById('ea-role').value;
+  if (!username || !xhandle) { toast('Fill in username and X handle', 'error'); return; }
+
+  try {
+    setTxStatus('tx-early', '⏳ Minting Early Access NFT...', 'pending');
+    const price = await nftContract.EARLY_ACCESS_PRICE();
+    const tx    = await nftContract.mintEarlyAccess(role, username, xhandle, platform, { value: price });
+    setTxStatus('tx-early', '⏳ Transaction pending...', 'pending');
+    await tx.wait();
+    setTxStatus('tx-early', '✅ Early Access NFT minted!', 'success');
+    toast('Early Access NFT minted! Welcome to ClipDAO.', 'success');
+    await logActivity('mint_early', { username, xhandle });
+    setTimeout(() => { showPage('dashboard'); loadDashboard(); }, 1500);
+  } catch(e) {
+    setTxStatus('tx-early', '❌ ' + (e.reason || e.message || 'Error'), 'error');
+    toast('Mint failed: ' + (e.reason || e.message), 'error');
+  }
+}
+
+async function loadMintStats() {
+  try {
+    const minted = await nftContract.genesisMinted();
+    const n = Number(minted);
+    document.getElementById('genesis-minted').textContent = n;
+    document.getElementById('genesis-bar').style.width = (n/500*100) + '%';
+    document.getElementById('stat-genesis').textContent = 500 - n;
+  } catch(e) {}
+}
+
+// =====================================================================
+// PROFILE UPDATE
+// =====================================================================
+async function saveProfile() {
+  if (!signer) { toast('Connect wallet first', 'error'); return; }
+  const username = document.getElementById('edit-username').value.trim();
+  const xhandle  = document.getElementById('edit-xhandle').value.trim();
+  const platform = document.getElementById('edit-platform').value;
+  const channel  = document.getElementById('edit-channel').value.trim();
+  if (!username) { toast('Username required', 'error'); return; }
+
+  try {
+    setTxStatus('tx-profile', '⏳ Updating on-chain profile...', 'pending');
+    const tx = await nftContract.updateProfile(username, xhandle, platform);
+    await tx.wait();
+    userProfile = { ...userProfile, username, x_handle: xhandle, platform, channel };
+    await saveProfileToSupabase();
+    setTxStatus('tx-profile', '✅ Profile updated!', 'success');
+    toast('Profile updated!', 'success');
+    updateProfileUI();
+  } catch(e) {
+    setTxStatus('tx-profile', '❌ ' + (e.reason || e.message), 'error');
+    toast('Update failed', 'error');
+  }
+}
+
+function updateProfileUI() {
+  if (!userProfile) return;
+  const name = userProfile.username || 'Anon';
+  document.getElementById('profile-username').textContent = name;
+  document.getElementById('profile-avatar-letter').textContent = name[0]?.toUpperCase() || '?';
+  document.getElementById('profile-wallet-short').textContent = account ? account.slice(0,10)+'...' : '';
+  document.getElementById('dash-welcome').textContent = 'Welcome back, ' + name;
+  document.getElementById('edit-username').value = userProfile.username || '';
+  document.getElementById('edit-xhandle').value  = userProfile.x_handle || '';
+  document.getElementById('edit-platform').value = userProfile.platform || 'blaze';
+  document.getElementById('edit-channel').value  = userProfile.channel  || '';
+  const tier = userProfile.tier;
+  const tierName = tier === 1 ? 'Genesis' : tier === 2 ? 'Early Access' : 'No NFT';
+  document.getElementById('overview-tier').textContent = tierName;
+  document.getElementById('profile-wallet-short').textContent = account?.slice(0,10)+'...' || '';
+
+  const badges = document.getElementById('profile-badges');
+  badges.innerHTML = '';
+  if (tier === 1) badges.innerHTML += '<span class="badge badge-amber">⭐ Genesis</span>';
+  if (tier === 2) badges.innerHTML += '<span class="badge badge-red">🔥 Early Access</span>';
+  const role = userProfile.role;
+  if (role === 1) badges.innerHTML += '<span class="badge badge-orange">✂️ Clipper</span>';
+  if (role === 2) badges.innerHTML += '<span class="badge badge-muted">📡 Streamer</span>';
+}
+
+// =====================================================================
+// DASHBOARD LOAD
+// =====================================================================
+async function loadDashboard() {
+  updateProfileUI();
+  await Promise.all([
+    loadReputation(),
+    loadNFTStats(),
+    loadBounties()
+  ]);
+}
+
+async function loadReputation() {
+  if (!account || !treasuryContract) return;
+  try {
+    const rep = await treasuryContract.getReputation(account);
+    const score = Number(rep.clipperRep) + Number(rep.streamerRep);
+    document.getElementById('overview-rep').textContent = score;
+    document.getElementById('profile-rep-num').textContent = score;
+    document.getElementById('profile-rep-bar').style.width = Math.min(score, 100) + '%';
+  } catch(e) {}
+}
+
+async function loadNFTStats() {
+  if (!account || !nftContract) return;
+  try {
+    const tokenId = await nftContract.walletToToken(account);
+    if (Number(tokenId) === 0) return;
+    const data = await nftContract.getTokenData(tokenId);
+    document.getElementById('overview-won').textContent  = Number(data.bountiesWon);
+    document.getElementById('overview-role').textContent = Number(data.role) === 1 ? 'Clipper' : 'Streamer';
+    userProfile = { ...userProfile, tier: Number(data.tier), role: Number(data.role) };
+  } catch(e) {}
+}
+
+// =====================================================================
+// BOUNTIES
+// =====================================================================
+async function loadBounties() {
+  if (!escrowContract) {
+    // Read-only provider for public page
+    try {
+      const ro = new ethers.JsonRpcProvider(FUJI_RPC);
+      escrowContract = new ethers.Contract(ESCROW_ADDRESS, ESCROW_ABI, ro);
+    } catch(e) { return; }
+  }
+
+  try {
+    const total    = Number(await escrowContract.totalBounties());
+    const openIds  = await escrowContract.getOpenBounties();
+
+    allBounties = [];
+    const ids = Array.from({ length: total }, (_, i) => i + 1);
+    for (const id of ids) {
+      try {
+        const b = await escrowContract.getBounty(id);
+        allBounties.push({
+          id: Number(b.id),
+          streamer: b.streamer,
+          title: b.title,
+          description: b.description,
+          reward: ethers.formatEther(b.reward),
+          deadline: Number(b.deadline),
+          mode: Number(b.mode),
+          status: Number(b.status),
+          winnerCount: Number(b.winnerCount),
+          createdAt: Number(b.createdAt)
+        });
+      } catch(e) {}
+    }
+
+    document.getElementById('stat-bounties').textContent = openIds.length;
+    renderBounties();
+  } catch(e) {
+    console.error('loadBounties', e);
+  }
+}
+
+function filterBounties(filter, btn) {
+  currentBountyFilter = filter;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderBounties();
+}
+
+function renderBounties() {
+  const now = Math.floor(Date.now() / 1000);
+  const filtered = allBounties.filter(b => {
+    if (currentBountyFilter === 'open')   return b.status === 0 && b.deadline > now;
+    if (currentBountyFilter === 'closed') return b.status === 1 || b.deadline <= now;
+    return true;
+  });
+
+  const html = filtered.length === 0
+    ? `<div class="empty-state"><div class="icon">🎯</div><p>No bounties found</p></div>`
+    : filtered.map(b => bountyCardHTML(b)).join('');
+
+  ['bounty-list-dash', 'bounty-list-public'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = html;
+  });
+}
+
+function bountyCardHTML(b) {
+  const now      = Math.floor(Date.now() / 1000);
+  const isOpen   = b.status === 0 && b.deadline > now;
+  const timeLeft = timeRemaining(b.deadline);
+  const modeName = b.mode === 0 ? 'Streamer Picks' : 'Community Vote';
+  const statusBadge = isOpen
+    ? '<span class="badge badge-green">OPEN</span>'
+    : '<span class="badge badge-muted">CLOSED</span>';
+
+  return `
+    <div class="bounty-card" onclick="openBountyDetail(${b.id})">
+      <div class="bounty-card-top">
+        <div>
+          <div class="bounty-title">${escHtml(b.title)}</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;">
+            ${statusBadge}
+            <span class="badge badge-orange">${modeName}</span>
+          </div>
+        </div>
+        <div style="text-align:right;">
+          <div class="bounty-reward">${parseFloat(b.reward).toFixed(2)} <span>AVAX</span></div>
+        </div>
+      </div>
+      <div class="bounty-desc">${escHtml(b.description).slice(0,120)}${b.description.length > 120 ? '...' : ''}</div>
+      <div class="bounty-meta">
+        <div class="bounty-meta-item">⏱ ${timeLeft}</div>
+        <div class="bounty-meta-item">🏆 ${b.winnerCount} winner${b.winnerCount > 1 ? 's' : ''}</div>
+        <div class="bounty-meta-item mono">${b.streamer.slice(0,8)}...</div>
+      </div>
+    </div>`;
+}
+
+async function openBountyDetail(bountyId) {
+  const b = allBounties.find(x => x.id === bountyId);
+  if (!b) return;
+
+  openModal('modal-bounty');
+  document.getElementById('modal-bounty-content').innerHTML = `<div class="empty-state"><div class="spinner"></div></div>`;
+
+  try {
+    const subs = await escrowContract.getSubmissions(bountyId);
+    const now  = Math.floor(Date.now() / 1000);
+    const isOpen = b.status === 0 && b.deadline > now;
+    const isStreamer = account && b.streamer.toLowerCase() === account.toLowerCase();
+    const modeName = b.mode === 0 ? 'Streamer Picks' : 'Community Vote';
+
+    let subsHTML = '';
+    if (subs.length === 0) {
+      subsHTML = `<div class="empty-state" style="padding:30px"><div class="icon">📎</div><p>No submissions yet</p></div>`;
+    } else {
+      subsHTML = subs.map((s, i) => {
+        const isWinner = s.isWinner;
+        const canVote  = isOpen && b.mode === 1 && account && !isStreamer;
+        const canPick  = isOpen && b.mode === 0 && isStreamer;
+        return `
+          <div class="submission-card ${isWinner ? 'winner' : ''}">
+            <div style="flex:1;min-width:0;">
+              ${isWinner ? '<span class="badge badge-amber" style="margin-bottom:4px;display:inline-block;">🏆 Winner</span><br/>' : ''}
+              <a href="${escHtml(s.clipLink)}" target="_blank" class="sub-link">${escHtml(s.clipLink)}</a>
+              <div class="sub-meta" style="margin-top:4px;">${s.clipper.slice(0,10)}... · ${new Date(Number(s.timestamp)*1000).toLocaleDateString()}</div>
+            </div>
+            <div style="text-align:right;flex-shrink:0;">
+              ${b.mode === 1 ? `<div class="vote-count">${s.voteCount}</div><div class="sub-meta">votes</div>` : ''}
+              ${canVote ? `<button class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="voteOnClip(${bountyId},${i})">Vote</button>` : ''}
+              ${canPick && !s.isWinner ? `<button class="btn btn-primary btn-sm" style="margin-top:6px;" onclick="pickWinner(${bountyId},${i})">Pick</button>` : ''}
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    let actionHTML = '';
+    if (isOpen && account && !isStreamer) {
+      actionHTML = `
+        <div class="divider"></div>
+        <h3 style="margin-bottom:12px;color:var(--orange);">Submit Your Clip</h3>
+        <div class="form-group">
+          <label>X or YouTube Link</label>
+          <input type="url" id="clip-link-input" placeholder="https://x.com/... or https://youtube.com/..."/>
+        </div>
+        <div id="tx-submit" class="tx-status"></div>
+        <button class="btn btn-primary" onclick="submitClip(${bountyId})" style="width:100%">Submit Clip</button>`;
+    }
+    if (isOpen && b.mode === 1 && account && (b.deadline <= now || isStreamer)) {
+      actionHTML += `<button class="btn btn-ghost" style="width:100%;margin-top:8px;" onclick="resolveVote(${bountyId})">Resolve Vote</button>`;
+    }
+
+    document.getElementById('modal-bounty-content').innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;gap:12px;">
+        <div>
+          <h2 style="color:var(--orange);font-size:1.6rem;margin-bottom:8px;">${escHtml(b.title)}</h2>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <span class="badge ${isOpen ? 'badge-green' : 'badge-muted'}">${isOpen ? 'OPEN' : 'CLOSED'}</span>
+            <span class="badge badge-orange">${modeName}</span>
+          </div>
+        </div>
+        <div style="text-align:right;flex-shrink:0;">
+          <div style="font-family:var(--font-display);font-size:2rem;color:var(--orange);">${parseFloat(b.reward).toFixed(2)}</div>
+          <div style="font-size:0.78rem;color:var(--muted);">AVAX Locked</div>
+        </div>
+      </div>
+      <p style="color:var(--muted);font-size:0.9rem;margin-bottom:16px;">${escHtml(b.description)}</p>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px;">
+        <div class="bounty-meta-item">⏱ ${timeRemaining(b.deadline)}</div>
+        <div class="bounty-meta-item">🏆 ${b.winnerCount} winner${b.winnerCount > 1 ? 's' : ''}</div>
+        <div class="bounty-meta-item mono">${b.streamer.slice(0,14)}...</div>
+      </div>
+      <div class="divider"></div>
+      <h3 style="margin-bottom:12px;">Submissions (${subs.length})</h3>
+      ${subsHTML}
+      ${actionHTML}`;
+  } catch(e) {
+    document.getElementById('modal-bounty-content').innerHTML = `<div class="empty-state"><p>Failed to load bounty</p></div>`;
+    console.error(e);
+  }
+}
+
+// =====================================================================
+// POST BOUNTY
+// =====================================================================
+async function postBounty() {
+  if (!signer) { toast('Connect wallet first', 'error'); return; }
+  const title    = document.getElementById('post-title').value.trim();
+  const desc     = document.getElementById('post-desc').value.trim();
+  const reward   = document.getElementById('post-reward').value;
+  const duration = document.getElementById('post-duration').value;
+  const mode     = document.getElementById('post-mode').value;
+  const winners  = document.getElementById('post-winners').value;
+
+  if (!title || !desc || !reward) { toast('Fill in all fields', 'error'); return; }
+  if (parseFloat(reward) <= 0)   { toast('Reward must be > 0', 'error'); return; }
+
+  try {
+    setTxStatus('tx-post', '⏳ Posting bounty...', 'pending');
+    const value = ethers.parseEther(reward.toString());
+    const tx    = await escrowContract.postBounty(title, desc, duration, mode, winners, { value });
+    setTxStatus('tx-post', '⏳ Transaction pending...', 'pending');
+    const receipt = await tx.wait();
+    setTxStatus('tx-post', '✅ Bounty posted!', 'success');
+    toast('Bounty posted! AVAX locked in escrow.', 'success');
+
+    // Save to Supabase
+    await logActivity('post_bounty', { title, reward });
+
+    // Clear form
+    ['post-title','post-desc','post-reward'].forEach(id => document.getElementById(id).value = '');
+    await loadBounties();
+    switchTab('tab-bounties-dash');
+  } catch(e) {
+    setTxStatus('tx-post', '❌ ' + (e.reason || e.message || 'Error'), 'error');
+    toast('Post failed: ' + (e.reason || e.message), 'error');
+  }
+}
+
+// =====================================================================
+// SUBMIT CLIP
+// =====================================================================
+async function submitClip(bountyId) {
+  if (!signer) { toast('Connect wallet first', 'error'); return; }
+  const link = document.getElementById('clip-link-input').value.trim();
+  if (!link) { toast('Paste your clip link', 'error'); return; }
+  if (!isValidClipLink(link)) { toast('Must be an X or YouTube link', 'error'); return; }
+
+  try {
+    setTxStatus('tx-submit', '⏳ Submitting clip on-chain...', 'pending');
+    const tx = await escrowContract.submitClip(bountyId, link);
+    await tx.wait();
+    setTxStatus('tx-submit', '✅ Clip submitted!', 'success');
+    toast('Clip submitted!', 'success');
+    await logActivity('submit_clip', { bountyId, link });
+    // Refresh modal
+    openBountyDetail(bountyId);
+  } catch(e) {
+    setTxStatus('tx-submit', '❌ ' + (e.reason || e.message || 'Error'), 'error');
+    toast('Submit failed: ' + (e.reason || e.message), 'error');
+  }
+}
+
+function isValidClipLink(link) {
+  return link.includes('x.com') || link.includes('twitter.com') ||
+         link.includes('youtube.com') || link.includes('youtu.be');
+}
+
+// =====================================================================
+// VOTE
+// =====================================================================
+async function voteOnClip(bountyId, submissionId) {
+  if (!signer) { toast('Connect wallet first', 'error'); return; }
+  try {
+    toast('Submitting vote...', 'info');
+    const tx = await escrowContract.vote(bountyId, submissionId);
+    await tx.wait();
+    toast('Vote cast!', 'success');
+    await logActivity('vote', { bountyId, submissionId });
+    openBountyDetail(bountyId);
+  } catch(e) {
+    toast('Vote failed: ' + (e.reason || e.message), 'error');
+  }
+}
+
+// =====================================================================
+// PICK WINNER (streamer)
+// =====================================================================
+async function pickWinner(bountyId, submissionId) {
+  if (!signer) { toast('Connect wallet first', 'error'); return; }
+  if (!confirm('Pick this clip as the winner? This will trigger the payout.')) return;
+  try {
+    toast('Selecting winner...', 'info');
+    const tx = await escrowContract.streamerPicksWinners(bountyId, [submissionId], [100]);
+    await tx.wait();
+    toast('Winner selected! AVAX paid out.', 'success');
+    await logActivity('pick_winner', { bountyId, submissionId });
+    await loadBounties();
+    openBountyDetail(bountyId);
+  } catch(e) {
+    toast('Failed: ' + (e.reason || e.message), 'error');
+  }
+}
+
+// =====================================================================
+// RESOLVE VOTE
+// =====================================================================
+async function resolveVote(bountyId) {
+  if (!signer) { toast('Connect wallet first', 'error'); return; }
+  try {
+    toast('Resolving vote...', 'info');
+    const tx = await escrowContract.resolveVote(bountyId);
+    await tx.wait();
+    toast('Vote resolved! Winners paid out.', 'success');
+    await loadBounties();
+    openBountyDetail(bountyId);
+  } catch(e) {
+    toast('Resolve failed: ' + (e.reason || e.message), 'error');
+  }
+}
+
+// =====================================================================
+// SUPABASE ACTIVITY LOG
+// =====================================================================
+async function logActivity(type, meta = {}) {
+  if (!supabase || !account) return;
+  try {
+    await supabase.from('activity').insert({
+      wallet: account.toLowerCase(),
+      type,
+      meta,
+      created_at: new Date().toISOString()
+    });
+  } catch(e) {}
+}
+
+async function loadMySubmissions() {
+  const el = document.getElementById('my-submissions-list');
+  if (!el || !account) return;
+  if (!supabase) {
+    el.innerHTML = `<div class="empty-state"><p>Connect Supabase to track submissions</p></div>`;
+    return;
+  }
+  try {
+    const { data } = await supabase.from('activity')
+      .select('*').eq('wallet', account.toLowerCase()).eq('type','submit_clip').order('created_at',{ascending:false});
+    if (!data || data.length === 0) {
+      el.innerHTML = `<div class="empty-state"><div class="icon">📎</div><p>No submissions yet</p></div>`;
+      return;
+    }
+    el.innerHTML = data.map(row => `
+      <div class="submission-card">
+        <div>
+          <div class="sub-meta">Bounty #${row.meta?.bountyId || '?'} · ${new Date(row.created_at).toLocaleDateString()}</div>
+          <a href="${escHtml(row.meta?.link || '')}" target="_blank" class="sub-link">${escHtml(row.meta?.link || '')}</a>
+        </div>
+      </div>`).join('');
+  } catch(e) {
+    el.innerHTML = `<div class="empty-state"><p>Failed to load</p></div>`;
+  }
+}
+
+// =====================================================================
+// NAVIGATION
+// =====================================================================
+function showPage(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + page)?.classList.add('active');
+  if (page === 'mint')     loadMintStats();
+  if (page === 'bounties') { loadBounties(); }
+  window.scrollTo(0, 0);
+}
+
+function switchTab(tabId) {
+  document.querySelectorAll('.dash-tab').forEach(t => t.style.display = 'none');
+  document.getElementById(tabId).style.display = 'block';
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const map = {
+    'tab-overview':      'nav-overview',
+    'tab-bounties-dash': 'nav-bounties-dash',
+    'tab-submissions':   'nav-submissions',
+    'tab-post':          'nav-post',
+    'tab-profile':       'nav-profile'
+  };
+  document.getElementById(map[tabId])?.classList.add('active');
+  if (tabId === 'tab-bounties-dash') loadBounties();
+  if (tabId === 'tab-submissions')   loadMySubmissions();
+}
+
+function openModal(id)  { document.getElementById(id).classList.add('active'); }
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+// Click outside modal to close
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) overlay.classList.remove('active');
+  });
+});
+
+// =====================================================================
+// UTILS
+// =====================================================================
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function timeRemaining(deadline) {
+  const diff = deadline - Math.floor(Date.now()/1000);
+  if (diff <= 0) return 'Ended';
+  const h = Math.floor(diff / 3600);
+  const m = Math.floor((diff % 3600) / 60);
+  if (h > 24) return Math.floor(h/24) + 'd ' + (h%24) + 'h';
+  return h + 'h ' + m + 'm';
+}
+
+// =====================================================================
+// WALLET EVENTS
+// =====================================================================
 if (window.ethereum) {
-  window.ethereum.on('accountsChanged', (accs) => {
-    if (accs.length) onWalletConnected(accs[0]);
-    else window.location.reload();
+  window.ethereum.on('accountsChanged', accounts => {
+    if (accounts.length === 0) disconnectWallet();
+    else { account = accounts[0]; updateNavWallet(); loadUserData(); }
   });
   window.ethereum.on('chainChanged', () => window.location.reload());
 }
 
-// ─── LOAD NFTS ───────────────────────────────────────────────────
-// Strategy: no ERC721Enumerable assumed.
-// 1. balanceOf(wallet) → how many tokens
-// 2. eth_getLogs Transfer events TO this wallet → collect token IDs received
-// 3. eth_getLogs Transfer events FROM this wallet → collect token IDs sent away
-// 4. remaining = received - sent = currently owned
-// 5. Confirm each with ownerOf (filter any stale ones)
-// 6. Fetch tokenURI + metadata for confirmed IDs
-
-const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
-
-function padAddr(addr) {
-  return '0x' + addr.toLowerCase().replace('0x','').padStart(64,'0');
-}
-
-async function getLogsAllChunks(filter) {
-  const latestHex   = await rpcCall('eth_blockNumber', []);
-  const latestBlock = parseInt(latestHex, 16);
-  let allLogs = [];
-
-  async function fetchRange(from, to) {
-    if (from > to) return;
-    try {
-      const logs = await rpcCall('eth_getLogs', [{
-        ...filter,
-        fromBlock: '0x' + from.toString(16),
-        toBlock:   '0x' + to.toString(16),
-      }]);
-      allLogs = allLogs.concat(logs);
-    } catch (e) {
-      const msg = (e.message || '').toLowerCase();
-      if ((msg.includes('too large') || msg.includes('range') || msg.includes('limit') || msg.includes('exceed')) && to > from) {
-        const mid = Math.floor((from + to) / 2);
-        await fetchRange(from, mid);
-        await fetchRange(mid + 1, to);
-      } else {
-        console.warn('getLogs failed (' + from + '-' + to + '):', e.message);
-      }
-    }
-  }
-
-  const CHUNK = 50000;
-  for (let from = 0; from <= latestBlock; from += CHUNK) {
-    const to = Math.min(from + CHUNK - 1, latestBlock);
-    await fetchRange(from, to);
-  }
-  return allLogs;
-}
-
-function tokenIdFromLog(log) {
-  // ERC-721 Transfer: topics = [sig, from, to] and tokenId in topics[3] OR data
-  if (log.topics && log.topics[3]) {
-    return Number(BigInt(log.topics[3]));
-  }
-  // Some contracts put tokenId in data
-  if (log.data && log.data !== '0x' && log.data.length >= 66) {
-    return Number(BigInt(log.data.slice(0, 66)));
-  }
-  return null;
-}
-
-async function loadNFTs() {
-  if (!walletAddr || isFetching) return;
-  isFetching = true;
-
-  const refreshBtn  = document.getElementById('refresh-btn');
-  const refreshBtn2 = document.getElementById('refresh-nfts-btn');
-  refreshBtn.classList.add('spinning');
-  const grid = document.getElementById('nft-grid');
-  grid.innerHTML = '';
-  for (let i = 0; i < 6; i++) {
-    const sk = document.createElement('div'); sk.className = 'skeleton'; grid.appendChild(sk);
-  }
-
-  try {
-    // ── Step 1: Total supply direct from The Grotto RPC (best-effort) ──
-    let totalSupplyDisplay = '?';
-    const tsHex = await ethCallSafe('totalSupply()');
-    if (tsHex) totalSupplyDisplay = Number(decodeUint256(tsHex)).toLocaleString();
-
-    // ── Step 2: Scan ALL Transfer logs for this contract ──
-    // We get both directions at once and compute current ownership from event history.
-    // This works for ANY ERC-721 regardless of whether it implements Enumerable.
-    setStatus('Scanning Transfer events on The Grotto… (first load may take ~15s)');
-
-    const addrPadded = padAddr(walletAddr);
-
-    // Fetch logs TO this address and FROM this address in parallel
-    const [logsIn, logsOut] = await Promise.all([
-      getLogsAllChunks({ address: NFT_CONTRACT, topics: [TRANSFER_TOPIC, null, addrPadded] }),
-      getLogsAllChunks({ address: NFT_CONTRACT, topics: [TRANSFER_TOPIC, addrPadded, null] }),
-    ]);
-
-    // ── Step 3: Build ownership map from log history ──
-    // For each tokenId: track the block number of last transfer IN and last transfer OUT.
-    // If last-in > last-out → currently owned by this wallet.
-    const received = new Map(); // tokenId → highest blockNumber received
-    for (const log of logsIn) {
-      const id = tokenIdFromLog(log);
-      if (id === null || id === undefined) continue;
-      const bn = parseInt(log.blockNumber, 16);
-      if (!received.has(id) || bn > received.get(id)) received.set(id, bn);
-    }
-    const sentOut = new Map(); // tokenId → highest blockNumber sent
-    // Also exclude mints FROM zero address being treated as "sent from wallet"
-    const ZERO_PAD = '0x' + '0'.repeat(64);
-    for (const log of logsOut) {
-      // Skip if the "from" topic is zero address (these are mint events, not real transfers out)
-      if (log.topics && log.topics[1] === ZERO_PAD) continue;
-      const id = tokenIdFromLog(log);
-      if (id === null || id === undefined) continue;
-      const bn = parseInt(log.blockNumber, 16);
-      if (!sentOut.has(id) || bn > sentOut.get(id)) sentOut.set(id, bn);
-    }
-
-    // Candidate IDs = tokens where last received block > last sent block
-    let candidateIds = [];
-    for (const [id, inBlock] of received) {
-      const outBlock = sentOut.get(id) ?? -1;
-      if (inBlock > outBlock) candidateIds.push(id);
-    }
-    candidateIds.sort((a, b) => a - b);
-
-    // ── Step 4: Confirm with ownerOf (catches edge cases like re-sold tokens) ──
-    setStatus(`Verifying ownership of ${candidateIds.length} candidate token(s)…`);
-    const BATCH = 15;
-    const confirmedIds = [];
-    for (let i = 0; i < candidateIds.length; i += BATCH) {
-      const batch = candidateIds.slice(i, i + BATCH);
-      const results = await Promise.allSettled(batch.map(id =>
-        rpcCall('eth_call', [{
-          to: NFT_CONTRACT,
-          data: '0x' + SEL['ownerOf(uint256)'] + BigInt(id).toString(16).padStart(64, '0')
-        }, 'latest'])
-      ));
-      for (let j = 0; j < batch.length; j++) {
-        const r = results[j];
-        if (r.status === 'fulfilled' && r.value && r.value.length >= 42) {
-          // ownerOf returns a padded address — last 40 hex chars
-          const ownerRaw = '0x' + r.value.slice(-40);
-          if (ownerRaw.toLowerCase() === walletAddr.toLowerCase()) {
-            confirmedIds.push(batch[j]);
-          }
-        }
-        // If ownerOf reverted or errored, trust the log-based result
-        else if (r.status === 'rejected') {
-          confirmedIds.push(batch[j]);
-        }
-      }
-    }
-    confirmedIds.sort((a, b) => a - b);
-
-    // ── Step 5: balanceOf for display (best-effort) ──
-    let balanceDisplay = confirmedIds.length;
-    const balHex = await ethCallSafe('balanceOf(address)', walletAddr);
-    if (balHex) balanceDisplay = Number(decodeUint256(balHex));
-
-    // Update UI counts
-    document.getElementById('stat-hens').textContent = balanceDisplay;
-    document.getElementById('nft-count-label').innerHTML =
-      `You own <strong>${confirmedIds.length}</strong> hen${confirmedIds.length !== 1 ? 's' : ''}
-       &nbsp;·&nbsp; <span style="opacity:.6">${totalSupplyDisplay} total minted</span>`;
-    userNFTs = [];
-
-    if (confirmedIds.length === 0) {
-      grid.innerHTML = '';
-      const empty = document.createElement('div');
-      empty.className = 'empty-state';
-      empty.innerHTML = `<div class="big">🐣</div>
-        <p>No HenVerse hens found in this wallet.<br/>
-        <span style="font-size:.8rem;opacity:.6">Scanned ${logsIn.length} inbound transfer events</span></p>`;
-      grid.appendChild(empty);
-      document.getElementById('stat-hens').textContent = 0;
-      setStatus('');
-      updateCoopStats();
-      return;
-    }
-
-    // ── Step 6: Fetch tokenURI + metadata in parallel batches ──
-    setStatus(`Fetching metadata for ${confirmedIds.length} hen(s)…`);
-    const CONCURRENCY = 6;
-    const nfts = [];
-    for (let i = 0; i < confirmedIds.length; i += CONCURRENCY) {
-      const batch = confirmedIds.slice(i, i + CONCURRENCY);
-      const results = await Promise.all(batch.map(async (id) => {
-        let metadata = null;
-        try {
-          const uriHex = await ethCall('tokenURI(uint256)', id);
-          const uri    = decodeString(uriHex);
-          if (uri) metadata = await fetchMetadata(uri);
-        } catch {}
-        return { tokenId: id, metadata };
-      }));
-      nfts.push(...results);
-    }
-    userNFTs = nfts;
-
-    // ── Step 7: Render cards ──
-    grid.innerHTML = '';
-    nfts.forEach(nft => grid.appendChild(createNFTCard(nft)));
-    document.getElementById('stat-hens').textContent = nfts.length;
-    updateCoopStats();
-    setStatus('');
-
-  } catch (e) {
-    grid.innerHTML = '';
-    const errEl = document.createElement('div');
-    errEl.className = 'empty-state';
-    errEl.innerHTML = `<div class="big">⚠️</div>
-      <p style="color:var(--shell)">Failed to load hens</p>
-      <p style="font-size:.8rem;margin-top:.5rem;font-family:var(--font-mono);color:var(--red-warn)">${escHtml(e.message)}</p>
-      <p style="font-size:.78rem;margin-top:.75rem;opacity:.6">Make sure you're connected to <strong>The Grotto</strong> network (Chain ID 36463)</p>`;
-    grid.appendChild(errEl);
-    setStatus('Error: ' + e.message, true);
-  } finally {
-    isFetching = false;
-    refreshBtn.classList.remove('spinning');
-  }
-}
-
-// ─── CREATE NFT CARD ─────────────────────────────────────────────
-function createNFTCard(nft) {
-  const { tokenId, metadata } = nft;
-  const card = document.createElement('div');
-  card.className = 'nft-card' + (placedNFTs.has(tokenId) ? ' selected' : '');
-  card.onclick = () => openModal(nft);
-
-  const name  = metadata?.name  || `Hen #${tokenId}`;
-  const image = resolveURI(metadata?.image || metadata?.image_url || '');
-
-  let imgHtml;
-  if (image) {
-    imgHtml = `<img src="${escAttr(image)}" alt="${escAttr(name)}"
-      onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/>
-      <div class="nft-img-placeholder" style="display:none;aspect-ratio:1">🐔</div>`;
-  } else {
-    imgHtml = `<div class="nft-img-placeholder">🐔</div>`;
-  }
-
-  const badge = placedNFTs.has(tokenId)
-    ? '<div class="nft-badge placed">In Coop</div>'
-    : '<div class="nft-badge">Wallet</div>';
-
-  card.innerHTML = `
-    ${badge}
-    ${imgHtml}
-    <div class="nft-info">
-      <div class="nft-name">${escHtml(name)}</div>
-      <div class="nft-id">#${tokenId}</div>
-    </div>
-  `;
-  return card;
-}
-
-// ─── OPEN NFT MODAL ──────────────────────────────────────────────
-function openModal(nft) {
-  const { tokenId, metadata } = nft;
-  const name  = metadata?.name  || `Hen #${tokenId}`;
-  const image = resolveURI(metadata?.image || metadata?.image_url || '');
-  const desc  = metadata?.description || '';
-  const attrs = metadata?.attributes || metadata?.traits || [];
-
-  document.getElementById('modal-name').textContent = name;
-
-  // Image
-  const imgWrap = document.getElementById('modal-img-wrap');
-  if (image) {
-    imgWrap.innerHTML = `<img class="modal-img" src="${escAttr(image)}" alt="${escAttr(name)}"
-      onerror="this.outerHTML='<div class=\\'modal-img-placeholder\\'>🐔</div>'"/>`;
-  } else {
-    imgWrap.innerHTML = `<div class="modal-img-placeholder">🐔</div>`;
-  }
-
-  // Description
-  document.getElementById('modal-desc').textContent = desc;
-
-  // Attributes
-  const attrsEl = document.getElementById('modal-attrs');
-  if (Array.isArray(attrs) && attrs.length) {
-    attrsEl.innerHTML = attrs.slice(0,8).map(a => `
-      <div class="attr-pill">
-        <div class="attr-type">${escHtml(String(a.trait_type || a.name || ''))}</div>
-        <div class="attr-val">${escHtml(String(a.value || ''))}</div>
-      </div>
-    `).join('');
-  } else {
-    attrsEl.innerHTML = '';
-  }
-
-  // Explorer link
-  document.getElementById('modal-explorer-link').href =
-    `${EXPLORER}/token/${NFT_CONTRACT}?tokenId=${tokenId}`;
-
-  document.getElementById('modal-overlay').classList.add('open');
-}
-
-function closeModal(e) {
-  if (e && e.target !== document.getElementById('modal-overlay')) return;
-  document.getElementById('modal-overlay').classList.remove('open');
-}
-
-// ─── COOP STATS ──────────────────────────────────────────────────
-// Approximate hen stats — will be driven by contract later
-const HEN_STATS = {
-  default: { hashrate: 10, power: 100 }  // MH/s, W per hen NFT
-};
-
-function updateCoopStats() {
-  const placed = placedNFTs.size;
-  const hashrate = placed * HEN_STATS.default.hashrate;
-  const power    = placed * HEN_STATS.default.power;
-  const capacity = 2000; // W starter coop
-
-  document.getElementById('stat-placed').textContent   = placed;
-  document.getElementById('stat-hashrate').textContent = hashrate + ' MH/s';
-  document.getElementById('stat-power').textContent    = power + 'W';
-  document.getElementById('power-label-val').textContent = power + ' / ' + capacity + 'W';
-
-  const pct = Math.min(100, (power / capacity) * 100);
-  const bar = document.getElementById('power-bar');
-  bar.style.width = pct + '%';
-  bar.className = 'power-bar-fill' +
-    (pct > 85 ? ' danger' : pct > 60 ? ' warn' : '');
-}
-
-// ─── EMISSION SCHEDULE TABLE ─────────────────────────────────────
-(function buildEmissionTable() {
-  const tbody = document.getElementById('emission-tbody');
-  let cumulative = 0;
-  let rate = BASE_EMISSION;
-  let rows = '';
-
-  for (let era = 1; era <= 8; era++) {
-    if (cumulative >= MAX_SUPPLY) break;
-    const eraSupply = Math.min(rate * HALVING_INTERVAL, MAX_SUPPLY - cumulative);
-    cumulative += eraSupply;
-    const days = Math.round((HALVING_INTERVAL / BLOCKS_PER_DAY));
-
-    // Estimate if this is the current era (just mark era 1 as current for now)
-    const isCurrentEra = era === 1;
-    rows += `<tr class="${isCurrentEra ? 'current-era' : ''}">
-      <td>${isCurrentEra ? '⚡ ' : ''}Era ${era}</td>
-      <td class="highlight">${(HALVING_INTERVAL * (era-1)).toLocaleString()} – ${(HALVING_INTERVAL * era).toLocaleString()}</td>
-      <td>${rate.toFixed(4)} EGG/block</td>
-      <td>${eraSupply.toLocaleString(undefined, {maximumFractionDigits:0})} EGG</td>
-      <td>${cumulative.toLocaleString(undefined, {maximumFractionDigits:0})} EGG</td>
-      <td>~${days}d</td>
-    </tr>`;
-    rate /= 2;
-  }
-  tbody.innerHTML = rows;
-})();
-
-// ─── HOLDERS SCANNER ──────────────────────────────────────────────
-// Strategy:
-//   1. Get totalSupply → that's how many token IDs exist (1-based or 0-based)
-//   2. Fetch ownerOf for each tokenId in parallel batches
-//   3. Group by owner → build leaderboard
-//   Fallback: also try eth_getLogs for Transfer events to find all ever-minted IDs
-
-let holderData     = [];   // [{address, tokens:[]}]
-let holderFiltered = [];
-let holderSort     = { key: 'count', dir: -1 };
-let holderPage     = 0;
-const HOLDER_PER_PAGE = 25;
-let scanRunning    = false;
-
-async function startHolderScan() {
-  if (scanRunning) return;
-  scanRunning = true;
-
-  // UI reset
-  document.getElementById('holders-idle').style.display       = 'none';
-  document.getElementById('holders-progress').style.display   = 'block';
-  document.getElementById('holders-search-bar').style.display = 'none';
-  document.getElementById('holders-table-container').style.display = 'none';
-  document.getElementById('holders-pagination').style.display = 'none';
-  document.getElementById('holders-meta').style.display       = 'none';
-  document.getElementById('holders-load-btn').style.display   = 'none';
-  document.getElementById('holders-refresh-btn').style.display = 'none';
-  document.getElementById('holders-count-badge').style.display = 'none';
-  setStatus('Scanning HenVerse holders on The Grotto…');
-
-  try {
-    // ── Step 1: Get latest block + total supply ──
-    setProgress('Connecting to The Grotto…', 2);
-    const [latestHex, tsHex] = await Promise.all([
-      rpcCall('eth_blockNumber', []),
-      ethCall('totalSupply()').catch(() => '0x0'),
-    ]);
-    const latestBlock = parseInt(latestHex, 16);
-    const totalMinted = Number(decodeUint256(tsHex));
-    document.getElementById('meta-minted').textContent = totalMinted.toLocaleString();
-
-    // ── Step 2: Scan ALL Transfer events in chunks ──
-    // Build a map: tokenId → {owner, blockNumber} using latest transfer
-    const CHUNK = 100000;
-    const totalChunks = Math.ceil(latestBlock / CHUNK);
-    // tokenState[id] = { owner (lowercased), block }
-    const tokenState = {};  // tracks latest known owner per token
-
-    let chunkIdx = 0;
-    for (let from = 0; from <= latestBlock; from += CHUNK) {
-      const to = Math.min(from + CHUNK - 1, latestBlock);
-      const pct = 5 + Math.round((chunkIdx / Math.max(totalChunks, 1)) * 80);
-      setProgress(
-        `Scanning blocks ${from.toLocaleString()} → ${to.toLocaleString()}…`,
-        pct
-      );
-      document.getElementById('progress-sub').textContent =
-        `Chunk ${chunkIdx + 1} / ${totalChunks} · ${Object.keys(tokenState).length} tokens found`;
-
-      let logs = [];
-      try {
-        logs = await rpcCall('eth_getLogs', [{
-          address: NFT_CONTRACT,
-          topics:  [TRANSFER_TOPIC],
-          fromBlock: '0x' + from.toString(16),
-          toBlock:   '0x' + to.toString(16),
-        }]);
-      } catch (e) {
-        console.warn('getLogs chunk failed:', e.message);
-        // try halving the chunk
-        try {
-          const mid = Math.floor((from + to) / 2);
-          const [a, b] = await Promise.all([
-            rpcCall('eth_getLogs', [{ address: NFT_CONTRACT, topics: [TRANSFER_TOPIC], fromBlock: '0x' + from.toString(16), toBlock: '0x' + mid.toString(16) }]),
-            rpcCall('eth_getLogs', [{ address: NFT_CONTRACT, topics: [TRANSFER_TOPIC], fromBlock: '0x' + (mid+1).toString(16), toBlock: '0x' + to.toString(16) }]),
-          ]);
-          logs = [...a, ...b];
-        } catch { /* skip chunk */ }
-      }
-
-      // Process logs in block order
-      for (const log of logs) {
-        const id = tokenIdFromLog(log);
-        if (id === null || isNaN(id)) continue;
-        const blockNum = parseInt(log.blockNumber, 16);
-        const toAddr   = ('0x' + (log.topics[2] || '').slice(-40)).toLowerCase();
-        const ZERO     = '0x0000000000000000000000000000000000000000';
-
-        // Only update if this event is newer than what we have
-        if (!tokenState[id] || blockNum >= tokenState[id].block) {
-          tokenState[id] = {
-            owner: toAddr === ZERO ? null : toAddr,  // null = burned
-            block: blockNum,
-          };
-        }
-      }
-      chunkIdx++;
-    }
-
-    // ── Step 3: Build owner map from tokenState ──
-    setProgress('Building holder leaderboard…', 88);
-    document.getElementById('progress-sub').textContent = `Processing ${Object.keys(tokenState).length} token states…`;
-
-    const ownerMap = {};
-    for (const [idStr, state] of Object.entries(tokenState)) {
-      if (!state.owner) continue; // burned
-      const owner = state.owner;
-      if (!ownerMap[owner]) ownerMap[owner] = [];
-      ownerMap[owner].push(Number(idStr));
-    }
-
-    // ── Step 4: Verify ambiguous cases with ownerOf ──
-    // Skip full verification to keep it fast; Transfer logs are reliable
-    setProgress('Finalising…', 96);
-
-    if (Object.keys(ownerMap).length === 0) {
-      showHolderEmpty('No holders found. The collection may have no mints yet.');
-      return;
-    }
-
-    holderData = Object.entries(ownerMap)
-      .map(([address, tokens]) => ({
-        address,
-        tokens: tokens.sort((a, b) => a - b),
-        count:  tokens.length,
-      }))
-      .sort((a, b) => b.count - a.count);
-
-    holderFiltered = [...holderData];
-
-    setProgress('Done!', 100);
-    await sleep(350);
-    renderHolders();
-    setStatus('');
-
-  } catch (e) {
-    setStatus('Holder scan failed: ' + e.message, true);
-    document.getElementById('holders-progress').style.display = 'none';
-    document.getElementById('holders-idle').style.display     = 'block';
-    document.getElementById('holders-idle').innerHTML =
-      `<div style="font-size:2.5rem;margin-bottom:.5rem">⚠️</div>
-       <p>Scan failed: ${escHtml(e.message)}</p>`;
-    document.getElementById('holders-load-btn').style.display = 'inline-block';
-  } finally {
-    scanRunning = false;
-  }
-}
-
-function setProgress(label, pct) {
-  document.getElementById('progress-label').textContent = label;
-  document.getElementById('progress-fill').style.width  = Math.min(100, pct) + '%';
-}
-
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-function renderHolders() {
-  const total      = holderData.reduce((s,h) => s + h.count, 0);
-  const uniq       = holderData.length;
-  const avg        = uniq ? (total / uniq).toFixed(2) : '0';
-
-  document.getElementById('meta-holders').textContent = uniq.toLocaleString();
-  document.getElementById('meta-minted').textContent  = total.toLocaleString();
-  document.getElementById('meta-avg').textContent     = avg;
-  document.getElementById('holders-meta').style.display = 'flex';
-
-  document.getElementById('holders-count-badge').textContent = uniq + ' holders';
-  document.getElementById('holders-count-badge').style.display = 'inline-flex';
-
-  document.getElementById('holders-progress').style.display   = 'none';
-  document.getElementById('holders-search-bar').style.display = 'flex';
-  document.getElementById('holders-table-container').style.display = 'block';
-  document.getElementById('holders-load-btn').style.display   = 'none';
-  document.getElementById('holders-refresh-btn').style.display = 'inline-block';
-
-  holderPage = 0;
-  renderHoldersPage();
-}
-
-function renderHoldersPage() {
-  const tbody = document.getElementById('holders-tbody');
-  const total = holderFiltered.length;
-  const start = holderPage * HOLDER_PER_PAGE;
-  const slice = holderFiltered.slice(start, start + HOLDER_PER_PAGE);
-
-  tbody.innerHTML = '';
-  if (slice.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--straw);opacity:.6">No results found</td></tr>`;
-  } else {
-    slice.forEach((h, idx) => {
-      const globalRank = holderData.indexOf(h) + 1;
-      const isYou = walletAddr && h.address.toLowerCase() === walletAddr.toLowerCase();
-      const medals = ['🥇','🥈','🥉'];
-      const rankDisplay = globalRank <= 3
-        ? `<span class="rank-num top3">${medals[globalRank-1]}</span>`
-        : `<span class="rank-num">${globalRank}</span>`;
-
-      const shortAddr = h.address.slice(0,6) + '…' + h.address.slice(-4);
-      const avatarEmoji = addressEmoji(h.address);
-
-      // Show up to 6 token chips
-      const chipHtml = h.tokens.slice(0,6).map(id =>
-        `<span class="token-chip" onclick="openTokenModal(${id})">#${id}</span>`
-      ).join('') + (h.tokens.length > 6 ? `<span class="token-chip" style="opacity:.5">+${h.tokens.length-6}</span>` : '');
-
-      const tr = document.createElement('tr');
-      if (isYou) tr.className = 'is-connected';
-      tr.innerHTML = `
-        <td>${rankDisplay}</td>
-        <td>
-          <div class="addr-cell">
-            <div class="addr-avatar">${avatarEmoji}</div>
-            <div class="addr-text">
-              <div class="addr-full">${h.address}${isYou ? ' <span class="you-tag">YOU</span>' : ''}</div>
-              <div class="addr-short">${shortAddr}${isYou ? ' <span class="you-tag">YOU</span>' : ''}</div>
-            </div>
-            <button class="copy-btn" title="Copy address" onclick="copyAddr('${h.address}')">⎘</button>
-          </div>
-        </td>
-        <td><strong style="color:var(--yolk)">${h.count}</strong></td>
-        <td><div class="token-chips">${chipHtml}</div><span style="font-size:.72rem;color:var(--straw);display:none" class="token-count-mobile">${h.count} tokens</span></td>
-        <td>
-          <a href="${EXPLORER}/address/${h.address}" target="_blank" rel="noreferrer"
-            style="color:var(--yolk);font-family:var(--font-mono);font-size:.75rem;text-decoration:none;border:1px solid rgba(245,166,35,.3);padding:.2rem .55rem;border-radius:5px;white-space:nowrap;"
-            onmouseover="this.style.background='rgba(245,166,35,.12)'" onmouseout="this.style.background='none'">
-            View ↗
-          </a>
-        </td>
-      `;
-      tbody.appendChild(tr);
-    });
-  }
-
-  renderPagination(total);
-  document.getElementById('holders-filter-count').textContent =
-    holderFiltered.length !== holderData.length
-      ? `${holderFiltered.length} of ${holderData.length}`
-      : `${holderData.length} holders`;
-}
-
-function renderPagination(total) {
-  const totalPages = Math.ceil(total / HOLDER_PER_PAGE);
-  const pag = document.getElementById('holders-pagination');
-  if (totalPages <= 1) { pag.style.display = 'none'; return; }
-  pag.style.display = 'flex';
-
-  let html = `<button class="page-btn" onclick="goPage(${holderPage-1})" ${holderPage===0?'disabled':''}>← Prev</button>`;
-
-  const range = pagRange(holderPage, totalPages);
-  let prev = null;
-  for (const p of range) {
-    if (prev !== null && p > prev + 1) html += `<span style="color:var(--straw);padding:0 .25rem">…</span>`;
-    html += `<button class="page-btn ${p===holderPage?'active':''}" onclick="goPage(${p})">${p+1}</button>`;
-    prev = p;
-  }
-  html += `<button class="page-btn" onclick="goPage(${holderPage+1})" ${holderPage>=totalPages-1?'disabled':''}>Next →</button>`;
-  pag.innerHTML = html;
-}
-
-function pagRange(current, total) {
-  const delta = 2;
-  const pages = new Set([0, total-1]);
-  for (let i = Math.max(0,current-delta); i <= Math.min(total-1,current+delta); i++) pages.add(i);
-  return [...pages].sort((a,b)=>a-b);
-}
-
-function goPage(p) {
-  const totalPages = Math.ceil(holderFiltered.length / HOLDER_PER_PAGE);
-  if (p < 0 || p >= totalPages) return;
-  holderPage = p;
-  renderHoldersPage();
-  document.getElementById('holders-table-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-function filterHolders(q) {
-  const query = q.trim().toLowerCase();
-  if (!query) {
-    holderFiltered = [...holderData];
-  } else {
-    holderFiltered = holderData.filter(h =>
-      h.address.toLowerCase().includes(query) ||
-      h.tokens.some(id => String(id).includes(query))
-    );
-  }
-  holderPage = 0;
-  renderHoldersPage();
-}
-
-function sortHolders(key) {
-  if (holderSort.key === key) {
-    holderSort.dir *= -1;
-  } else {
-    holderSort.key = key;
-    holderSort.dir = key === 'count' ? -1 : 1;
-  }
-  holderFiltered.sort((a,b) => {
-    if (key === 'count')   return holderSort.dir * (a.count - b.count);
-    if (key === 'address') return holderSort.dir * a.address.localeCompare(b.address);
-    return 0;
-  });
-  holderPage = 0;
-  renderHoldersPage();
-  // Update header arrows
-  document.querySelectorAll('.holders-table th').forEach(th => th.classList.remove('sorted'));
-  event.currentTarget.classList.add('sorted');
-}
-
-function copyAddr(addr) {
-  navigator.clipboard.writeText(addr).then(() => {
-    setStatus('Address copied: ' + addr);
-    setTimeout(() => setStatus(''), 2000);
-  });
-}
-
-// Deterministic emoji avatar from address
-function addressEmoji(addr) {
-  const emojis = ['🐔','🐣','🥚','🦚','🦅','🌾','🐓','🌻','🪺','🌿'];
-  const n = parseInt(addr.slice(2,8), 16);
-  return emojis[n % emojis.length];
-}
-
-function showHolderEmpty(msg) {
-  document.getElementById('holders-progress').style.display = 'none';
-  document.getElementById('holders-idle').style.display = 'block';
-  document.getElementById('holders-idle').innerHTML = `<div style="font-size:2.5rem;margin-bottom:.5rem">🐣</div><p>${escHtml(msg)}</p>`;
-  document.getElementById('holders-load-btn').style.display = 'inline-block';
-}
-
-// Open a token in modal from holders tab (fetch metadata)
-async function openTokenModal(tokenId) {
-  // Try to find in loaded NFTs first
-  const cached = userNFTs.find(n => n.tokenId === tokenId);
-  if (cached) { openModal(cached); return; }
-  // Otherwise fetch on-demand
-  try {
-    const uriHex  = await ethCall('tokenURI(uint256)', tokenId);
-    const uri     = decodeString(uriHex);
-    const metadata = await fetchMetadata(uri);
-    openModal({ tokenId, metadata });
-  } catch {
-    openModal({ tokenId, metadata: null });
-  }
-}
-
-
-
-function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-function escAttr(s) {
-  return String(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+// =====================================================================
+// INIT
+// =====================================================================
+initSupabase();
+loadMintStats();
+loadBounties();
+
+// Auto-reconnect if previously connected
+if (window.ethereum?.selectedAddress) {
+  connectWallet();
 }
 </script>
 </body>
