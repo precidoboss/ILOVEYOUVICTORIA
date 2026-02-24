@@ -8,9 +8,22 @@
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=Barlow:wght@400;500;600;700;900&display=swap" rel="stylesheet"/>
 
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>"/>
-<!-- Ethers + Supabase loaded synchronously so onclick handlers work immediately -->
+<!-- CDN scripts must load before body HTML so onclick attrs resolve -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+// =====================================================================
+// CONFIG — update these with your values
+// =====================================================================
+const SUPABASE_URL = 'https://cfndhpcumlxgdhfxaxkz.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNmbmRocGN1bWx4Z2RoZnhheGt6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4NzI0NDEsImV4cCI6MjA4NzQ0ODQ0MX0.kQaFiJh6HCj39lMoiZgy4y5HO26YqbZm1DnXIOiJAGk';
+
+const NFT_ADDRESS      = '0xa1bc0bfEdF7Ec1411C8769840EB80af1bcBa02e3';
+const ESCROW_ADDRESS   = '0xD68Fb3D68278c7792f17fd72a29775d2Fb28040c';
+const TREASURY_ADDRESS = '0xcA6c8F853E0E3D05FC63B49A80C4C19c193abF45';
+const FUJI_CHAIN_ID    = 43113;
+const FUJI_RPC         = 'https://api.avax-test.network/ext/bc/C/rpc';
+</script>
 
 <style>
 :root {
@@ -426,6 +439,7 @@ textarea { resize: vertical; min-height: 80px; }
 <nav>
   <div class="nav-logo" onclick="showPage('home')">CLIP<span>DAO</span></div>
   <div class="nav-right">
+    <button class="btn btn-ghost btn-sm" onclick="showPage('docs')" style="display:inline-flex;">Docs</button>
     <span id="nav-balance" class="nav-addr" style="display:none;color:var(--amber);border-color:rgba(255,149,0,0.3);background:rgba(255,149,0,0.08);"></span>
     <span id="nav-addr" class="nav-addr" style="display:none"></span>
     <button id="btn-connect" class="btn btn-primary btn-sm" onclick="connectWallet()">Connect Wallet</button>
@@ -493,6 +507,9 @@ textarea { resize: vertical; min-height: 80px; }
         </div>
         <div class="nav-item" onclick="showPage('mint')" id="nav-mint">
           <span class="icon">🔑</span> NFT Mint
+        </div>
+        <div class="nav-item" onclick="showPage('docs')" id="nav-docs">
+          <span class="icon">📖</span> How It Works
         </div>
       </div>
       <div class="sidebar-section" style="margin-top:auto;padding-top:20px;">
@@ -568,16 +585,28 @@ textarea { resize: vertical; min-height: 80px; }
       <div id="tab-post" class="dash-tab" style="display:none">
         <div class="page-header">
           <h2>Post a Bounty</h2>
-          <p>Lock AVAX in escrow and get clips made</p>
+          <p>Lock AVAX in escrow and get clips made from Blaze or Arena</p>
         </div>
-        <div class="card" style="max-width:560px;">
+        <div class="card" style="max-width:600px;">
           <div class="form-group">
             <label>Bounty Title</label>
             <input type="text" id="post-title" placeholder="e.g. Best hype clip from tonight's stream"/>
           </div>
           <div class="form-group">
-            <label>Description</label>
-            <textarea id="post-desc" placeholder="Describe what kind of clips you want..."></textarea>
+            <label>Description — What clips do you want?</label>
+            <textarea id="post-desc" placeholder="Describe the stream, the moments you want clipped, the vibe..."></textarea>
+          </div>
+          <div class="form-group">
+            <label>Clip Source Platform</label>
+            <select id="post-platform">
+              <option value="blaze">🔥 Blaze (blaze.stream)</option>
+              <option value="arena">🏟️ Arena (arena.social/live)</option>
+              <option value="both">Both Blaze & Arena</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Your Stream / Channel Link</label>
+            <input type="url" id="post-stream-link" placeholder="https://blaze.stream/yourchannel or https://arena.social/live/..."/>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
             <div class="form-group">
@@ -585,7 +614,7 @@ textarea { resize: vertical; min-height: 80px; }
               <input type="number" id="post-reward" placeholder="0.5" min="0.01" step="0.01"/>
             </div>
             <div class="form-group">
-              <label>Duration (hours)</label>
+              <label>Duration</label>
               <select id="post-duration">
                 <option value="24">24 hours</option>
                 <option value="48" selected>48 hours</option>
@@ -604,11 +633,26 @@ textarea { resize: vertical; min-height: 80px; }
             <div class="form-group">
               <label>Number of Winners</label>
               <select id="post-winners">
-                <option value="1">1 Winner</option>
-                <option value="2">2 Winners</option>
-                <option value="3">3 Winners</option>
+                <option value="1">1 Winner (100%)</option>
+                <option value="2">2 Winners (60/40)</option>
+                <option value="3">3 Winners (60/30/10)</option>
               </select>
             </div>
+          </div>
+          <div class="form-group">
+            <label>Max Submissions Per Clipper</label>
+            <select id="post-max-subs">
+              <option value="1">1 submission</option>
+              <option value="2">2 submissions</option>
+              <option value="3" selected>3 submissions</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Special Requirements / Note to Clippers</label>
+            <textarea id="post-note" placeholder="e.g. Must be from my stream on [date]. Clip must include the chat reaction. No music edits. Portrait format preferred for X posts..." style="min-height:70px;"></textarea>
+          </div>
+          <div style="background:rgba(255,107,26,0.06);border:1px solid rgba(255,107,26,0.2);border-radius:6px;padding:12px;margin-bottom:16px;font-size:0.82rem;color:var(--muted);">
+            💡 Clippers submit their video post link from <strong style="color:var(--orange);">X or YouTube</strong> — they clip from your Blaze or Arena stream, post it, then submit the link here.
           </div>
           <div id="tx-post" class="tx-status"></div>
           <button class="btn btn-primary" onclick="postBounty()" style="width:100%;">🔒 Lock AVAX & Post Bounty</button>
@@ -877,19 +921,6 @@ textarea { resize: vertical; min-height: 80px; }
 </div>
 
 <script>
-// =====================================================================
-// CONFIG
-// =====================================================================
-const SUPABASE_URL = 'https://cfndhpcumlxgdhfxaxkz.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNmbmRocGN1bWx4Z2RoZnhheGt6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4NzI0NDEsImV4cCI6MjA4NzQ0ODQ0MX0.kQaFiJh6HCj39lMoiZgy4y5HO26YqbZm1DnXIOiJAGk';
-
-const NFT_ADDRESS      = '0xa1bc0bfEdF7Ec1411C8769840EB80af1bcBa02e3';
-const ESCROW_ADDRESS   = '0xD68Fb3D68278c7792f17fd72a29775d2Fb28040c';
-const TREASURY_ADDRESS = '0xcA6c8F853E0E3D05FC63B49A80C4C19c193abF45';
-
-const FUJI_CHAIN_ID = 43113;
-const FUJI_RPC      = 'https://api.avax-test.network/ext/bc/C/rpc';
-
 // =====================================================================
 // ABIs (minimal)
 // =====================================================================
@@ -1379,11 +1410,27 @@ function renderBounties() {
   });
 }
 
+function parseBountyMeta(desc) {
+  const platform   = (desc.match(/\[PLATFORM:([^\]]+)\]/) || [])[1] || '';
+  const streamLink = (desc.match(/\[STREAM:([^\]]+)\]/) || [])[1] || '';
+  const note       = (desc.match(/\[NOTE:([^\]]+)\]/) || [])[1] || '';
+  const cleanDesc  = desc.replace(/\[PLATFORM:[^\]]*\]|\[STREAM:[^\]]*\]|\[NOTE:[^\]]*\]/g,'').trim();
+  return { platform, streamLink, note, cleanDesc };
+}
+
+function platformBadge(platform) {
+  if (platform === 'blaze')  return '<span class="badge badge-red">🔥 Blaze</span>';
+  if (platform === 'arena')  return '<span class="badge badge-amber">🏟️ Arena</span>';
+  if (platform === 'both')   return '<span class="badge badge-orange">🔥🏟️ Blaze + Arena</span>';
+  return '';
+}
+
 function bountyCardHTML(b) {
   const now      = Math.floor(Date.now() / 1000);
   const isOpen   = b.status === 0 && b.deadline > now;
   const timeLeft = timeRemaining(b.deadline);
   const modeName = b.mode === 0 ? 'Streamer Picks' : 'Community Vote';
+  const { platform, cleanDesc } = parseBountyMeta(b.description);
   const statusBadge = isOpen
     ? '<span class="badge badge-green">OPEN</span>'
     : '<span class="badge badge-muted">CLOSED</span>';
@@ -1396,13 +1443,14 @@ function bountyCardHTML(b) {
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;">
             ${statusBadge}
             <span class="badge badge-orange">${modeName}</span>
+            ${platformBadge(platform)}
           </div>
         </div>
         <div style="text-align:right;">
           <div class="bounty-reward">${parseFloat(b.reward).toFixed(2)} <span>AVAX</span></div>
         </div>
       </div>
-      <div class="bounty-desc">${escHtml(b.description).slice(0,120)}${b.description.length > 120 ? '...' : ''}</div>
+      <div class="bounty-desc">${escHtml(cleanDesc).slice(0,120)}${cleanDesc.length > 120 ? '...' : ''}</div>
       <div class="bounty-meta">
         <div class="bounty-meta-item">⏱ ${timeLeft}</div>
         <div class="bounty-meta-item">🏆 ${b.winnerCount} winner${b.winnerCount > 1 ? 's' : ''}</div>
@@ -1465,6 +1513,8 @@ async function openBountyDetail(bountyId) {
       actionHTML += `<button class="btn btn-ghost" style="width:100%;margin-top:8px;" onclick="resolveVote(${bountyId})">Resolve Vote</button>`;
     }
 
+    const { platform, streamLink, note, cleanDesc } = parseBountyMeta(b.description);
+
     document.getElementById('modal-bounty-content').innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;gap:12px;">
         <div>
@@ -1472,6 +1522,7 @@ async function openBountyDetail(bountyId) {
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
             <span class="badge ${isOpen ? 'badge-green' : 'badge-muted'}">${isOpen ? 'OPEN' : 'CLOSED'}</span>
             <span class="badge badge-orange">${modeName}</span>
+            ${platformBadge(platform)}
           </div>
         </div>
         <div style="text-align:right;flex-shrink:0;">
@@ -1479,7 +1530,9 @@ async function openBountyDetail(bountyId) {
           <div style="font-size:0.78rem;color:var(--muted);">AVAX Locked</div>
         </div>
       </div>
-      <p style="color:var(--muted);font-size:0.9rem;margin-bottom:16px;">${escHtml(b.description)}</p>
+      <p style="color:var(--muted);font-size:0.9rem;margin-bottom:12px;">${escHtml(cleanDesc)}</p>
+      ${streamLink ? `<div style="margin-bottom:12px;"><span style="font-size:0.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;">Stream Link</span><br/><a href="${escHtml(streamLink)}" target="_blank" style="color:var(--orange);font-family:var(--font-mono);font-size:0.8rem;">${escHtml(streamLink)} ↗</a></div>` : ''}
+      ${note ? `<div style="background:rgba(255,107,26,0.08);border:1px solid rgba(255,107,26,0.25);border-radius:6px;padding:12px;margin-bottom:12px;"><div style="font-size:0.75rem;color:var(--orange);text-transform:uppercase;margin-bottom:4px;">📋 Streamer's Note</div><div style="font-size:0.88rem;color:var(--text);">${escHtml(note)}</div></div>` : ''}
       <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px;">
         <div class="bounty-meta-item">⏱ ${timeRemaining(b.deadline)}</div>
         <div class="bounty-meta-item">🏆 ${b.winnerCount} winner${b.winnerCount > 1 ? 's' : ''}</div>
@@ -1500,30 +1553,34 @@ async function openBountyDetail(bountyId) {
 // =====================================================================
 async function postBounty() {
   if (!signer) { toast('Connect wallet first', 'error'); return; }
-  const title    = document.getElementById('post-title').value.trim();
-  const desc     = document.getElementById('post-desc').value.trim();
-  const reward   = document.getElementById('post-reward').value;
-  const duration = document.getElementById('post-duration').value;
-  const mode     = document.getElementById('post-mode').value;
-  const winners  = document.getElementById('post-winners').value;
+  const title      = document.getElementById('post-title').value.trim();
+  const desc       = document.getElementById('post-desc').value.trim();
+  const reward     = document.getElementById('post-reward').value;
+  const duration   = document.getElementById('post-duration').value;
+  const mode       = document.getElementById('post-mode').value;
+  const winners    = document.getElementById('post-winners').value;
+  const platform   = document.getElementById('post-platform').value;
+  const streamLink = document.getElementById('post-stream-link').value.trim();
+  const note       = document.getElementById('post-note').value.trim();
 
-  if (!title || !desc || !reward) { toast('Fill in all fields', 'error'); return; }
-  if (parseFloat(reward) <= 0)   { toast('Reward must be > 0', 'error'); return; }
+  if (!title || !desc || !reward) { toast('Fill in title, description and reward', 'error'); return; }
+  if (parseFloat(reward) <= 0)    { toast('Reward must be > 0', 'error'); return; }
+
+  // Encode platform + stream link + note into description for on-chain storage
+  const fullDesc = `${desc}\n\n[PLATFORM:${platform}]\n[STREAM:${streamLink}]\n[NOTE:${note}]`;
 
   try {
     setTxStatus('tx-post', '⏳ Posting bounty...', 'pending');
     const value = ethers.parseEther(reward.toString());
-    const tx    = await escrowContract.postBounty(title, desc, duration, mode, winners, { value });
+    const tx    = await escrowContract.postBounty(title, fullDesc, duration, mode, winners, { value });
     setTxStatus('tx-post', '⏳ Transaction pending...', 'pending');
-    const receipt = await tx.wait();
+    await tx.wait();
     setTxStatus('tx-post', '✅ Bounty posted!', 'success');
     toast('Bounty posted! AVAX locked in escrow.', 'success');
-
-    // Save to Supabase
-    await logActivity('post_bounty', { title, reward });
-
-    // Clear form
-    ['post-title','post-desc','post-reward'].forEach(id => document.getElementById(id).value = '');
+    await logActivity('post_bounty', { title, reward, platform, streamLink });
+    ['post-title','post-desc','post-reward','post-stream-link','post-note'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
     await loadBounties();
     switchTab('tab-bounties-dash');
   } catch(e) {
@@ -1755,5 +1812,228 @@ document.addEventListener('DOMContentLoaded', () => {
   if (window.ethereum?.selectedAddress) connectWallet();
 });
 </script>
+<!-- ===================== PAGE: DOCS ===================== -->
+<div id="page-docs" class="page">
+  <div class="container" style="padding-top:48px;padding-bottom:80px;max-width:860px;">
+
+    <div style="margin-bottom:48px;">
+      <div style="font-family:var(--font-mono);font-size:0.78rem;color:var(--orange);letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;">📖 Documentation</div>
+      <h1 style="margin-bottom:12px;">How <em style="color:var(--red);font-style:normal;">ClipDAO</em> Works</h1>
+      <p style="color:var(--muted);font-size:1rem;max-width:600px;">A trustless marketplace connecting streamers on Blaze and Arena with skilled clippers — powered by Avalanche smart contracts.</p>
+    </div>
+
+    <!-- What is ClipDAO -->
+    <div class="card" style="margin-bottom:20px;border-left:3px solid var(--red);">
+      <h3 style="color:var(--orange);margin-bottom:12px;">What is ClipDAO?</h3>
+      <p style="color:var(--muted);line-height:1.8;">ClipDAO is a decentralized bounty platform where streamers lock AVAX into smart contract escrow and clippers compete to make the best clips. No informal agreements. No waiting to get paid. No ghosting. The smart contract holds the funds and releases them automatically when a winner is selected.</p>
+      <p style="color:var(--muted);line-height:1.8;margin-top:10px;">It's built specifically around <strong style="color:white;">Blaze</strong> and <strong style="color:white;">Arena</strong> — the two streaming platforms where the ClipDAO community is active.</p>
+      <div style="display:flex;gap:12px;margin-top:16px;flex-wrap:wrap;">
+        <a href="https://blaze.stream/" target="_blank" class="btn btn-ghost btn-sm">🔥 blaze.stream</a>
+        <a href="https://arena.social/live" target="_blank" class="btn btn-ghost btn-sm">🏟️ arena.social/live</a>
+      </div>
+    </div>
+
+    <!-- The Flow -->
+    <div class="card" style="margin-bottom:20px;border-left:3px solid var(--orange);">
+      <h3 style="color:var(--orange);margin-bottom:20px;">The Full Flow</h3>
+      <div style="display:flex;flex-direction:column;gap:0;">
+        <!-- steps -->
+        <div style="display:flex;gap:16px;align-items:flex-start;margin-bottom:20px;">
+          <div style="width:36px;height:36px;border-radius:50%;background:var(--red);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:1.1rem;flex-shrink:0;">1</div>
+          <div>
+            <div style="font-weight:700;margin-bottom:4px;">Mint Your NFT</div>
+            <div style="color:var(--muted);font-size:0.88rem;line-height:1.7;">Every participant — clipper or streamer — needs a ClipDAO membership NFT. Genesis NFT (500 max, 0.5 AVAX) or Early Access NFT (0.1 AVAX). Your NFT is your identity, your voting power, and your reputation score all in one.</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:16px;align-items:flex-start;margin-bottom:20px;">
+          <div style="width:36px;height:36px;border-radius:50%;background:var(--orange);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:1.1rem;flex-shrink:0;">2</div>
+          <div>
+            <div style="font-weight:700;margin-bottom:4px;">Streamer Posts a Bounty</div>
+            <div style="color:var(--muted);font-size:0.88rem;line-height:1.7;">A streamer goes live on <strong style="color:white;">Blaze</strong> or <strong style="color:white;">Arena</strong>, then comes to ClipDAO to post a bounty. They specify: their stream link, which platform it's on, what kind of clips they want, any special requirements, the AVAX reward, the deadline (24/48/72hrs), how many winners, the max submissions per clipper (1–3), and whether they pick the winner or the community votes.</div>
+            <div style="background:rgba(232,53,10,0.08);border:1px solid rgba(232,53,10,0.2);border-radius:5px;padding:10px;margin-top:10px;font-size:0.82rem;color:var(--muted);">
+              🔒 The AVAX is locked into the smart contract escrow the moment the bounty goes live. The streamer <strong style="color:white;">cannot</strong> cancel once submissions exist.
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:16px;align-items:flex-start;margin-bottom:20px;">
+          <div style="width:36px;height:36px;border-radius:50%;background:var(--amber);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:1.1rem;flex-shrink:0;color:black;">3</div>
+          <div>
+            <div style="font-weight:700;margin-bottom:4px;">Clippers Watch & Clip</div>
+            <div style="color:var(--muted);font-size:0.88rem;line-height:1.7;">Clippers watch the streamer's Blaze or Arena stream (live or VOD), find the best moments, and create clips. They post those clips to <strong style="color:white;">X (Twitter)</strong> or <strong style="color:white;">YouTube</strong>. The clip must be a real public post — the link is what gets submitted.</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:16px;align-items:flex-start;margin-bottom:20px;">
+          <div style="width:36px;height:36px;border-radius:50%;background:var(--red);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:1.1rem;flex-shrink:0;">4</div>
+          <div>
+            <div style="font-weight:700;margin-bottom:4px;">Submit the Clip Link</div>
+            <div style="color:var(--muted);font-size:0.88rem;line-height:1.7;">The clipper comes to ClipDAO and submits their X or YouTube link on the bounty page. The link is timestamped on-chain. Each clipper can submit up to the max number of clips the streamer set (1, 2, or 3). You can't submit the same link twice and you can't submit to your own bounty.</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:16px;align-items:flex-start;margin-bottom:20px;">
+          <div style="width:36px;height:36px;border-radius:50%;background:var(--orange);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:1.1rem;flex-shrink:0;">5</div>
+          <div>
+            <div style="font-weight:700;margin-bottom:4px;">Winner Selected</div>
+            <div style="color:var(--muted);font-size:0.88rem;line-height:1.7;"><strong style="color:white;">Streamer Picks:</strong> The streamer reviews all submissions and clicks to select the winner(s). Payout fires instantly.<br/><br/><strong style="color:white;">Community Vote:</strong> NFT holders vote during the open window. Genesis holders have 3x voting power, Early Access 1.5x. When the deadline passes, anyone can trigger resolution and the top voted clips win.</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:16px;align-items:flex-start;">
+          <div style="width:36px;height:36px;border-radius:50%;background:var(--success);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:1.1rem;flex-shrink:0;color:black;">6</div>
+          <div>
+            <div style="font-weight:700;margin-bottom:4px;">Automatic Payout</div>
+            <div style="color:var(--muted);font-size:0.88rem;line-height:1.7;">The smart contract sends AVAX directly to winner wallet(s). Platform takes 4% automatically. No manual transfer. No waiting. The clipper's reputation score and NFT level both increase on-chain.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- NFT Tiers -->
+    <div class="card" style="margin-bottom:20px;border-left:3px solid var(--amber);">
+      <h3 style="color:var(--amber);margin-bottom:16px;">NFT Membership Tiers</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+        <div style="background:var(--dark);border:1px solid rgba(255,149,0,0.3);border-radius:6px;padding:14px;">
+          <div style="font-size:0.7rem;color:var(--amber);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">⭐ Genesis</div>
+          <div style="font-weight:700;margin-bottom:6px;">0.5 AVAX</div>
+          <div style="font-size:0.8rem;color:var(--muted);">500 max. Lifetime 1% fee. 3x votes. Monthly revenue share. Exclusive bounties.</div>
+        </div>
+        <div style="background:var(--dark);border:1px solid rgba(232,53,10,0.3);border-radius:6px;padding:14px;">
+          <div style="font-size:0.7rem;color:var(--red);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">🔥 Early Access</div>
+          <div style="font-weight:700;margin-bottom:6px;">0.1 AVAX</div>
+          <div style="font-size:0.8rem;color:var(--muted);">Open window. 2.5% fee. 1.5x votes. Early campaign access. Evolving NFT.</div>
+        </div>
+        <div style="background:var(--dark);border:1px solid var(--border);border-radius:6px;padding:14px;">
+          <div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Free</div>
+          <div style="font-weight:700;margin-bottom:6px;">Browse Only</div>
+          <div style="font-size:0.8rem;color:var(--muted);">5% fee. 1x votes. Can view but cannot post, submit or vote.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bounty Rules -->
+    <div class="card" style="margin-bottom:20px;border-left:3px solid var(--red);">
+      <h3 style="color:var(--orange);margin-bottom:16px;">Bounty Rules</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div style="display:flex;gap:8px;align-items:flex-start;padding:8px;background:var(--dark);border-radius:5px;">
+          <span style="color:var(--green,#22c55e);">✓</span>
+          <span style="font-size:0.85rem;color:var(--muted);">Clip must come from the streamer's Blaze or Arena stream</span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:flex-start;padding:8px;background:var(--dark);border-radius:5px;">
+          <span style="color:var(--green,#22c55e);">✓</span>
+          <span style="font-size:0.85rem;color:var(--muted);">Submit link to your X or YouTube post of the clip</span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:flex-start;padding:8px;background:var(--dark);border-radius:5px;">
+          <span style="color:var(--green,#22c55e);">✓</span>
+          <span style="font-size:0.85rem;color:var(--muted);">Max submissions set by the bounty creator (1–3 per clipper)</span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:flex-start;padding:8px;background:var(--dark);border-radius:5px;">
+          <span style="color:var(--green,#22c55e);">✓</span>
+          <span style="font-size:0.85rem;color:var(--muted);">Link must be publicly accessible and match your registered handle</span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:flex-start;padding:8px;background:var(--dark);border-radius:5px;">
+          <span style="color:var(--red);">✕</span>
+          <span style="font-size:0.85rem;color:var(--muted);">Cannot submit to your own bounty</span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:flex-start;padding:8px;background:var(--dark);border-radius:5px;">
+          <span style="color:var(--red);">✕</span>
+          <span style="font-size:0.85rem;color:var(--muted);">Cannot vote on your own submission</span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:flex-start;padding:8px;background:var(--dark);border-radius:5px;">
+          <span style="color:var(--red);">✕</span>
+          <span style="font-size:0.85rem;color:var(--muted);">Streamers cannot cancel once submissions exist</span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:flex-start;padding:8px;background:var(--dark);border-radius:5px;">
+          <span style="color:var(--red);">✕</span>
+          <span style="font-size:0.85rem;color:var(--muted);">Cannot vote twice on the same bounty</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reputation -->
+    <div class="card" style="margin-bottom:20px;border-left:3px solid var(--orange);">
+      <h3 style="color:var(--orange);margin-bottom:12px;">Reputation & NFT Levels</h3>
+      <p style="color:var(--muted);font-size:0.88rem;line-height:1.8;margin-bottom:12px;">Every action on ClipDAO builds your on-chain reputation. Your NFT evolves visually from Level 1 to Level 10 as you participate. Reputation is permanent, tied to your wallet, and can never be faked.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <span class="badge badge-orange">Win a bounty → +Rep +Level progress</span>
+        <span class="badge badge-orange">Receive votes → +Rep +Level progress</span>
+        <span class="badge badge-orange">Post paid bounties → +Streamer Rep</span>
+        <span class="badge badge-red">Disputes → -Rep penalty</span>
+      </div>
+      <p style="color:var(--muted);font-size:0.82rem;margin-top:12px;">NFT levels up every 5 bounties won or every 20 votes received. Max level 10.</p>
+    </div>
+
+    <!-- Platforms -->
+    <div class="card" style="margin-bottom:20px;border-left:3px solid var(--amber);">
+      <h3 style="color:var(--amber);margin-bottom:16px;">Supported Streaming Platforms</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div style="background:var(--dark);border:1px solid rgba(255,107,26,0.3);border-radius:8px;padding:20px;">
+          <div style="font-size:1.8rem;margin-bottom:8px;">🔥</div>
+          <div style="font-weight:700;font-size:1.1rem;margin-bottom:4px;">Blaze</div>
+          <div style="color:var(--muted);font-size:0.85rem;margin-bottom:12px;">Web3-native live streaming. Home of the ClipDAO clipper community.</div>
+          <a href="https://blaze.stream/" target="_blank" style="font-family:var(--font-mono);font-size:0.78rem;color:var(--orange);">blaze.stream →</a>
+        </div>
+        <div style="background:var(--dark);border:1px solid rgba(255,149,0,0.3);border-radius:8px;padding:20px;">
+          <div style="font-size:1.8rem;margin-bottom:8px;">🏟️</div>
+          <div style="font-weight:700;font-size:1.1rem;margin-bottom:4px;">Arena</div>
+          <div style="color:var(--muted);font-size:0.85rem;margin-bottom:12px;">Live streaming on Arena Social. Fast growing crypto-native audience.</div>
+          <a href="https://arena.social/live" target="_blank" style="font-family:var(--font-mono);font-size:0.78rem;color:var(--amber);">arena.social/live →</a>
+        </div>
+      </div>
+      <p style="color:var(--muted);font-size:0.82rem;margin-top:14px;">Clippers watch streams on these platforms, find the best moments, then post their clips to X or YouTube before submitting the link here.</p>
+    </div>
+
+    <!-- Smart Contracts -->
+    <div class="card" style="margin-bottom:20px;border-left:3px solid var(--red);">
+      <h3 style="color:var(--red);margin-bottom:16px;">Smart Contracts — Fuji Testnet</h3>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--dark);border-radius:5px;flex-wrap:wrap;gap:8px;">
+          <span style="font-weight:600;">ClipDAO NFT</span>
+          <a href="https://testnet.snowtrace.io/address/0xa1bc0bfEdF7Ec1411C8769840EB80af1bcBa02e3" target="_blank" style="font-family:var(--font-mono);font-size:0.72rem;color:var(--orange);">0xa1bc0bfE...02e3 ↗</a>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--dark);border-radius:5px;flex-wrap:wrap;gap:8px;">
+          <span style="font-weight:600;">Bounty Escrow</span>
+          <a href="https://testnet.snowtrace.io/address/0xD68Fb3D68278c7792f17fd72a29775d2Fb28040c" target="_blank" style="font-family:var(--font-mono);font-size:0.72rem;color:var(--orange);">0xD68Fb3D6...040c ↗</a>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--dark);border-radius:5px;flex-wrap:wrap;gap:8px;">
+          <span style="font-weight:600;">Treasury</span>
+          <a href="https://testnet.snowtrace.io/address/0xcA6c8F853E0E3D05FC63B49A80C4C19c193abF45" target="_blank" style="font-family:var(--font-mono);font-size:0.72rem;color:var(--orange);">0xcA6c8F85...bF45 ↗</a>
+        </div>
+      </div>
+      <div style="margin-top:14px;padding:10px;background:rgba(232,53,10,0.06);border-radius:5px;font-size:0.82rem;color:var(--muted);">
+        ⚠️ Currently on <strong style="color:white;">Avalanche Fuji Testnet</strong>. Mainnet launch coming after full audit. Get free test AVAX at <a href="https://faucet.avax.network" target="_blank" style="color:var(--orange);">faucet.avax.network</a>
+      </div>
+    </div>
+
+    <!-- FAQ -->
+    <div class="card" style="border-left:3px solid var(--orange);">
+      <h3 style="color:var(--orange);margin-bottom:16px;">FAQ</h3>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div style="border-bottom:1px solid var(--border);padding-bottom:12px;">
+          <div style="font-weight:700;margin-bottom:4px;">Do I need crypto to use ClipDAO?</div>
+          <div style="color:var(--muted);font-size:0.85rem;">Yes. You need AVAX on Avalanche to mint an NFT and to post bounties. Clippers only need an NFT (0.1 AVAX) to start submitting — no gas needed to vote or submit on Fuji testnet where gas is free test tokens.</div>
+        </div>
+        <div style="border-bottom:1px solid var(--border);padding-bottom:12px;">
+          <div style="font-weight:700;margin-bottom:4px;">Which wallet should I use?</div>
+          <div style="color:var(--muted);font-size:0.85rem;">Core Wallet (built for Avalanche) or MetaMask. ClipDAO auto-adds the Fuji testnet when you connect.</div>
+        </div>
+        <div style="border-bottom:1px solid var(--border);padding-bottom:12px;">
+          <div style="font-weight:700;margin-bottom:4px;">Can a clipper also be a streamer?</div>
+          <div style="color:var(--muted);font-size:0.85rem;">Yes. Your NFT role is your primary role but you can do both. You just can't submit clips to your own bounties.</div>
+        </div>
+        <div style="border-bottom:1px solid var(--border);padding-bottom:12px;">
+          <div style="font-weight:700;margin-bottom:4px;">What if no one submits to my bounty?</div>
+          <div style="color:var(--muted);font-size:0.85rem;">If zero submissions exist when the deadline passes, you can cancel the bounty and your AVAX is fully refunded.</div>
+        </div>
+        <div>
+          <div style="font-weight:700;margin-bottom:4px;">Where do I post my clips?</div>
+          <div style="color:var(--muted);font-size:0.85rem;">Post to X (Twitter) or YouTube. Then submit that public link here. The clip must be from the streamer's Blaze or Arena content.</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="text-align:center;margin-top:48px;">
+      <button class="btn btn-primary" onclick="connectWallet()">🔥 Connect & Start</button>
+      <button class="btn btn-ghost" style="margin-left:12px;" onclick="showPage('mint')">Mint NFT</button>
+    </div>
+  </div>
+</div>
+
 </body>
-</html>
