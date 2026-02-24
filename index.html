@@ -7,7 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=Barlow:wght@400;500;600;700;900&display=swap" rel="stylesheet"/>
 
-<!-- Ethers + Supabase -->
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>"/>
+<!-- Ethers + Supabase loaded synchronously so onclick handlers work immediately -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 
@@ -425,6 +426,7 @@ textarea { resize: vertical; min-height: 80px; }
 <nav>
   <div class="nav-logo" onclick="showPage('home')">CLIP<span>DAO</span></div>
   <div class="nav-right">
+    <span id="nav-balance" class="nav-addr" style="display:none;color:var(--amber);border-color:rgba(255,149,0,0.3);background:rgba(255,149,0,0.08);"></span>
     <span id="nav-addr" class="nav-addr" style="display:none"></span>
     <button id="btn-connect" class="btn btn-primary btn-sm" onclick="connectWallet()">Connect Wallet</button>
     <button id="btn-dashboard" class="btn btn-ghost btn-sm" style="display:none" onclick="showPage('dashboard')">Dashboard</button>
@@ -1032,6 +1034,7 @@ function disconnectWallet() {
   document.getElementById('btn-dashboard').style.display = 'none';
   document.getElementById('btn-disconnect').style.display = 'none';
   document.getElementById('nav-addr').style.display = 'none';
+  document.getElementById('nav-balance').style.display = 'none';
   showPage('home');
   toast('Disconnected', 'info');
 }
@@ -1049,6 +1052,13 @@ function updateNavWallet() {
   document.getElementById('btn-connect').style.display = 'none';
   document.getElementById('btn-dashboard').style.display = 'inline-flex';
   document.getElementById('btn-disconnect').style.display = 'inline-flex';
+  // Fetch and show AVAX balance
+  provider.getBalance(account).then(bal => {
+    const avax = parseFloat(ethers.formatEther(bal)).toFixed(3);
+    const el = document.getElementById('nav-balance');
+    el.textContent = avax + ' AVAX';
+    el.style.display = 'inline-block';
+  }).catch(() => {});
 }
 
 async function loadUserData() {
@@ -1712,16 +1722,38 @@ if (window.ethereum) {
 }
 
 // =====================================================================
+// EXPOSE FUNCTIONS TO WINDOW (fixes onclick not defined errors)
+// =====================================================================
+window.connectWallet    = connectWallet;
+window.disconnectWallet = disconnectWallet;
+window.showPage         = showPage;
+window.switchTab        = switchTab;
+window.openModal        = openModal;
+window.closeModal       = closeModal;
+window.selectRole       = selectRole;
+window.onboardNext      = onboardNext;
+window.finishOnboarding = finishOnboarding;
+window.mintGenesis      = mintGenesis;
+window.mintEarlyAccess  = mintEarlyAccess;
+window.saveProfile      = saveProfile;
+window.postBounty       = postBounty;
+window.submitClip       = submitClip;
+window.voteOnClip       = voteOnClip;
+window.pickWinner       = pickWinner;
+window.resolveVote      = resolveVote;
+window.filterBounties   = filterBounties;
+window.openBountyDetail = openBountyDetail;
+
+// =====================================================================
 // INIT
 // =====================================================================
-initSupabase();
-loadMintStats();
-loadBounties();
-
-// Auto-reconnect if previously connected
-if (window.ethereum?.selectedAddress) {
-  connectWallet();
-}
+document.addEventListener('DOMContentLoaded', () => {
+  initSupabase();
+  loadMintStats();
+  loadBounties();
+  // Auto-reconnect if previously connected
+  if (window.ethereum?.selectedAddress) connectWallet();
+});
 </script>
 </body>
 </html>
