@@ -8,921 +8,20 @@
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=Barlow:wght@400;500;600;700;900&display=swap" rel="stylesheet"/>
 
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>"/>
-<!-- CDN scripts must load before body HTML so onclick attrs resolve -->
+<!-- All scripts in head — CDN must load before functions are defined -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
-// =====================================================================
-// CONFIG — update these with your values
-// =====================================================================
 const SUPABASE_URL = 'https://cfndhpcumlxgdhfxaxkz.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNmbmRocGN1bWx4Z2RoZnhheGt6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4NzI0NDEsImV4cCI6MjA4NzQ0ODQ0MX0.kQaFiJh6HCj39lMoiZgy4y5HO26YqbZm1DnXIOiJAGk';
-
 const NFT_ADDRESS      = '0xa1bc0bfEdF7Ec1411C8769840EB80af1bcBa02e3';
 const ESCROW_ADDRESS   = '0xD68Fb3D68278c7792f17fd72a29775d2Fb28040c';
 const TREASURY_ADDRESS = '0xcA6c8F853E0E3D05FC63B49A80C4C19c193abF45';
 const FUJI_CHAIN_ID    = 43113;
 const FUJI_RPC         = 'https://api.avax-test.network/ext/bc/C/rpc';
 </script>
-
-<style>
-:root {
-  --red:    #E8350A;
-  --orange: #FF6B1A;
-  --amber:  #FF9500;
-  --black:  #0A0A0A;
-  --dark:   #111111;
-  --card:   #181818;
-  --border: #2A2A2A;
-  --text:   #F0F0F0;
-  --muted:  #888888;
-  --success:#22C55E;
-  --font-display: 'Bebas Neue', sans-serif;
-  --font-body:    'Barlow', sans-serif;
-  --font-mono:    'DM Mono', monospace;
-}
-
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-html { scroll-behavior: smooth; }
-
-body {
-  background: var(--black);
-  color: var(--text);
-  font-family: var(--font-body);
-  font-size: 15px;
-  line-height: 1.6;
-  min-height: 100vh;
-  overflow-x: hidden;
-}
-
-/* ── Scrollbar ── */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: var(--dark); }
-::-webkit-scrollbar-thumb { background: var(--red); border-radius: 3px; }
-
-/* ── Typography ── */
-h1,h2,h3,h4 { font-family: var(--font-display); letter-spacing: 1px; line-height: 1.1; }
-h1 { font-size: clamp(2.5rem, 6vw, 5rem); }
-h2 { font-size: clamp(1.8rem, 4vw, 3rem); }
-h3 { font-size: 1.4rem; }
-.mono { font-family: var(--font-mono); font-size: 0.8rem; }
-
-/* ── Layout ── */
-.container { max-width: 1100px; margin: 0 auto; padding: 0 20px; }
-
-/* ── NAV ── */
-nav {
-  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
-  background: rgba(10,10,10,0.95);
-  border-bottom: 1px solid var(--border);
-  backdrop-filter: blur(12px);
-  padding: 0 24px;
-  height: 60px;
-  display: flex; align-items: center; justify-content: space-between;
-}
-.nav-logo {
-  font-family: var(--font-display);
-  font-size: 1.8rem;
-  letter-spacing: 3px;
-  cursor: pointer;
-}
-.nav-logo span { color: var(--red); }
-.nav-right { display: flex; align-items: center; gap: 12px; }
-.nav-addr {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  color: var(--orange);
-  background: rgba(255,107,26,0.1);
-  padding: 4px 10px;
-  border-radius: 4px;
-  border: 1px solid rgba(255,107,26,0.3);
-}
-
-/* ── Buttons ── */
-.btn {
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 10px 20px;
-  border: none; border-radius: 4px;
-  font-family: var(--font-body); font-weight: 700;
-  font-size: 0.85rem; letter-spacing: 0.5px;
-  cursor: pointer; transition: all 0.15s;
-  text-transform: uppercase;
-}
-.btn-primary {
-  background: var(--red); color: white;
-}
-.btn-primary:hover { background: #c42d08; transform: translateY(-1px); }
-.btn-orange {
-  background: var(--orange); color: white;
-}
-.btn-orange:hover { background: #e05a10; }
-.btn-ghost {
-  background: transparent; color: var(--text);
-  border: 1px solid var(--border);
-}
-.btn-ghost:hover { border-color: var(--red); color: var(--red); }
-.btn-sm { padding: 6px 14px; font-size: 0.78rem; }
-.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
-
-/* ── Cards ── */
-.card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 24px;
-}
-.card-hover { transition: border-color 0.2s, transform 0.2s; cursor: pointer; }
-.card-hover:hover { border-color: var(--red); transform: translateY(-2px); }
-
-/* ── Forms ── */
-.form-group { margin-bottom: 16px; }
-label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
-input, textarea, select {
-  width: 100%; padding: 10px 14px;
-  background: var(--dark); border: 1px solid var(--border);
-  border-radius: 4px; color: var(--text);
-  font-family: var(--font-body); font-size: 0.9rem;
-  transition: border-color 0.15s;
-}
-input:focus, textarea:focus, select:focus {
-  outline: none; border-color: var(--orange);
-}
-select option { background: var(--dark); }
-textarea { resize: vertical; min-height: 80px; }
-
-/* ── Badges ── */
-.badge {
-  display: inline-block; padding: 2px 10px;
-  border-radius: 3px; font-size: 0.72rem; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.5px;
-}
-.badge-red    { background: rgba(232,53,10,0.2); color: var(--red); border: 1px solid rgba(232,53,10,0.4); }
-.badge-orange { background: rgba(255,107,26,0.2); color: var(--orange); border: 1px solid rgba(255,107,26,0.4); }
-.badge-amber  { background: rgba(255,149,0,0.2); color: var(--amber); border: 1px solid rgba(255,149,0,0.4); }
-.badge-green  { background: rgba(34,197,94,0.2); color: var(--success); border: 1px solid rgba(34,197,94,0.4); }
-.badge-muted  { background: rgba(136,136,136,0.15); color: var(--muted); border: 1px solid rgba(136,136,136,0.25); }
-
-/* ── Toast ── */
-#toast-container {
-  position: fixed; bottom: 24px; right: 24px;
-  display: flex; flex-direction: column; gap: 8px;
-  z-index: 9999;
-}
-.toast {
-  padding: 12px 18px; border-radius: 6px;
-  font-size: 0.85rem; font-weight: 600;
-  max-width: 320px;
-  animation: slideIn 0.3s ease;
-  border-left: 3px solid;
-}
-.toast-success { background: #0a1f12; color: var(--success); border-color: var(--success); }
-.toast-error   { background: #1f0a0a; color: var(--red); border-color: var(--red); }
-.toast-info    { background: #111827; color: var(--orange); border-color: var(--orange); }
-@keyframes slideIn { from { transform: translateX(100px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-
-/* ── Modal ── */
-.modal-overlay {
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,0.85);
-  display: none; align-items: center; justify-content: center;
-  z-index: 200; padding: 20px;
-}
-.modal-overlay.active { display: flex; }
-.modal {
-  background: var(--card); border: 1px solid var(--border);
-  border-radius: 10px; padding: 32px;
-  width: 100%; max-width: 480px;
-  max-height: 90vh; overflow-y: auto;
-  position: relative;
-}
-.modal h2 { margin-bottom: 20px; color: var(--orange); }
-.modal-close {
-  position: absolute; top: 16px; right: 16px;
-  background: none; border: none; color: var(--muted);
-  font-size: 1.3rem; cursor: pointer;
-}
-.modal-close:hover { color: var(--red); }
-
-/* ── Sections / Pages ── */
-.page { display: none; padding-top: 60px; min-height: 100vh; }
-.page.active { display: block; }
-
-/* ── Hero ── */
-#page-home {
-  background:
-    radial-gradient(ellipse at 10% 50%, rgba(232,53,10,0.12) 0%, transparent 60%),
-    radial-gradient(ellipse at 90% 20%, rgba(255,107,26,0.08) 0%, transparent 50%),
-    var(--black);
-}
-.hero {
-  min-height: calc(100vh - 60px);
-  display: flex; align-items: center;
-}
-.hero-inner { padding: 80px 0; }
-.hero-eyebrow {
-  font-family: var(--font-mono); font-size: 0.78rem;
-  color: var(--orange); letter-spacing: 2px;
-  text-transform: uppercase; margin-bottom: 16px;
-  display: flex; align-items: center; gap: 8px;
-}
-.hero-eyebrow::before {
-  content: ''; display: block;
-  width: 32px; height: 2px; background: var(--orange);
-}
-.hero h1 { margin-bottom: 20px; }
-.hero h1 em { color: var(--red); font-style: normal; }
-.hero p { font-size: 1.05rem; color: var(--muted); max-width: 520px; margin-bottom: 36px; }
-.hero-stats {
-  display: flex; gap: 40px; margin-top: 60px;
-  border-top: 1px solid var(--border); padding-top: 32px;
-}
-.stat-item { }
-.stat-num { font-family: var(--font-display); font-size: 2rem; color: var(--orange); }
-.stat-label { font-size: 0.78rem; color: var(--muted); text-transform: uppercase; }
-
-/* ── Dashboard ── */
-.dashboard-grid {
-  display: grid; grid-template-columns: 240px 1fr;
-  gap: 0; min-height: calc(100vh - 60px);
-}
-.sidebar {
-  background: var(--dark); border-right: 1px solid var(--border);
-  padding: 24px 0; position: sticky; top: 60px;
-  height: calc(100vh - 60px); overflow-y: auto;
-}
-.sidebar-section { padding: 8px 16px; margin-bottom: 4px; }
-.sidebar-label { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; padding: 0 8px; }
-.nav-item {
-  display: flex; align-items: center; gap: 10px;
-  padding: 9px 16px; border-radius: 6px;
-  cursor: pointer; transition: all 0.15s;
-  font-weight: 600; font-size: 0.88rem;
-  color: var(--muted);
-}
-.nav-item:hover { background: rgba(255,107,26,0.08); color: var(--text); }
-.nav-item.active { background: rgba(232,53,10,0.15); color: var(--red); }
-.nav-item .icon { font-size: 1rem; width: 20px; text-align: center; }
-.main-content { padding: 32px; }
-.page-header { margin-bottom: 28px; }
-.page-header h2 { margin-bottom: 4px; }
-.page-header p { color: var(--muted); font-size: 0.9rem; }
-
-/* ── Bounty Cards ── */
-.bounty-grid { display: grid; gap: 16px; }
-.bounty-card {
-  background: var(--card); border: 1px solid var(--border);
-  border-radius: 8px; padding: 20px;
-  transition: border-color 0.2s, transform 0.2s;
-}
-.bounty-card:hover { border-color: rgba(232,53,10,0.5); transform: translateY(-2px); cursor: pointer; }
-.bounty-card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
-.bounty-title { font-size: 1rem; font-weight: 700; margin-bottom: 4px; }
-.bounty-desc { color: var(--muted); font-size: 0.85rem; margin-bottom: 12px; line-height: 1.4; }
-.bounty-meta { display: flex; gap: 16px; flex-wrap: wrap; }
-.bounty-meta-item { display: flex; align-items: center; gap: 5px; font-size: 0.8rem; color: var(--muted); }
-.bounty-reward { font-family: var(--font-display); font-size: 1.5rem; color: var(--orange); }
-.bounty-reward span { font-size: 0.85rem; color: var(--muted); font-family: var(--font-body); }
-
-/* ── NFT Mint Cards ── */
-.mint-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-.mint-card {
-  border-radius: 10px; padding: 32px;
-  position: relative; overflow: hidden;
-}
-.mint-card.genesis {
-  background: linear-gradient(135deg, #1a0a00 0%, #2a1000 100%);
-  border: 1px solid rgba(255,149,0,0.4);
-}
-.mint-card.early {
-  background: linear-gradient(135deg, #0a0a1a 0%, #100a1a 100%);
-  border: 1px solid rgba(232,53,10,0.4);
-}
-.mint-card::before {
-  content: '';
-  position: absolute; top: -40px; right: -40px;
-  width: 150px; height: 150px; border-radius: 50%;
-  opacity: 0.08;
-}
-.mint-card.genesis::before { background: var(--amber); }
-.mint-card.early::before { background: var(--red); }
-.mint-tier-badge {
-  font-family: var(--font-mono); font-size: 0.7rem;
-  text-transform: uppercase; letter-spacing: 2px;
-  margin-bottom: 12px;
-}
-.mint-price { font-family: var(--font-display); font-size: 2.5rem; margin: 16px 0; }
-.mint-supply { font-size: 0.82rem; color: var(--muted); margin-bottom: 20px; }
-.mint-perks { list-style: none; margin-bottom: 24px; }
-.mint-perks li {
-  font-size: 0.85rem; padding: 5px 0;
-  display: flex; align-items: center; gap: 8px;
-  border-bottom: 1px solid rgba(255,255,255,0.04);
-}
-.mint-perks li::before { content: '✓'; color: var(--orange); font-weight: 700; }
-.supply-bar {
-  height: 4px; background: var(--border); border-radius: 2px; margin-bottom: 6px;
-}
-.supply-fill { height: 100%; background: linear-gradient(90deg, var(--red), var(--orange)); border-radius: 2px; transition: width 0.5s; }
-
-/* ── Submission cards ── */
-.submission-card {
-  background: var(--dark); border: 1px solid var(--border);
-  border-radius: 6px; padding: 16px;
-  display: flex; justify-content: space-between; align-items: center;
-  gap: 12px; margin-bottom: 10px;
-}
-.submission-card.winner { border-color: var(--amber); background: rgba(255,149,0,0.05); }
-.sub-link { font-family: var(--font-mono); font-size: 0.78rem; color: var(--orange); }
-.sub-meta { font-size: 0.78rem; color: var(--muted); }
-.vote-count { font-family: var(--font-display); font-size: 1.2rem; color: var(--orange); }
-
-/* ── Profile ── */
-.profile-header {
-  background: linear-gradient(135deg, #1a0a00, #0a0a0a);
-  border: 1px solid var(--border);
-  border-radius: 10px; padding: 32px;
-  margin-bottom: 24px;
-  display: flex; gap: 24px; align-items: center;
-}
-.profile-avatar {
-  width: 72px; height: 72px; border-radius: 50%;
-  background: linear-gradient(135deg, var(--red), var(--orange));
-  display: flex; align-items: center; justify-content: center;
-  font-family: var(--font-display); font-size: 2rem; flex-shrink: 0;
-}
-.rep-bar-wrap { margin-top: 8px; }
-.rep-bar { height: 6px; background: var(--border); border-radius: 3px; }
-.rep-fill { height: 100%; background: linear-gradient(90deg, var(--red), var(--orange)); border-radius: 3px; }
-
-/* ── Tx Status ── */
-.tx-status {
-  padding: 12px 16px; border-radius: 6px;
-  font-size: 0.85rem; margin-top: 12px;
-  display: none;
-}
-.tx-status.show { display: block; }
-.tx-pending { background: rgba(255,149,0,0.1); color: var(--amber); border: 1px solid rgba(255,149,0,0.3); }
-.tx-success { background: rgba(34,197,94,0.1); color: var(--success); border: 1px solid rgba(34,197,94,0.3); }
-.tx-error   { background: rgba(232,53,10,0.1); color: var(--red); border: 1px solid rgba(232,53,10,0.3); }
-
-/* ── Filters ── */
-.filter-row { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
-.filter-btn {
-  padding: 6px 14px; border-radius: 4px;
-  background: var(--dark); border: 1px solid var(--border);
-  color: var(--muted); font-size: 0.8rem; font-weight: 600;
-  cursor: pointer; transition: all 0.15s;
-  text-transform: uppercase; letter-spacing: 0.5px;
-}
-.filter-btn.active, .filter-btn:hover { border-color: var(--red); color: var(--red); background: rgba(232,53,10,0.08); }
-
-/* ── Responsive ── */
-@media (max-width: 768px) {
-  .dashboard-grid { grid-template-columns: 1fr; }
-  .sidebar { position: static; height: auto; display: flex; flex-wrap: wrap; padding: 12px; border-right: none; border-bottom: 1px solid var(--border); }
-  .sidebar-section { flex: 1; min-width: 120px; }
-  .mint-grid { grid-template-columns: 1fr; }
-  .hero-stats { gap: 24px; flex-wrap: wrap; }
-  .main-content { padding: 20px; }
-  .profile-header { flex-direction: column; text-align: center; }
-}
-
-/* ── Divider ── */
-.divider { height: 1px; background: var(--border); margin: 24px 0; }
-
-/* ── Empty State ── */
-.empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
-.empty-state .icon { font-size: 3rem; margin-bottom: 12px; }
-.empty-state p { font-size: 0.9rem; }
-
-/* ── Loading spinner ── */
-.spinner {
-  width: 18px; height: 18px;
-  border: 2px solid rgba(255,255,255,0.2);
-  border-top-color: white;
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-  display: inline-block;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* ── Onboarding Modal specific ── */
-.role-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
-.role-card {
-  border: 2px solid var(--border); border-radius: 8px;
-  padding: 20px; cursor: pointer; transition: all 0.2s; text-align: center;
-}
-.role-card:hover { border-color: var(--orange); }
-.role-card.selected { border-color: var(--red); background: rgba(232,53,10,0.08); }
-.role-card .role-icon { font-size: 2rem; margin-bottom: 8px; }
-.role-card h4 { font-size: 1rem; margin-bottom: 4px; }
-.role-card p { font-size: 0.78rem; color: var(--muted); }
-
-/* ── Steps ── */
-.step-indicator { display: flex; gap: 8px; margin-bottom: 24px; }
-.step-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); transition: background 0.3s; }
-.step-dot.active { background: var(--red); }
-.step-dot.done { background: var(--orange); }
-
-/* ── Tag row ── */
-.tag-row { display: flex; flex-wrap: wrap; gap: 6px; }
-.tag { padding: 3px 10px; background: var(--dark); border: 1px solid var(--border); border-radius: 3px; font-size: 0.75rem; color: var(--muted); }
-</style>
-</head>
-<body>
-
-<!-- TOAST CONTAINER -->
-<div id="toast-container"></div>
-
-<!-- NAV -->
-<nav>
-  <div class="nav-logo" onclick="showPage('home')">CLIP<span>DAO</span></div>
-  <div class="nav-right">
-    <button class="btn btn-ghost btn-sm" onclick="showPage('docs')" style="display:inline-flex;">Docs</button>
-    <span id="nav-balance" class="nav-addr" style="display:none;color:var(--amber);border-color:rgba(255,149,0,0.3);background:rgba(255,149,0,0.08);"></span>
-    <span id="nav-addr" class="nav-addr" style="display:none"></span>
-    <button id="btn-connect" class="btn btn-primary btn-sm" onclick="connectWallet()">Connect Wallet</button>
-    <button id="btn-dashboard" class="btn btn-ghost btn-sm" style="display:none" onclick="showPage('dashboard')">Dashboard</button>
-    <button id="btn-disconnect" class="btn btn-ghost btn-sm" style="display:none" onclick="disconnectWallet()">Disconnect</button>
-  </div>
-</nav>
-
-<!-- ===================== PAGE: HOME ===================== -->
-<div id="page-home" class="page active">
-  <div class="container">
-    <div class="hero">
-      <div class="hero-inner">
-        <div class="hero-eyebrow">Built on Avalanche Fuji Testnet</div>
-        <h1>Clip.<br>Submit.<br><em>Get Paid.</em></h1>
-        <p>The first decentralized marketplace connecting streamers and clippers through trustless smart contracts. No middlemen. Automatic payouts. On-chain reputation.</p>
-        <div style="display:flex;gap:12px;flex-wrap:wrap;">
-          <button class="btn btn-primary" onclick="connectWallet()">🔥 Connect & Start</button>
-          <button class="btn btn-ghost" onclick="showPage('mint')">Mint NFT</button>
-          <button class="btn btn-ghost" onclick="showPage('bounties')">Browse Bounties</button>
-        </div>
-        <div class="hero-stats">
-          <div class="stat-item">
-            <div class="stat-num" id="stat-bounties">0</div>
-            <div class="stat-label">Open Bounties</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-num" id="stat-genesis">500</div>
-            <div class="stat-label">Genesis Supply</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-num" id="stat-paid">0</div>
-            <div class="stat-label">AVAX Paid Out</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ===================== PAGE: DASHBOARD ===================== -->
-<div id="page-dashboard" class="page">
-  <div class="dashboard-grid">
-    <!-- Sidebar -->
-    <aside class="sidebar">
-      <div class="sidebar-section">
-        <div class="sidebar-label">Main</div>
-        <div class="nav-item active" onclick="switchTab('tab-overview')" id="nav-overview">
-          <span class="icon">⚡</span> Overview
-        </div>
-        <div class="nav-item" onclick="switchTab('tab-bounties-dash')" id="nav-bounties-dash">
-          <span class="icon">🎯</span> Bounty Board
-        </div>
-        <div class="nav-item" onclick="switchTab('tab-submissions')" id="nav-submissions">
-          <span class="icon">📎</span> My Submissions
-        </div>
-        <div class="nav-item" onclick="switchTab('tab-post')" id="nav-post">
-          <span class="icon">➕</span> Post Bounty
-        </div>
-      </div>
-      <div class="sidebar-section">
-        <div class="sidebar-label">Account</div>
-        <div class="nav-item" onclick="switchTab('tab-profile')" id="nav-profile">
-          <span class="icon">👤</span> Profile
-        </div>
-        <div class="nav-item" onclick="showPage('mint')" id="nav-mint">
-          <span class="icon">🔑</span> NFT Mint
-        </div>
-        <div class="nav-item" onclick="showPage('docs')" id="nav-docs">
-          <span class="icon">📖</span> How It Works
-        </div>
-      </div>
-      <div class="sidebar-section" style="margin-top:auto;padding-top:20px;">
-        <div class="nav-item" style="color:var(--red);" onclick="disconnectWallet()">
-          <span class="icon">🚪</span> Disconnect
-        </div>
-      </div>
-    </aside>
-
-    <!-- Main content -->
-    <main class="main-content">
-
-      <!-- TAB: Overview -->
-      <div id="tab-overview" class="dash-tab">
-        <div class="page-header">
-          <h2>Overview</h2>
-          <p id="dash-welcome">Welcome back</p>
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:28px;">
-          <div class="card">
-            <div style="color:var(--muted);font-size:0.78rem;text-transform:uppercase;margin-bottom:6px;">NFT Tier</div>
-            <div id="overview-tier" style="font-family:var(--font-display);font-size:1.5rem;color:var(--orange);">—</div>
-          </div>
-          <div class="card">
-            <div style="color:var(--muted);font-size:0.78rem;text-transform:uppercase;margin-bottom:6px;">Reputation</div>
-            <div id="overview-rep" style="font-family:var(--font-display);font-size:1.5rem;color:var(--red);">0</div>
-          </div>
-          <div class="card">
-            <div style="color:var(--muted);font-size:0.78rem;text-transform:uppercase;margin-bottom:6px;">Bounties Won</div>
-            <div id="overview-won" style="font-family:var(--font-display);font-size:1.5rem;color:var(--orange);">0</div>
-          </div>
-          <div class="card">
-            <div style="color:var(--muted);font-size:0.78rem;text-transform:uppercase;margin-bottom:6px;">Role</div>
-            <div id="overview-role" style="font-family:var(--font-display);font-size:1.5rem;color:var(--amber);">—</div>
-          </div>
-        </div>
-        <div class="card">
-          <h3 style="margin-bottom:16px;color:var(--orange);">Recent Activity</h3>
-          <div id="recent-activity">
-            <div class="empty-state"><div class="icon">📋</div><p>No activity yet</p></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- TAB: Bounty Board (dashboard) -->
-      <div id="tab-bounties-dash" class="dash-tab" style="display:none">
-        <div class="page-header">
-          <h2>Bounty Board</h2>
-          <p>Find open bounties and submit your clips</p>
-        </div>
-        <div class="filter-row">
-          <button class="filter-btn active" onclick="filterBounties('open',this)">Open</button>
-          <button class="filter-btn" onclick="filterBounties('closed',this)">Closed</button>
-          <button class="filter-btn" onclick="filterBounties('all',this)">All</button>
-        </div>
-        <div id="bounty-list-dash" class="bounty-grid">
-          <div class="empty-state"><div class="spinner"></div><p>Loading bounties...</p></div>
-        </div>
-      </div>
-
-      <!-- TAB: My Submissions -->
-      <div id="tab-submissions" class="dash-tab" style="display:none">
-        <div class="page-header">
-          <h2>My Submissions</h2>
-          <p>Track your clip submissions and earnings</p>
-        </div>
-        <div id="my-submissions-list">
-          <div class="empty-state"><div class="icon">📎</div><p>No submissions yet</p></div>
-        </div>
-      </div>
-
-      <!-- TAB: Post Bounty -->
-      <div id="tab-post" class="dash-tab" style="display:none">
-        <div class="page-header">
-          <h2>Post a Bounty</h2>
-          <p>Lock AVAX in escrow and get clips made from Blaze or Arena</p>
-        </div>
-        <div class="card" style="max-width:600px;">
-          <div class="form-group">
-            <label>Bounty Title</label>
-            <input type="text" id="post-title" placeholder="e.g. Best hype clip from tonight's stream"/>
-          </div>
-          <div class="form-group">
-            <label>Description — What clips do you want?</label>
-            <textarea id="post-desc" placeholder="Describe the stream, the moments you want clipped, the vibe..."></textarea>
-          </div>
-          <div class="form-group">
-            <label>Clip Source Platform</label>
-            <select id="post-platform">
-              <option value="blaze">🔥 Blaze (blaze.stream)</option>
-              <option value="arena">🏟️ Arena (arena.social/live)</option>
-              <option value="both">Both Blaze & Arena</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Your Stream / Channel Link</label>
-            <input type="url" id="post-stream-link" placeholder="https://blaze.stream/yourchannel or https://arena.social/live/..."/>
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-            <div class="form-group">
-              <label>Reward (AVAX)</label>
-              <input type="number" id="post-reward" placeholder="0.5" min="0.01" step="0.01"/>
-            </div>
-            <div class="form-group">
-              <label>Duration</label>
-              <select id="post-duration">
-                <option value="24">24 hours</option>
-                <option value="48" selected>48 hours</option>
-                <option value="72">72 hours</option>
-              </select>
-            </div>
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-            <div class="form-group">
-              <label>Resolution Mode</label>
-              <select id="post-mode">
-                <option value="0">Streamer Picks</option>
-                <option value="1">Community Vote</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Number of Winners</label>
-              <select id="post-winners">
-                <option value="1">1 Winner (100%)</option>
-                <option value="2">2 Winners (60/40)</option>
-                <option value="3">3 Winners (60/30/10)</option>
-              </select>
-            </div>
-          </div>
-          <div class="form-group">
-            <label>Max Submissions Per Clipper</label>
-            <select id="post-max-subs">
-              <option value="1">1 submission</option>
-              <option value="2">2 submissions</option>
-              <option value="3" selected>3 submissions</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Special Requirements / Note to Clippers</label>
-            <textarea id="post-note" placeholder="e.g. Must be from my stream on [date]. Clip must include the chat reaction. No music edits. Portrait format preferred for X posts..." style="min-height:70px;"></textarea>
-          </div>
-          <div style="background:rgba(255,107,26,0.06);border:1px solid rgba(255,107,26,0.2);border-radius:6px;padding:12px;margin-bottom:16px;font-size:0.82rem;color:var(--muted);">
-            💡 Clippers submit their video post link from <strong style="color:var(--orange);">X or YouTube</strong> — they clip from your Blaze or Arena stream, post it, then submit the link here.
-          </div>
-          <div id="tx-post" class="tx-status"></div>
-          <button class="btn btn-primary" onclick="postBounty()" style="width:100%;">🔒 Lock AVAX & Post Bounty</button>
-        </div>
-      </div>
-
-      <!-- TAB: Profile -->
-      <div id="tab-profile" class="dash-tab" style="display:none">
-        <div class="page-header">
-          <h2>My Profile</h2>
-        </div>
-        <div class="profile-header">
-          <div class="profile-avatar" id="profile-avatar-letter">?</div>
-          <div>
-            <h3 id="profile-username" style="margin-bottom:4px;">—</h3>
-            <div class="mono" style="color:var(--muted);margin-bottom:8px;" id="profile-wallet-short">—</div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;" id="profile-badges"></div>
-            <div class="rep-bar-wrap" style="margin-top:12px;">
-              <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-                <span style="font-size:0.78rem;color:var(--muted);">Reputation</span>
-                <span style="font-size:0.78rem;color:var(--orange);" id="profile-rep-num">0</span>
-              </div>
-              <div class="rep-bar"><div class="rep-fill" id="profile-rep-bar" style="width:0%"></div></div>
-            </div>
-          </div>
-        </div>
-
-        <div class="card" style="max-width:480px;">
-          <h3 style="margin-bottom:16px;color:var(--orange);">Update Profile</h3>
-          <div class="form-group">
-            <label>Username</label>
-            <input type="text" id="edit-username" placeholder="Your name"/>
-          </div>
-          <div class="form-group">
-            <label>X (Twitter) Handle</label>
-            <input type="text" id="edit-xhandle" placeholder="@yourhandle"/>
-          </div>
-          <div class="form-group">
-            <label>Platform</label>
-            <select id="edit-platform">
-              <option value="blaze">Blaze</option>
-              <option value="arena">Arena</option>
-              <option value="twitch">Twitch</option>
-              <option value="youtube">YouTube</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Channel / Profile Link</label>
-            <input type="text" id="edit-channel" placeholder="https://..."/>
-          </div>
-          <div id="tx-profile" class="tx-status"></div>
-          <button class="btn btn-orange" onclick="saveProfile()" style="width:100%;">Save Profile</button>
-        </div>
-      </div>
-
-    </main>
-  </div>
-</div>
-
-<!-- ===================== PAGE: MINT ===================== -->
-<div id="page-mint" class="page">
-  <div class="container" style="padding-top:40px;padding-bottom:60px;">
-    <div class="page-header" style="margin-bottom:40px;">
-      <h2>Mint Your NFT</h2>
-      <p style="color:var(--muted);">Your key to the ClipDAO ecosystem. One per wallet.</p>
-    </div>
-    <div class="mint-grid">
-      <!-- Genesis -->
-      <div class="mint-card genesis">
-        <div class="mint-tier-badge" style="color:var(--amber);">⭐ Genesis Tier</div>
-        <h3 style="color:var(--amber);">Genesis NFT</h3>
-        <div class="mint-price" style="color:var(--amber);">0.5 <span style="font-size:1rem;color:var(--muted);">AVAX</span></div>
-        <div class="supply-bar">
-          <div class="supply-fill" id="genesis-bar" style="width:0%"></div>
-        </div>
-        <div class="mint-supply"><span id="genesis-minted">0</span> / 500 minted</div>
-        <ul class="mint-perks">
-          <li>Lifetime 1% platform fee</li>
-          <li>3x community voting power</li>
-          <li>Monthly revenue share</li>
-          <li>Exclusive Genesis bounties</li>
-          <li>First access to brand campaigns</li>
-          <li>Gold badge + evolving NFT</li>
-        </ul>
-        <div class="form-group">
-          <label>Username</label>
-          <input type="text" id="gen-username" placeholder="Your name"/>
-        </div>
-        <div class="form-group">
-          <label>X Handle</label>
-          <input type="text" id="gen-xhandle" placeholder="@handle"/>
-        </div>
-        <div class="form-group">
-          <label>Platform</label>
-          <select id="gen-platform">
-            <option value="blaze">Blaze</option>
-            <option value="arena">Arena</option>
-            <option value="twitch">Twitch</option>
-            <option value="youtube">YouTube</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Role</label>
-          <select id="gen-role">
-            <option value="1">Clipper</option>
-            <option value="2">Streamer</option>
-          </select>
-        </div>
-        <div id="tx-genesis" class="tx-status"></div>
-        <button class="btn btn-orange" onclick="mintGenesis()" style="width:100%;margin-top:8px;" id="btn-mint-genesis">
-          Mint Genesis NFT
-        </button>
-      </div>
-
-      <!-- Early Access -->
-      <div class="mint-card early">
-        <div class="mint-tier-badge" style="color:var(--red);">🔥 Early Access</div>
-        <h3>Early Access NFT</h3>
-        <div class="mint-price" style="color:var(--red);">0.1 <span style="font-size:1rem;color:var(--muted);">AVAX</span></div>
-        <div class="mint-supply" style="margin-top:20px;">Open mint window</div>
-        <ul class="mint-perks">
-          <li>Reduced 2.5% platform fee</li>
-          <li>1.5x voting power</li>
-          <li>Early campaign access</li>
-          <li>Early adopter badge</li>
-          <li>Evolving NFT</li>
-        </ul>
-        <div class="form-group">
-          <label>Username</label>
-          <input type="text" id="ea-username" placeholder="Your name"/>
-        </div>
-        <div class="form-group">
-          <label>X Handle</label>
-          <input type="text" id="ea-xhandle" placeholder="@handle"/>
-        </div>
-        <div class="form-group">
-          <label>Platform</label>
-          <select id="ea-platform">
-            <option value="blaze">Blaze</option>
-            <option value="arena">Arena</option>
-            <option value="twitch">Twitch</option>
-            <option value="youtube">YouTube</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Role</label>
-          <select id="ea-role">
-            <option value="1">Clipper</option>
-            <option value="2">Streamer</option>
-          </select>
-        </div>
-        <div id="tx-early" class="tx-status"></div>
-        <button class="btn btn-primary" onclick="mintEarlyAccess()" style="width:100%;margin-top:8px;" id="btn-mint-early">
-          Mint Early Access NFT
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ===================== PAGE: BOUNTIES (public) ===================== -->
-<div id="page-bounties" class="page">
-  <div class="container" style="padding-top:40px;padding-bottom:60px;">
-    <div class="page-header" style="margin-bottom:28px;">
-      <h2>Bounty Board</h2>
-      <p style="color:var(--muted);">Open clip bounties with AVAX locked in escrow</p>
-    </div>
-    <div class="filter-row">
-      <button class="filter-btn active" onclick="filterBounties('open',this)">Open</button>
-      <button class="filter-btn" onclick="filterBounties('closed',this)">Closed</button>
-      <button class="filter-btn" onclick="filterBounties('all',this)">All</button>
-    </div>
-    <div id="bounty-list-public" class="bounty-grid">
-      <div class="empty-state"><div class="spinner"></div><p>Loading...</p></div>
-    </div>
-  </div>
-</div>
-
-<!-- ===================== MODAL: Bounty Detail ===================== -->
-<div class="modal-overlay" id="modal-bounty">
-  <div class="modal" style="max-width:620px;">
-    <button class="modal-close" onclick="closeModal('modal-bounty')">✕</button>
-    <div id="modal-bounty-content"></div>
-  </div>
-</div>
-
-<!-- ===================== MODAL: Onboarding ===================== -->
-<div class="modal-overlay" id="modal-onboard">
-  <div class="modal">
-    <h2>Welcome to ClipDAO</h2>
-    <div class="step-indicator">
-      <div class="step-dot active" id="step-dot-1"></div>
-      <div class="step-dot" id="step-dot-2"></div>
-      <div class="step-dot" id="step-dot-3"></div>
-    </div>
-
-    <!-- Step 1: Role -->
-    <div id="onboard-step-1">
-      <p style="color:var(--muted);margin-bottom:20px;font-size:0.9rem;">Choose your primary role on ClipDAO</p>
-      <div class="role-cards">
-        <div class="role-card" onclick="selectRole('clipper',this)" id="role-clipper">
-          <div class="role-icon">✂️</div>
-          <h4>Clipper</h4>
-          <p>Submit clips, win bounties, earn AVAX</p>
-        </div>
-        <div class="role-card" onclick="selectRole('streamer',this)" id="role-streamer">
-          <div class="role-icon">📡</div>
-          <h4>Streamer</h4>
-          <p>Post bounties, get clips made, pay winners</p>
-        </div>
-      </div>
-      <button class="btn btn-primary" style="width:100%" onclick="onboardNext(2)">Continue →</button>
-    </div>
-
-    <!-- Step 2: Profile -->
-    <div id="onboard-step-2" style="display:none">
-      <p style="color:var(--muted);margin-bottom:20px;font-size:0.9rem;">Set up your profile</p>
-      <div class="form-group">
-        <label>Username</label>
-        <input type="text" id="ob-username" placeholder="Your name"/>
-      </div>
-      <div class="form-group">
-        <label>X (Twitter) Handle</label>
-        <input type="text" id="ob-xhandle" placeholder="@yourhandle"/>
-      </div>
-      <div class="form-group">
-        <label>Platform</label>
-        <select id="ob-platform">
-          <option value="blaze">Blaze</option>
-          <option value="arena">Arena</option>
-          <option value="twitch">Twitch</option>
-          <option value="youtube">YouTube</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Channel / Profile Link</label>
-        <input type="text" id="ob-channel" placeholder="https://..."/>
-      </div>
-      <div style="display:flex;gap:8px;">
-        <button class="btn btn-ghost" onclick="onboardNext(1)" style="flex:1">← Back</button>
-        <button class="btn btn-primary" onclick="onboardNext(3)" style="flex:2">Continue →</button>
-      </div>
-    </div>
-
-    <!-- Step 3: NFT check -->
-    <div id="onboard-step-3" style="display:none">
-      <div id="ob-has-nft" style="display:none">
-        <div style="text-align:center;padding:20px 0;">
-          <div style="font-size:3rem;margin-bottom:12px;">✅</div>
-          <h3 style="color:var(--success);margin-bottom:8px;">NFT Detected!</h3>
-          <p style="color:var(--muted);font-size:0.9rem;">You already have a ClipDAO NFT.</p>
-          <button class="btn btn-primary" style="width:100%;margin-top:20px;" onclick="finishOnboarding()">Enter ClipDAO →</button>
-        </div>
-      </div>
-      <div id="ob-no-nft">
-        <div style="text-align:center;padding:20px 0;">
-          <div style="font-size:3rem;margin-bottom:12px;">🔑</div>
-          <h3 style="color:var(--orange);margin-bottom:8px;">Mint Your NFT</h3>
-          <p style="color:var(--muted);font-size:0.9rem;margin-bottom:20px;">You need a ClipDAO NFT to post bounties, submit clips, and vote.</p>
-          <button class="btn btn-primary" style="width:100%" onclick="closeModal('modal-onboard');showPage('mint')">Go to Mint Page →</button>
-          <button class="btn btn-ghost" style="width:100%;margin-top:8px;" onclick="finishOnboarding()">Browse First</button>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
 <script>
-// =====================================================================
-// ABIs (minimal)
+// ABIs + ALL JS — this block is in <head> after CDN scripts load
 // =====================================================================
 const NFT_ABI = [
   "function mintGenesis(uint8 _role, string _username, string _xHandle, string _platform) payable",
@@ -969,7 +68,7 @@ const TREASURY_ABI = [
 // =====================================================================
 let provider, signer, account;
 let nftContract, escrowContract, treasuryContract;
-let supabase;
+let db;
 let userProfile   = null;
 let selectedRole  = null;
 let currentBountyFilter = 'open';
@@ -984,7 +83,7 @@ function initSupabase() {
       console.warn('Supabase not configured — running on-chain only');
       return;
     }
-    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
   } catch(e) { console.warn('Supabase init failed', e); }
 }
 
@@ -1095,8 +194,8 @@ function updateNavWallet() {
 async function loadUserData() {
   try {
     // Load from Supabase first
-    if (supabase) {
-      const { data } = await supabase.from('profiles').select('*').eq('wallet', account.toLowerCase()).single();
+    if (db) {
+      const { data } = await db.from('profiles').select('*').eq('wallet', account.toLowerCase()).single();
       if (data) {
         userProfile = data;
         updateProfileUI();
@@ -1172,16 +271,16 @@ function onboardNext(step) {
 
 async function finishOnboarding() {
   closeModal('modal-onboard');
-  if (supabase && userProfile) await saveProfileToSupabase();
+  if (db && userProfile) await saveProfileToSupabase();
   const hasNft = await nftContract.hasNFT(account);
   if (hasNft) { showPage('dashboard'); loadDashboard(); }
   else { showPage('mint'); }
 }
 
 async function saveProfileToSupabase() {
-  if (!supabase || !userProfile) return;
+  if (!db || !userProfile) return;
   try {
-    await supabase.from('profiles').upsert({
+    await db.from('profiles').upsert({
       wallet:    account.toLowerCase(),
       username:  userProfile.username || '',
       x_handle:  userProfile.x_handle || '',
@@ -1675,9 +774,9 @@ async function resolveVote(bountyId) {
 // SUPABASE ACTIVITY LOG
 // =====================================================================
 async function logActivity(type, meta = {}) {
-  if (!supabase || !account) return;
+  if (!db || !account) return;
   try {
-    await supabase.from('activity').insert({
+    await db.from('activity').insert({
       wallet: account.toLowerCase(),
       type,
       meta,
@@ -1689,12 +788,12 @@ async function logActivity(type, meta = {}) {
 async function loadMySubmissions() {
   const el = document.getElementById('my-submissions-list');
   if (!el || !account) return;
-  if (!supabase) {
+  if (!db) {
     el.innerHTML = `<div class="empty-state"><p>Connect Supabase to track submissions</p></div>`;
     return;
   }
   try {
-    const { data } = await supabase.from('activity')
+    const { data } = await db.from('activity')
       .select('*').eq('wallet', account.toLowerCase()).eq('type','submit_clip').order('created_at',{ascending:false});
     if (!data || data.length === 0) {
       el.innerHTML = `<div class="empty-state"><div class="icon">📎</div><p>No submissions yet</p></div>`;
@@ -1812,6 +911,943 @@ document.addEventListener('DOMContentLoaded', () => {
   if (window.ethereum?.selectedAddress) connectWallet();
 });
 </script>
+
+<style>
+:root {
+  --red:    #E8350A;
+  --orange: #FF6B1A;
+  --amber:  #FF9500;
+  --black:  #0A0A0A;
+  --dark:   #111111;
+  --card:   #181818;
+  --border: #2A2A2A;
+  --text:   #F0F0F0;
+  --muted:  #888888;
+  --success:#22C55E;
+  --font-display: 'Bebas Neue', sans-serif;
+  --font-body:    'Barlow', sans-serif;
+  --font-mono:    'DM Mono', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--black);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.6;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--dark); }
+::-webkit-scrollbar-thumb { background: var(--red); border-radius: 3px; }
+
+/* ── Typography ── */
+h1,h2,h3,h4 { font-family: var(--font-display); letter-spacing: 1px; line-height: 1.1; }
+h1 { font-size: clamp(2.5rem, 6vw, 5rem); }
+h2 { font-size: clamp(1.8rem, 4vw, 3rem); }
+h3 { font-size: 1.4rem; }
+.mono { font-family: var(--font-mono); font-size: 0.8rem; }
+
+/* ── Layout ── */
+.container { max-width: 1100px; margin: 0 auto; padding: 0 20px; }
+
+/* ── NAV ── */
+nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  background: rgba(10,10,10,0.95);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(12px);
+  padding: 0 24px;
+  height: 60px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.nav-logo {
+  font-family: var(--font-display);
+  font-size: 1.8rem;
+  letter-spacing: 3px;
+  cursor: pointer;
+}
+.nav-logo span { color: var(--red); }
+.nav-right { display: flex; align-items: center; gap: 12px; }
+.nav-addr {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--orange);
+  background: rgba(255,107,26,0.1);
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(255,107,26,0.3);
+}
+
+/* ── Buttons ── */
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 10px 20px;
+  border: none; border-radius: 4px;
+  font-family: var(--font-body); font-weight: 700;
+  font-size: 0.85rem; letter-spacing: 0.5px;
+  cursor: pointer; transition: all 0.15s;
+  text-transform: uppercase;
+}
+.btn-primary {
+  background: var(--red); color: white;
+}
+.btn-primary:hover { background: #c42d08; transform: translateY(-1px); }
+.btn-orange {
+  background: var(--orange); color: white;
+}
+.btn-orange:hover { background: #e05a10; }
+.btn-ghost {
+  background: transparent; color: var(--text);
+  border: 1px solid var(--border);
+}
+.btn-ghost:hover { border-color: var(--red); color: var(--red); }
+.btn-sm { padding: 6px 14px; font-size: 0.78rem; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+/* ── Cards ── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 24px;
+}
+.card-hover { transition: border-color 0.2s, transform 0.2s; cursor: pointer; }
+.card-hover:hover { border-color: var(--red); transform: translateY(-2px); }
+
+/* ── Forms ── */
+.form-group { margin-bottom: 16px; }
+label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+input, textarea, select {
+  width: 100%; padding: 10px 14px;
+  background: var(--dark); border: 1px solid var(--border);
+  border-radius: 4px; color: var(--text);
+  font-family: var(--font-body); font-size: 0.9rem;
+  transition: border-color 0.15s;
+}
+input:focus, textarea:focus, select:focus {
+  outline: none; border-color: var(--orange);
+}
+select option { background: var(--dark); }
+textarea { resize: vertical; min-height: 80px; }
+
+/* ── Badges ── */
+.badge {
+  display: inline-block; padding: 2px 10px;
+  border-radius: 3px; font-size: 0.72rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.badge-red    { background: rgba(232,53,10,0.2); color: var(--red); border: 1px solid rgba(232,53,10,0.4); }
+.badge-orange { background: rgba(255,107,26,0.2); color: var(--orange); border: 1px solid rgba(255,107,26,0.4); }
+.badge-amber  { background: rgba(255,149,0,0.2); color: var(--amber); border: 1px solid rgba(255,149,0,0.4); }
+.badge-green  { background: rgba(34,197,94,0.2); color: var(--success); border: 1px solid rgba(34,197,94,0.4); }
+.badge-muted  { background: rgba(136,136,136,0.15); color: var(--muted); border: 1px solid rgba(136,136,136,0.25); }
+
+/* ── Toast ── */
+#toast-container {
+  position: fixed; bottom: 24px; right: 24px;
+  display: flex; flex-direction: column; gap: 8px;
+  z-index: 9999;
+}
+.toast {
+  padding: 12px 18px; border-radius: 6px;
+  font-size: 0.85rem; font-weight: 600;
+  max-width: 320px;
+  animation: slideIn 0.3s ease;
+  border-left: 3px solid;
+}
+.toast-success { background: #0a1f12; color: var(--success); border-color: var(--success); }
+.toast-error   { background: #1f0a0a; color: var(--red); border-color: var(--red); }
+.toast-info    { background: #111827; color: var(--orange); border-color: var(--orange); }
+@keyframes slideIn { from { transform: translateX(100px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+/* ── Modal ── */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.85);
+  display: none; align-items: center; justify-content: center;
+  z-index: 200; padding: 20px;
+}
+.modal-overlay.active { display: flex; }
+.modal {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 32px;
+  width: 100%; max-width: 480px;
+  max-height: 90vh; overflow-y: auto;
+  position: relative;
+}
+.modal h2 { margin-bottom: 20px; color: var(--orange); }
+.modal-close {
+  position: absolute; top: 16px; right: 16px;
+  background: none; border: none; color: var(--muted);
+  font-size: 1.3rem; cursor: pointer;
+}
+.modal-close:hover { color: var(--red); }
+
+/* ── Sections / Pages ── */
+.page { display: none; padding-top: 60px; min-height: 100vh; }
+.page.active { display: block; }
+
+/* ── Hero ── */
+#page-home {
+  background:
+    radial-gradient(ellipse at 10% 50%, rgba(232,53,10,0.12) 0%, transparent 60%),
+    radial-gradient(ellipse at 90% 20%, rgba(255,107,26,0.08) 0%, transparent 50%),
+    var(--black);
+}
+.hero {
+  min-height: calc(100vh - 60px);
+  display: flex; align-items: center;
+}
+.hero-inner { padding: 80px 0; }
+.hero-eyebrow {
+  font-family: var(--font-mono); font-size: 0.78rem;
+  color: var(--orange); letter-spacing: 2px;
+  text-transform: uppercase; margin-bottom: 16px;
+  display: flex; align-items: center; gap: 8px;
+}
+.hero-eyebrow::before {
+  content: ''; display: block;
+  width: 32px; height: 2px; background: var(--orange);
+}
+.hero h1 { margin-bottom: 20px; }
+.hero h1 em { color: var(--red); font-style: normal; }
+.hero p { font-size: 1.05rem; color: var(--muted); max-width: 520px; margin-bottom: 36px; }
+.hero-stats {
+  display: flex; gap: 40px; margin-top: 60px;
+  border-top: 1px solid var(--border); padding-top: 32px;
+}
+.stat-item { }
+.stat-num { font-family: var(--font-display); font-size: 2rem; color: var(--orange); }
+.stat-label { font-size: 0.78rem; color: var(--muted); text-transform: uppercase; }
+
+/* ── Dashboard ── */
+.dashboard-grid {
+  display: grid; grid-template-columns: 240px 1fr;
+  gap: 0; min-height: calc(100vh - 60px);
+}
+.sidebar {
+  background: var(--dark); border-right: 1px solid var(--border);
+  padding: 24px 0; position: sticky; top: 60px;
+  height: calc(100vh - 60px); overflow-y: auto;
+}
+.sidebar-section { padding: 8px 16px; margin-bottom: 4px; }
+.sidebar-label { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; padding: 0 8px; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 16px; border-radius: 6px;
+  cursor: pointer; transition: all 0.15s;
+  font-weight: 600; font-size: 0.88rem;
+  color: var(--muted);
+}
+.nav-item:hover { background: rgba(255,107,26,0.08); color: var(--text); }
+.nav-item.active { background: rgba(232,53,10,0.15); color: var(--red); }
+.nav-item .icon { font-size: 1rem; width: 20px; text-align: center; }
+.main-content { padding: 32px; }
+.page-header { margin-bottom: 28px; }
+.page-header h2 { margin-bottom: 4px; }
+.page-header p { color: var(--muted); font-size: 0.9rem; }
+
+/* ── Bounty Cards ── */
+.bounty-grid { display: grid; gap: 16px; }
+.bounty-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 20px;
+  transition: border-color 0.2s, transform 0.2s;
+}
+.bounty-card:hover { border-color: rgba(232,53,10,0.5); transform: translateY(-2px); cursor: pointer; }
+.bounty-card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+.bounty-title { font-size: 1rem; font-weight: 700; margin-bottom: 4px; }
+.bounty-desc { color: var(--muted); font-size: 0.85rem; margin-bottom: 12px; line-height: 1.4; }
+.bounty-meta { display: flex; gap: 16px; flex-wrap: wrap; }
+.bounty-meta-item { display: flex; align-items: center; gap: 5px; font-size: 0.8rem; color: var(--muted); }
+.bounty-reward { font-family: var(--font-display); font-size: 1.5rem; color: var(--orange); }
+.bounty-reward span { font-size: 0.85rem; color: var(--muted); font-family: var(--font-body); }
+
+/* ── NFT Mint Cards ── */
+.mint-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.mint-card {
+  border-radius: 10px; padding: 32px;
+  position: relative; overflow: hidden;
+}
+.mint-card.genesis {
+  background: linear-gradient(135deg, #1a0a00 0%, #2a1000 100%);
+  border: 1px solid rgba(255,149,0,0.4);
+}
+.mint-card.early {
+  background: linear-gradient(135deg, #0a0a1a 0%, #100a1a 100%);
+  border: 1px solid rgba(232,53,10,0.4);
+}
+.mint-card::before {
+  content: '';
+  position: absolute; top: -40px; right: -40px;
+  width: 150px; height: 150px; border-radius: 50%;
+  opacity: 0.08;
+}
+.mint-card.genesis::before { background: var(--amber); }
+.mint-card.early::before { background: var(--red); }
+.mint-tier-badge {
+  font-family: var(--font-mono); font-size: 0.7rem;
+  text-transform: uppercase; letter-spacing: 2px;
+  margin-bottom: 12px;
+}
+.mint-price { font-family: var(--font-display); font-size: 2.5rem; margin: 16px 0; }
+.mint-supply { font-size: 0.82rem; color: var(--muted); margin-bottom: 20px; }
+.mint-perks { list-style: none; margin-bottom: 24px; }
+.mint-perks li {
+  font-size: 0.85rem; padding: 5px 0;
+  display: flex; align-items: center; gap: 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.mint-perks li::before { content: '✓'; color: var(--orange); font-weight: 700; }
+.supply-bar {
+  height: 4px; background: var(--border); border-radius: 2px; margin-bottom: 6px;
+}
+.supply-fill { height: 100%; background: linear-gradient(90deg, var(--red), var(--orange)); border-radius: 2px; transition: width 0.5s; }
+
+/* ── Submission cards ── */
+.submission-card {
+  background: var(--dark); border: 1px solid var(--border);
+  border-radius: 6px; padding: 16px;
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 12px; margin-bottom: 10px;
+}
+.submission-card.winner { border-color: var(--amber); background: rgba(255,149,0,0.05); }
+.sub-link { font-family: var(--font-mono); font-size: 0.78rem; color: var(--orange); }
+.sub-meta { font-size: 0.78rem; color: var(--muted); }
+.vote-count { font-family: var(--font-display); font-size: 1.2rem; color: var(--orange); }
+
+/* ── Profile ── */
+.profile-header {
+  background: linear-gradient(135deg, #1a0a00, #0a0a0a);
+  border: 1px solid var(--border);
+  border-radius: 10px; padding: 32px;
+  margin-bottom: 24px;
+  display: flex; gap: 24px; align-items: center;
+}
+.profile-avatar {
+  width: 72px; height: 72px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--red), var(--orange));
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display); font-size: 2rem; flex-shrink: 0;
+}
+.rep-bar-wrap { margin-top: 8px; }
+.rep-bar { height: 6px; background: var(--border); border-radius: 3px; }
+.rep-fill { height: 100%; background: linear-gradient(90deg, var(--red), var(--orange)); border-radius: 3px; }
+
+/* ── Tx Status ── */
+.tx-status {
+  padding: 12px 16px; border-radius: 6px;
+  font-size: 0.85rem; margin-top: 12px;
+  display: none;
+}
+.tx-status.show { display: block; }
+.tx-pending { background: rgba(255,149,0,0.1); color: var(--amber); border: 1px solid rgba(255,149,0,0.3); }
+.tx-success { background: rgba(34,197,94,0.1); color: var(--success); border: 1px solid rgba(34,197,94,0.3); }
+.tx-error   { background: rgba(232,53,10,0.1); color: var(--red); border: 1px solid rgba(232,53,10,0.3); }
+
+/* ── Filters ── */
+.filter-row { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+.filter-btn {
+  padding: 6px 14px; border-radius: 4px;
+  background: var(--dark); border: 1px solid var(--border);
+  color: var(--muted); font-size: 0.8rem; font-weight: 600;
+  cursor: pointer; transition: all 0.15s;
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.filter-btn.active, .filter-btn:hover { border-color: var(--red); color: var(--red); background: rgba(232,53,10,0.08); }
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .dashboard-grid { grid-template-columns: 1fr; }
+  .sidebar { position: static; height: auto; display: flex; flex-wrap: wrap; padding: 12px; border-right: none; border-bottom: 1px solid var(--border); }
+  .sidebar-section { flex: 1; min-width: 120px; }
+  .mint-grid { grid-template-columns: 1fr; }
+  .hero-stats { gap: 24px; flex-wrap: wrap; }
+  .main-content { padding: 20px; }
+  .profile-header { flex-direction: column; text-align: center; }
+}
+
+/* ── Divider ── */
+.divider { height: 1px; background: var(--border); margin: 24px 0; }
+
+/* ── Empty State ── */
+.empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
+.empty-state .icon { font-size: 3rem; margin-bottom: 12px; }
+.empty-state p { font-size: 0.9rem; }
+
+/* ── Loading spinner ── */
+.spinner {
+  width: 18px; height: 18px;
+  border: 2px solid rgba(255,255,255,0.2);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Onboarding Modal specific ── */
+.role-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+.role-card {
+  border: 2px solid var(--border); border-radius: 8px;
+  padding: 20px; cursor: pointer; transition: all 0.2s; text-align: center;
+}
+.role-card:hover { border-color: var(--orange); }
+.role-card.selected { border-color: var(--red); background: rgba(232,53,10,0.08); }
+.role-card .role-icon { font-size: 2rem; margin-bottom: 8px; }
+.role-card h4 { font-size: 1rem; margin-bottom: 4px; }
+.role-card p { font-size: 0.78rem; color: var(--muted); }
+
+/* ── Steps ── */
+.step-indicator { display: flex; gap: 8px; margin-bottom: 24px; }
+.step-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); transition: background 0.3s; }
+.step-dot.active { background: var(--red); }
+.step-dot.done { background: var(--orange); }
+
+/* ── Tag row ── */
+.tag-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag { padding: 3px 10px; background: var(--dark); border: 1px solid var(--border); border-radius: 3px; font-size: 0.75rem; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<!-- TOAST CONTAINER -->
+<div id="toast-container"></div>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo" onclick="showPage('home')">
+    <svg width="120" height="32" viewBox="0 0 120 32" fill="none" xmlns="http://www.w3.org/2000/svg" style="cursor:pointer;">
+      <defs>
+        <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#E8350A">
+            <animate attributeName="stop-color" values="#E8350A;#FF6B1A;#FF9500;#E8350A" dur="3s" repeatCount="indefinite"/>
+          </stop>
+          <stop offset="100%" stop-color="#FF9500">
+            <animate attributeName="stop-color" values="#FF9500;#E8350A;#FF6B1A;#FF9500" dur="3s" repeatCount="indefinite"/>
+          </stop>
+        </linearGradient>
+        <filter id="logoGlow">
+          <feGaussianBlur stdDeviation="1.5" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+      <!-- Clip icon: film clapperboard shape -->
+      <rect x="1" y="7" width="20" height="18" rx="2" fill="url(#logoGrad)" opacity="0.9">
+        <animate attributeName="opacity" values="0.9;1;0.9" dur="2s" repeatCount="indefinite"/>
+      </rect>
+      <rect x="1" y="7" width="20" height="5" rx="1" fill="#0A0A0A" opacity="0.4"/>
+      <!-- clapperboard stripes -->
+      <line x1="5" y1="7" x2="3" y2="12" stroke="#0A0A0A" stroke-width="1.5" opacity="0.6"/>
+      <line x1="9" y1="7" x2="7" y2="12" stroke="#0A0A0A" stroke-width="1.5" opacity="0.6"/>
+      <line x1="13" y1="7" x2="11" y2="12" stroke="#0A0A0A" stroke-width="1.5" opacity="0.6"/>
+      <line x1="17" y1="7" x2="15" y2="12" stroke="#0A0A0A" stroke-width="1.5" opacity="0.6"/>
+      <!-- play triangle inside -->
+      <polygon points="8,17 8,23 15,20" fill="white" opacity="0.9">
+        <animate attributeName="opacity" values="0.9;0.5;0.9" dur="1.5s" repeatCount="indefinite"/>
+      </polygon>
+      <!-- CLIP text -->
+      <text x="26" y="23" font-family="'Bebas Neue', sans-serif" font-size="20" letter-spacing="2" fill="url(#logoGrad)" filter="url(#logoGlow)">CLIP</text>
+      <!-- DAO text -->
+      <text x="72" y="23" font-family="'Bebas Neue', sans-serif" font-size="20" letter-spacing="2" fill="#F0F0F0">DAO</text>
+      <!-- animated underline -->
+      <line x1="26" y1="26" x2="119" y2="26" stroke="url(#logoGrad)" stroke-width="1.5" opacity="0.6">
+        <animate attributeName="x2" values="26;119;26" dur="2.5s" repeatCount="indefinite" calcMode="ease-in-out"/>
+        <animate attributeName="opacity" values="0.6;1;0.6" dur="2.5s" repeatCount="indefinite"/>
+      </line>
+    </svg>
+  </div>
+  <div class="nav-right">
+    <button class="btn btn-ghost btn-sm" onclick="showPage('docs')" style="display:inline-flex;">Docs</button>
+    <span id="nav-balance" class="nav-addr" style="display:none;color:var(--amber);border-color:rgba(255,149,0,0.3);background:rgba(255,149,0,0.08);"></span>
+    <span id="nav-addr" class="nav-addr" style="display:none"></span>
+    <button id="btn-connect" class="btn btn-primary btn-sm" onclick="connectWallet()">Connect Wallet</button>
+    <button id="btn-dashboard" class="btn btn-ghost btn-sm" style="display:none" onclick="showPage('dashboard')">Dashboard</button>
+    <button id="btn-disconnect" class="btn btn-ghost btn-sm" style="display:none" onclick="disconnectWallet()">Disconnect</button>
+  </div>
+</nav>
+
+<!-- ===================== PAGE: HOME ===================== -->
+<div id="page-home" class="page active">
+  <div class="container">
+    <div class="hero">
+      <div class="hero-inner">
+        <div class="hero-eyebrow">Built on Avalanche Fuji Testnet</div>
+        <h1>Clip.<br>Submit.<br><em>Get Paid.</em></h1>
+        <p>The first decentralized marketplace connecting streamers and clippers through trustless smart contracts. No middlemen. Automatic payouts. On-chain reputation.</p>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+          <button class="btn btn-primary" onclick="connectWallet()">🔥 Connect & Start</button>
+          <button class="btn btn-ghost" onclick="showPage('mint')">Mint NFT</button>
+          <button class="btn btn-ghost" onclick="showPage('bounties')">Browse Bounties</button>
+        </div>
+        <div class="hero-stats">
+          <div class="stat-item">
+            <div class="stat-num" id="stat-bounties">0</div>
+            <div class="stat-label">Open Bounties</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-num" id="stat-genesis">500</div>
+            <div class="stat-label">Genesis Supply</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-num" id="stat-paid">0</div>
+            <div class="stat-label">AVAX Paid Out</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== PAGE: DASHBOARD ===================== -->
+<div id="page-dashboard" class="page">
+  <div class="dashboard-grid">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-label">Main</div>
+        <div class="nav-item active" onclick="switchTab('tab-overview')" id="nav-overview">
+          <span class="icon">⚡</span> Overview
+        </div>
+        <div class="nav-item" onclick="switchTab('tab-bounties-dash')" id="nav-bounties-dash">
+          <span class="icon">🎯</span> Bounty Board
+        </div>
+        <div class="nav-item" onclick="switchTab('tab-submissions')" id="nav-submissions">
+          <span class="icon">📎</span> My Submissions
+        </div>
+        <div class="nav-item" onclick="switchTab('tab-post')" id="nav-post">
+          <span class="icon">➕</span> Post Bounty
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Account</div>
+        <div class="nav-item" onclick="switchTab('tab-profile')" id="nav-profile">
+          <span class="icon">👤</span> Profile
+        </div>
+        <div class="nav-item" onclick="showPage('mint')" id="nav-mint">
+          <span class="icon">🔑</span> NFT Mint
+        </div>
+        <div class="nav-item" onclick="showPage('docs')" id="nav-docs">
+          <span class="icon">📖</span> How It Works
+        </div>
+      </div>
+      <div class="sidebar-section" style="margin-top:auto;padding-top:20px;">
+        <div class="nav-item" style="color:var(--red);" onclick="disconnectWallet()">
+          <span class="icon">🚪</span> Disconnect
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main content -->
+    <main class="main-content">
+
+      <!-- TAB: Overview -->
+      <div id="tab-overview" class="dash-tab">
+        <div class="page-header">
+          <h2>Overview</h2>
+          <p id="dash-welcome">Welcome back</p>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:28px;">
+          <div class="card">
+            <div style="color:var(--muted);font-size:0.78rem;text-transform:uppercase;margin-bottom:6px;">NFT Tier</div>
+            <div id="overview-tier" style="font-family:var(--font-display);font-size:1.5rem;color:var(--orange);">—</div>
+          </div>
+          <div class="card">
+            <div style="color:var(--muted);font-size:0.78rem;text-transform:uppercase;margin-bottom:6px;">Reputation</div>
+            <div id="overview-rep" style="font-family:var(--font-display);font-size:1.5rem;color:var(--red);">0</div>
+          </div>
+          <div class="card">
+            <div style="color:var(--muted);font-size:0.78rem;text-transform:uppercase;margin-bottom:6px;">Bounties Won</div>
+            <div id="overview-won" style="font-family:var(--font-display);font-size:1.5rem;color:var(--orange);">0</div>
+          </div>
+          <div class="card">
+            <div style="color:var(--muted);font-size:0.78rem;text-transform:uppercase;margin-bottom:6px;">Role</div>
+            <div id="overview-role" style="font-family:var(--font-display);font-size:1.5rem;color:var(--amber);">—</div>
+          </div>
+        </div>
+        <div class="card">
+          <h3 style="margin-bottom:16px;color:var(--orange);">Recent Activity</h3>
+          <div id="recent-activity">
+            <div class="empty-state"><div class="icon">📋</div><p>No activity yet</p></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: Bounty Board (dashboard) -->
+      <div id="tab-bounties-dash" class="dash-tab" style="display:none">
+        <div class="page-header">
+          <h2>Bounty Board</h2>
+          <p>Find open bounties and submit your clips</p>
+        </div>
+        <div class="filter-row">
+          <button class="filter-btn active" onclick="filterBounties('open',this)">Open</button>
+          <button class="filter-btn" onclick="filterBounties('closed',this)">Closed</button>
+          <button class="filter-btn" onclick="filterBounties('all',this)">All</button>
+        </div>
+        <div id="bounty-list-dash" class="bounty-grid">
+          <div class="empty-state"><div class="spinner"></div><p>Loading bounties...</p></div>
+        </div>
+      </div>
+
+      <!-- TAB: My Submissions -->
+      <div id="tab-submissions" class="dash-tab" style="display:none">
+        <div class="page-header">
+          <h2>My Submissions</h2>
+          <p>Track your clip submissions and earnings</p>
+        </div>
+        <div id="my-submissions-list">
+          <div class="empty-state"><div class="icon">📎</div><p>No submissions yet</p></div>
+        </div>
+      </div>
+
+      <!-- TAB: Post Bounty -->
+      <div id="tab-post" class="dash-tab" style="display:none">
+        <div class="page-header">
+          <h2>Post a Bounty</h2>
+          <p>Lock AVAX in escrow and get clips made from Blaze or Arena</p>
+        </div>
+        <div class="card" style="max-width:600px;">
+          <div class="form-group">
+            <label>Bounty Title</label>
+            <input type="text" id="post-title" placeholder="e.g. Best hype clip from tonight's stream"/>
+          </div>
+          <div class="form-group">
+            <label>Description — What clips do you want?</label>
+            <textarea id="post-desc" placeholder="Describe the stream, the moments you want clipped, the vibe..."></textarea>
+          </div>
+          <div class="form-group">
+            <label>Clip Source Platform</label>
+            <select id="post-platform">
+              <option value="blaze">🔥 Blaze (blaze.stream)</option>
+              <option value="arena">🏟️ Arena (arena.social/live)</option>
+              <option value="both">Both Blaze & Arena</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Your Stream / Channel Link</label>
+            <input type="url" id="post-stream-link" placeholder="https://blaze.stream/yourchannel or https://arena.social/live/..."/>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div class="form-group">
+              <label>Reward (AVAX)</label>
+              <input type="number" id="post-reward" placeholder="0.5" min="0.01" step="0.01"/>
+            </div>
+            <div class="form-group">
+              <label>Duration</label>
+              <select id="post-duration">
+                <option value="24">24 hours</option>
+                <option value="48" selected>48 hours</option>
+                <option value="72">72 hours</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div class="form-group">
+              <label>Resolution Mode</label>
+              <select id="post-mode">
+                <option value="0">Streamer Picks</option>
+                <option value="1">Community Vote</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Number of Winners</label>
+              <select id="post-winners">
+                <option value="1">1 Winner (100%)</option>
+                <option value="2">2 Winners (60/40)</option>
+                <option value="3">3 Winners (60/30/10)</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Max Submissions Per Clipper</label>
+            <select id="post-max-subs">
+              <option value="1">1 submission</option>
+              <option value="2">2 submissions</option>
+              <option value="3" selected>3 submissions</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Special Requirements / Note to Clippers</label>
+            <textarea id="post-note" placeholder="e.g. Must be from my stream on [date]. Clip must include the chat reaction. No music edits. Portrait format preferred for X posts..." style="min-height:70px;"></textarea>
+          </div>
+          <div style="background:rgba(255,107,26,0.06);border:1px solid rgba(255,107,26,0.2);border-radius:6px;padding:12px;margin-bottom:16px;font-size:0.82rem;color:var(--muted);">
+            💡 Clippers submit their video post link from <strong style="color:var(--orange);">X or YouTube</strong> — they clip from your Blaze or Arena stream, post it, then submit the link here.
+          </div>
+          <div id="tx-post" class="tx-status"></div>
+          <button class="btn btn-primary" onclick="postBounty()" style="width:100%;">🔒 Lock AVAX & Post Bounty</button>
+        </div>
+      </div>
+
+      <!-- TAB: Profile -->
+      <div id="tab-profile" class="dash-tab" style="display:none">
+        <div class="page-header">
+          <h2>My Profile</h2>
+        </div>
+        <div class="profile-header">
+          <div class="profile-avatar" id="profile-avatar-letter">?</div>
+          <div>
+            <h3 id="profile-username" style="margin-bottom:4px;">—</h3>
+            <div class="mono" style="color:var(--muted);margin-bottom:8px;" id="profile-wallet-short">—</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;" id="profile-badges"></div>
+            <div class="rep-bar-wrap" style="margin-top:12px;">
+              <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                <span style="font-size:0.78rem;color:var(--muted);">Reputation</span>
+                <span style="font-size:0.78rem;color:var(--orange);" id="profile-rep-num">0</span>
+              </div>
+              <div class="rep-bar"><div class="rep-fill" id="profile-rep-bar" style="width:0%"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="max-width:480px;">
+          <h3 style="margin-bottom:16px;color:var(--orange);">Update Profile</h3>
+          <div class="form-group">
+            <label>Username</label>
+            <input type="text" id="edit-username" placeholder="Your name"/>
+          </div>
+          <div class="form-group">
+            <label>X (Twitter) Handle</label>
+            <input type="text" id="edit-xhandle" placeholder="@yourhandle"/>
+          </div>
+          <div class="form-group">
+            <label>Platform</label>
+            <select id="edit-platform">
+              <option value="blaze">Blaze</option>
+              <option value="arena">Arena</option>
+              <option value="twitch">Twitch</option>
+              <option value="youtube">YouTube</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Channel / Profile Link</label>
+            <input type="text" id="edit-channel" placeholder="https://..."/>
+          </div>
+          <div id="tx-profile" class="tx-status"></div>
+          <button class="btn btn-orange" onclick="saveProfile()" style="width:100%;">Save Profile</button>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- ===================== PAGE: MINT ===================== -->
+<div id="page-mint" class="page">
+  <div class="container" style="padding-top:40px;padding-bottom:60px;">
+    <div class="page-header" style="margin-bottom:40px;">
+      <h2>Mint Your NFT</h2>
+      <p style="color:var(--muted);">Your key to the ClipDAO ecosystem. One per wallet.</p>
+    </div>
+    <div class="mint-grid">
+      <!-- Genesis -->
+      <div class="mint-card genesis">
+        <div class="mint-tier-badge" style="color:var(--amber);">⭐ Genesis Tier</div>
+        <h3 style="color:var(--amber);">Genesis NFT</h3>
+        <div class="mint-price" style="color:var(--amber);">0.5 <span style="font-size:1rem;color:var(--muted);">AVAX</span></div>
+        <div class="supply-bar">
+          <div class="supply-fill" id="genesis-bar" style="width:0%"></div>
+        </div>
+        <div class="mint-supply"><span id="genesis-minted">0</span> / 500 minted</div>
+        <ul class="mint-perks">
+          <li>Lifetime 1% platform fee</li>
+          <li>3x community voting power</li>
+          <li>Monthly revenue share</li>
+          <li>Exclusive Genesis bounties</li>
+          <li>First access to brand campaigns</li>
+          <li>Gold badge + evolving NFT</li>
+        </ul>
+        <div class="form-group">
+          <label>Username</label>
+          <input type="text" id="gen-username" placeholder="Your name"/>
+        </div>
+        <div class="form-group">
+          <label>X Handle</label>
+          <input type="text" id="gen-xhandle" placeholder="@handle"/>
+        </div>
+        <div class="form-group">
+          <label>Platform</label>
+          <select id="gen-platform">
+            <option value="blaze">Blaze</option>
+            <option value="arena">Arena</option>
+            <option value="twitch">Twitch</option>
+            <option value="youtube">YouTube</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Role</label>
+          <select id="gen-role">
+            <option value="1">Clipper</option>
+            <option value="2">Streamer</option>
+          </select>
+        </div>
+        <div id="tx-genesis" class="tx-status"></div>
+        <button class="btn btn-orange" onclick="mintGenesis()" style="width:100%;margin-top:8px;" id="btn-mint-genesis">
+          Mint Genesis NFT
+        </button>
+      </div>
+
+      <!-- Early Access -->
+      <div class="mint-card early">
+        <div class="mint-tier-badge" style="color:var(--red);">🔥 Early Access</div>
+        <h3>Early Access NFT</h3>
+        <div class="mint-price" style="color:var(--red);">0.1 <span style="font-size:1rem;color:var(--muted);">AVAX</span></div>
+        <div class="mint-supply" style="margin-top:20px;">Open mint window</div>
+        <ul class="mint-perks">
+          <li>Reduced 2.5% platform fee</li>
+          <li>1.5x voting power</li>
+          <li>Early campaign access</li>
+          <li>Early adopter badge</li>
+          <li>Evolving NFT</li>
+        </ul>
+        <div class="form-group">
+          <label>Username</label>
+          <input type="text" id="ea-username" placeholder="Your name"/>
+        </div>
+        <div class="form-group">
+          <label>X Handle</label>
+          <input type="text" id="ea-xhandle" placeholder="@handle"/>
+        </div>
+        <div class="form-group">
+          <label>Platform</label>
+          <select id="ea-platform">
+            <option value="blaze">Blaze</option>
+            <option value="arena">Arena</option>
+            <option value="twitch">Twitch</option>
+            <option value="youtube">YouTube</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Role</label>
+          <select id="ea-role">
+            <option value="1">Clipper</option>
+            <option value="2">Streamer</option>
+          </select>
+        </div>
+        <div id="tx-early" class="tx-status"></div>
+        <button class="btn btn-primary" onclick="mintEarlyAccess()" style="width:100%;margin-top:8px;" id="btn-mint-early">
+          Mint Early Access NFT
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== PAGE: BOUNTIES (public) ===================== -->
+<div id="page-bounties" class="page">
+  <div class="container" style="padding-top:40px;padding-bottom:60px;">
+    <div class="page-header" style="margin-bottom:28px;">
+      <h2>Bounty Board</h2>
+      <p style="color:var(--muted);">Open clip bounties with AVAX locked in escrow</p>
+    </div>
+    <div class="filter-row">
+      <button class="filter-btn active" onclick="filterBounties('open',this)">Open</button>
+      <button class="filter-btn" onclick="filterBounties('closed',this)">Closed</button>
+      <button class="filter-btn" onclick="filterBounties('all',this)">All</button>
+    </div>
+    <div id="bounty-list-public" class="bounty-grid">
+      <div class="empty-state"><div class="spinner"></div><p>Loading...</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: Bounty Detail ===================== -->
+<div class="modal-overlay" id="modal-bounty">
+  <div class="modal" style="max-width:620px;">
+    <button class="modal-close" onclick="closeModal('modal-bounty')">✕</button>
+    <div id="modal-bounty-content"></div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: Onboarding ===================== -->
+<div class="modal-overlay" id="modal-onboard">
+  <div class="modal">
+    <h2>Welcome to ClipDAO</h2>
+    <div class="step-indicator">
+      <div class="step-dot active" id="step-dot-1"></div>
+      <div class="step-dot" id="step-dot-2"></div>
+      <div class="step-dot" id="step-dot-3"></div>
+    </div>
+
+    <!-- Step 1: Role -->
+    <div id="onboard-step-1">
+      <p style="color:var(--muted);margin-bottom:20px;font-size:0.9rem;">Choose your primary role on ClipDAO</p>
+      <div class="role-cards">
+        <div class="role-card" onclick="selectRole('clipper',this)" id="role-clipper">
+          <div class="role-icon">✂️</div>
+          <h4>Clipper</h4>
+          <p>Submit clips, win bounties, earn AVAX</p>
+        </div>
+        <div class="role-card" onclick="selectRole('streamer',this)" id="role-streamer">
+          <div class="role-icon">📡</div>
+          <h4>Streamer</h4>
+          <p>Post bounties, get clips made, pay winners</p>
+        </div>
+      </div>
+      <button class="btn btn-primary" style="width:100%" onclick="onboardNext(2)">Continue →</button>
+    </div>
+
+    <!-- Step 2: Profile -->
+    <div id="onboard-step-2" style="display:none">
+      <p style="color:var(--muted);margin-bottom:20px;font-size:0.9rem;">Set up your profile</p>
+      <div class="form-group">
+        <label>Username</label>
+        <input type="text" id="ob-username" placeholder="Your name"/>
+      </div>
+      <div class="form-group">
+        <label>X (Twitter) Handle</label>
+        <input type="text" id="ob-xhandle" placeholder="@yourhandle"/>
+      </div>
+      <div class="form-group">
+        <label>Platform</label>
+        <select id="ob-platform">
+          <option value="blaze">Blaze</option>
+          <option value="arena">Arena</option>
+          <option value="twitch">Twitch</option>
+          <option value="youtube">YouTube</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Channel / Profile Link</label>
+        <input type="text" id="ob-channel" placeholder="https://..."/>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-ghost" onclick="onboardNext(1)" style="flex:1">← Back</button>
+        <button class="btn btn-primary" onclick="onboardNext(3)" style="flex:2">Continue →</button>
+      </div>
+    </div>
+
+    <!-- Step 3: NFT check -->
+    <div id="onboard-step-3" style="display:none">
+      <div id="ob-has-nft" style="display:none">
+        <div style="text-align:center;padding:20px 0;">
+          <div style="font-size:3rem;margin-bottom:12px;">✅</div>
+          <h3 style="color:var(--success);margin-bottom:8px;">NFT Detected!</h3>
+          <p style="color:var(--muted);font-size:0.9rem;">You already have a ClipDAO NFT.</p>
+          <button class="btn btn-primary" style="width:100%;margin-top:20px;" onclick="finishOnboarding()">Enter ClipDAO →</button>
+        </div>
+      </div>
+      <div id="ob-no-nft">
+        <div style="text-align:center;padding:20px 0;">
+          <div style="font-size:3rem;margin-bottom:12px;">🔑</div>
+          <h3 style="color:var(--orange);margin-bottom:8px;">Mint Your NFT</h3>
+          <p style="color:var(--muted);font-size:0.9rem;margin-bottom:20px;">You need a ClipDAO NFT to post bounties, submit clips, and vote.</p>
+          <button class="btn btn-primary" style="width:100%" onclick="closeModal('modal-onboard');showPage('mint')">Go to Mint Page →</button>
+          <button class="btn btn-ghost" style="width:100%;margin-top:8px;" onclick="finishOnboarding()">Browse First</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+// =====================================================================
 <!-- ===================== PAGE: DOCS ===================== -->
 <div id="page-docs" class="page">
   <div class="container" style="padding-top:48px;padding-bottom:80px;max-width:860px;">
