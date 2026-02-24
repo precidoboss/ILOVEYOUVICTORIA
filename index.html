@@ -165,6 +165,12 @@ function disconnectWallet() {
   document.getElementById('btn-disconnect').style.display = 'none';
   document.getElementById('nav-addr').style.display = 'none';
   document.getElementById('nav-balance').style.display = 'none';
+  const hc = document.getElementById('hero-connect-btn');
+  const hd = document.getElementById('hero-dashboard-btn');
+  if (hc) hc.style.display = 'inline-flex';
+  if (hd) hd.style.display = 'none';
+  const mbn = document.getElementById('mobile-bottom-nav');
+  if (mbn) mbn.style.display = 'none';
   showPage('home');
   toast('Disconnected', 'info');
 }
@@ -182,12 +188,22 @@ function updateNavWallet() {
   document.getElementById('btn-connect').style.display = 'none';
   document.getElementById('btn-dashboard').style.display = 'inline-flex';
   document.getElementById('btn-disconnect').style.display = 'inline-flex';
+  // Hero CTA: swap to "connected" state
+  const hc = document.getElementById('hero-connect-btn');
+  const hd = document.getElementById('hero-dashboard-btn');
+  if (hc) hc.style.display = 'none';
+  if (hd) hd.style.display = 'inline-flex';
+  // Show mobile bottom nav when on dashboard
+  const mbn = document.getElementById('mobile-bottom-nav');
+  if (mbn) mbn.style.display = 'flex';
   // Fetch and show AVAX balance
   provider.getBalance(account).then(bal => {
     const avax = parseFloat(ethers.formatEther(bal)).toFixed(3);
     const el = document.getElementById('nav-balance');
-    el.textContent = avax + ' AVAX';
-    el.style.display = 'inline-block';
+    if (el) { el.textContent = avax + ' AVAX'; el.style.display = 'inline-block'; }
+    // Also update overview balance card
+    const ob = document.getElementById('overview-balance');
+    if (ob) ob.textContent = avax + ' AVAX';
   }).catch(() => {});
 }
 
@@ -831,11 +847,20 @@ function switchTab(tabId) {
     'tab-bounties-dash': 'nav-bounties-dash',
     'tab-submissions':   'nav-submissions',
     'tab-post':          'nav-post',
-    'tab-profile':       'nav-profile'
+    'tab-profile':       'nav-profile',
+    'tab-inventory':     'nav-inventory'
   };
   document.getElementById(map[tabId])?.classList.add('active');
   if (tabId === 'tab-bounties-dash') loadBounties();
   if (tabId === 'tab-submissions')   loadMySubmissions();
+  if (tabId === 'tab-inventory')     loadInventory();
+  // Scroll to top on mobile
+  window.scrollTo(0, 0);
+}
+
+function setMobileActive(btnId) {
+  document.querySelectorAll('.mobile-nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(btnId)?.classList.add('active');
 }
 
 function openModal(id)  { document.getElementById(id).classList.add('active'); }
@@ -878,6 +903,127 @@ if (window.ethereum) {
 }
 
 // =====================================================================
+// NFT INVENTORY
+// =====================================================================
+async function loadInventory() {
+  const el = document.getElementById('inventory-content');
+  if (!el || !account) return;
+  el.innerHTML = '<div class="empty-state"><div class="spinner"></div><p>Loading NFT...</p></div>';
+  try {
+    const hasNft = await nftContract.hasNFT(account);
+    if (!hasNft) {
+      el.innerHTML = `<div class="empty-state" style="padding:60px 20px;">
+        <div style="font-size:4rem;margin-bottom:16px;">🔑</div>
+        <h3 style="margin-bottom:8px;color:var(--orange);">No NFT Found</h3>
+        <p style="margin-bottom:20px;">Mint a ClipDAO NFT to unlock the full platform.</p>
+        <button class="btn btn-primary" onclick="showPage('mint')">Mint Now</button>
+      </div>`;
+      return;
+    }
+    const tokenId    = await nftContract.walletToToken(account);
+    const d          = await nftContract.getTokenData(tokenId);
+    const tokenIdNum = Number(tokenId);
+    const tier       = Number(d.tier);
+    const role       = Number(d.role);
+    const level      = Number(d.level);
+    const won        = Number(d.bountiesWon);
+    const posted     = Number(d.bountiesPosted);
+    const votes      = Number(d.votesReceived);
+    const tierName   = tier === 1 ? 'Genesis' : 'Early Access';
+    const roleName   = role === 1 ? 'Clipper' : 'Streamer';
+    const imgUrl     = 'https://ipfs.io/ipfs/bafkreifw3rrlcu3u33rz7qbnvouwkknvxpcs4pff3ro4knkjum4suz57ky';
+    const levelPct   = (level / 10) * 100;
+    const votePwr    = tier === 1 ? '3x' : tier === 2 ? '1.5x' : '1x';
+    const feePct     = tier === 1 ? '1%' : tier === 2 ? '2.5%' : '5%';
+    const tierColor  = tier === 1 ? 'rgba(255,149,0,0.5)' : 'rgba(232,53,10,0.5)';
+
+    // Set NFT image as profile picture everywhere
+    document.querySelectorAll('.profile-avatar').forEach(av => {
+      av.style.backgroundImage = `url(${imgUrl})`;
+      av.style.backgroundSize = 'cover';
+      av.style.backgroundPosition = 'center';
+      av.textContent = '';
+    });
+
+    el.innerHTML = `
+      <div style="max-width:500px;">
+        <div style="border-radius:16px;overflow:hidden;border:1px solid ${tierColor};margin-bottom:20px;">
+          <div style="position:relative;background:#111;">
+            <img src="${imgUrl}" alt="ClipDAO NFT #${tokenIdNum}"
+              style="width:100%;display:block;object-fit:cover;"
+              onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/>
+            <div style="display:none;align-items:center;justify-content:center;min-height:260px;background:linear-gradient(135deg,#1a0a00,#0a0a1a);">
+              <div style="text-align:center;"><div style="font-size:5rem;">🎬</div>
+              <div style="font-family:var(--font-display);font-size:2rem;color:var(--orange);">CLIP DAO</div></div>
+            </div>
+            <div style="position:absolute;top:12px;left:12px;display:flex;gap:6px;flex-wrap:wrap;">
+              <span class="badge ${tier===1?'badge-amber':'badge-red'}">${tier===1?'⭐ Genesis':'🔥 Early Access'}</span>
+              <span class="badge badge-orange">${roleName}</span>
+            </div>
+            <div style="position:absolute;top:12px;right:12px;">
+              <span style="background:rgba(0,0,0,0.75);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:4px 10px;font-family:var(--font-mono);font-size:0.72rem;color:white;">LVL ${level}</span>
+            </div>
+          </div>
+          <div style="background:var(--card);padding:16px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <div>
+              <div style="font-family:var(--font-display);font-size:1.1rem;">ClipDAO #${tokenIdNum}</div>
+              <div style="font-size:0.8rem;color:var(--muted);">${d.username||'Anonymous'} · @${d.xHandle||'—'}</div>
+            </div>
+            <a href="https://testnet.snowtrace.io/token/${NFT_ADDRESS}?a=${tokenIdNum}" target="_blank" class="btn btn-ghost btn-sm">View ↗</a>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:14px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+            <span style="font-weight:700;">Level ${level} / 10</span>
+            <span style="font-size:0.8rem;color:var(--muted);">${Math.round(levelPct)}%</span>
+          </div>
+          <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden;">
+            <div style="height:100%;width:${levelPct}%;background:linear-gradient(90deg,var(--red),var(--orange));border-radius:4px;"></div>
+          </div>
+          <div style="font-size:0.75rem;color:var(--muted);margin-top:6px;">${5-(won%5)} more wins or ${20-(votes%20)} more votes to next level</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px;">
+          <div class="card" style="text-align:center;padding:12px;">
+            <div style="font-family:var(--font-display);font-size:1.6rem;color:var(--orange);">${won}</div>
+            <div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;">Wins</div>
+          </div>
+          <div class="card" style="text-align:center;padding:12px;">
+            <div style="font-family:var(--font-display);font-size:1.6rem;color:var(--amber);">${votes}</div>
+            <div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;">Votes</div>
+          </div>
+          <div class="card" style="text-align:center;padding:12px;">
+            <div style="font-family:var(--font-display);font-size:1.6rem;color:var(--red);">${posted}</div>
+            <div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;">Posted</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div style="font-weight:700;margin-bottom:10px;color:var(--orange);">Tier Perks</div>
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            <div style="display:flex;justify-content:space-between;padding:8px;background:var(--dark);border-radius:5px;font-size:0.85rem;">
+              <span style="color:var(--muted);">Platform Fee</span><strong style="color:var(--success);">${feePct}</strong>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:8px;background:var(--dark);border-radius:5px;font-size:0.85rem;">
+              <span style="color:var(--muted);">Voting Power</span><strong style="color:var(--orange);">${votePwr}</strong>
+            </div>
+            ${tier===1?`<div style="display:flex;justify-content:space-between;padding:8px;background:var(--dark);border-radius:5px;font-size:0.85rem;">
+              <span style="color:var(--muted);">Revenue Share</span><strong style="color:var(--amber);">30% monthly</strong>
+            </div>`:''}
+          </div>
+        </div>
+        <div style="margin-top:12px;padding:10px 14px;background:rgba(255,107,26,0.06);border:1px solid rgba(255,107,26,0.2);border-radius:6px;font-size:0.8rem;color:var(--muted);text-align:center;">
+          🖼️ Your NFT image is set as your profile picture across ClipDAO
+        </div>
+      </div>`;
+  } catch(e) {
+    el.innerHTML = `<div class="empty-state"><p>Error loading NFT. Check console.</p></div>`;
+    console.error(e);
+  }
+}
+
+// =====================================================================
 // EXPOSE FUNCTIONS TO WINDOW (fixes onclick not defined errors)
 // =====================================================================
 window.connectWallet    = connectWallet;
@@ -899,6 +1045,8 @@ window.pickWinner       = pickWinner;
 window.resolveVote      = resolveVote;
 window.filterBounties   = filterBounties;
 window.openBountyDetail = openBountyDetail;
+window.setMobileActive  = setMobileActive;
+window.loadInventory    = loadInventory;
 
 // =====================================================================
 // INIT
@@ -1266,13 +1414,98 @@ textarea { resize: vertical; min-height: 80px; }
 
 /* ── Responsive ── */
 @media (max-width: 768px) {
-  .dashboard-grid { grid-template-columns: 1fr; }
-  .sidebar { position: static; height: auto; display: flex; flex-wrap: wrap; padding: 12px; border-right: none; border-bottom: 1px solid var(--border); }
-  .sidebar-section { flex: 1; min-width: 120px; }
-  .mint-grid { grid-template-columns: 1fr; }
-  .hero-stats { gap: 24px; flex-wrap: wrap; }
-  .main-content { padding: 20px; }
-  .profile-header { flex-direction: column; text-align: center; }
+  /* Nav */
+  nav { padding: 0 14px; height: 56px; }
+  nav svg { width: 90px !important; height: 26px !important; }
+  .nav-right { gap: 6px; }
+  .nav-addr { font-size: 0.68rem; padding: 3px 7px; max-width: 90px; overflow: hidden; text-overflow: ellipsis; }
+  #nav-balance { display: none !important; } /* hide balance on mobile — shown in dashboard */
+  .btn-sm { padding: 6px 10px; font-size: 0.75rem; }
+
+  /* Pages */
+  .page { padding-top: 56px; }
+
+  /* Hero */
+  .hero-inner { padding: 40px 0 80px; }
+  .hero h1 { font-size: 3rem; }
+  .hero p { font-size: 0.95rem; }
+  .hero-stats { gap: 16px; flex-wrap: wrap; margin-top: 32px; padding-top: 24px; }
+  .stat-num { font-size: 1.6rem; }
+  .hero-cta-row { flex-direction: column !important; }
+  .hero-cta-row .btn { width: 100%; justify-content: center; }
+
+  /* Dashboard — bottom tab bar on mobile */
+  .dashboard-grid { grid-template-columns: 1fr; padding-bottom: 70px; }
+  .sidebar { display: none; } /* hide sidebar — use bottom bar */
+  .main-content { padding: 16px; }
+
+  /* Mobile bottom nav bar */
+  .mobile-bottom-nav {
+    display: flex !important;
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 99;
+    background: var(--dark); border-top: 1px solid var(--border);
+    height: 60px; align-items: stretch;
+  }
+  .mobile-nav-btn {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 3px; cursor: pointer; transition: all 0.15s;
+    color: var(--muted); font-size: 0.6rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    border: none; background: none;
+  }
+  .mobile-nav-btn .micon { font-size: 1.2rem; }
+  .mobile-nav-btn.active { color: var(--red); }
+  .mobile-nav-btn:hover { color: var(--orange); }
+
+  /* Mint grid */
+  .mint-grid { grid-template-columns: 1fr; gap: 16px; }
+  .mint-card { padding: 20px; }
+  .mint-price { font-size: 2rem; }
+
+  /* Modals */
+  .modal { padding: 20px; }
+  .modal h2 { font-size: 1.4rem; }
+  .role-cards { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .role-card { padding: 14px 10px; }
+
+  /* Cards */
+  .card { padding: 16px; }
+  .profile-header { flex-direction: column; text-align: center; padding: 20px; gap: 16px; }
+  .profile-avatar { width: 80px; height: 80px; }
+  .bounty-card-top { flex-direction: column; gap: 8px; }
+  .bounty-reward { font-size: 1.2rem; }
+
+  /* Overview stats grid */
+  .overview-stats-grid { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
+
+  /* NFT inventory */
+  .nft-inventory-grid { grid-template-columns: 1fr !important; }
+
+  /* Post bounty form */
+  .post-bounty-grid { grid-template-columns: 1fr !important; }
+
+  /* Docs page */
+  #page-docs .container { padding-top: 28px; padding-bottom: 80px; }
+  #page-docs .card { padding: 14px; }
+
+  /* Submission cards */
+  .submission-card { flex-direction: column; align-items: flex-start; gap: 8px; }
+
+  /* Page headers */
+  .page-header h2 { font-size: 1.5rem; }
+}
+
+@media (max-width: 480px) {
+  .hero h1 { font-size: 2.4rem; }
+  .role-cards { grid-template-columns: 1fr; }
+  .hero-stats { gap: 12px; }
+  .stat-num { font-size: 1.4rem; }
+}
+
+/* Desktop — hide mobile bottom nav */
+@media (min-width: 769px) {
+  .mobile-bottom-nav { display: none !important; }
 }
 
 /* ── Divider ── */
@@ -1383,8 +1616,9 @@ textarea { resize: vertical; min-height: 80px; }
         <div class="hero-eyebrow">Built on Avalanche Fuji Testnet</div>
         <h1>Clip.<br>Submit.<br><em>Get Paid.</em></h1>
         <p>The first decentralized marketplace connecting streamers and clippers through trustless smart contracts. No middlemen. Automatic payouts. On-chain reputation.</p>
-        <div style="display:flex;gap:12px;flex-wrap:wrap;">
-          <button class="btn btn-primary" onclick="connectWallet()">🔥 Connect & Start</button>
+        <div class="hero-cta-row" style="display:flex;gap:12px;flex-wrap:wrap;" id="hero-cta">
+          <button class="btn btn-primary" id="hero-connect-btn" onclick="connectWallet()">🔥 Connect & Start</button>
+          <button class="btn btn-ghost" id="hero-dashboard-btn" style="display:none" onclick="showPage('dashboard')">⚡ Go to Dashboard</button>
           <button class="btn btn-ghost" onclick="showPage('mint')">Mint NFT</button>
           <button class="btn btn-ghost" onclick="showPage('bounties')">Browse Bounties</button>
         </div>
@@ -1432,6 +1666,9 @@ textarea { resize: vertical; min-height: 80px; }
         <div class="nav-item" onclick="switchTab('tab-profile')" id="nav-profile">
           <span class="icon">👤</span> Profile
         </div>
+        <div class="nav-item" onclick="switchTab('tab-inventory')" id="nav-inventory">
+          <span class="icon">🖼️</span> My NFT
+        </div>
         <div class="nav-item" onclick="showPage('mint')" id="nav-mint">
           <span class="icon">🔑</span> NFT Mint
         </div>
@@ -1455,7 +1692,7 @@ textarea { resize: vertical; min-height: 80px; }
           <h2>Overview</h2>
           <p id="dash-welcome">Welcome back</p>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:28px;">
+        <div class="overview-stats-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:28px;">
           <div class="card">
             <div style="color:var(--muted);font-size:0.78rem;text-transform:uppercase;margin-bottom:6px;">NFT Tier</div>
             <div id="overview-tier" style="font-family:var(--font-display);font-size:1.5rem;color:var(--orange);">—</div>
@@ -1471,6 +1708,10 @@ textarea { resize: vertical; min-height: 80px; }
           <div class="card">
             <div style="color:var(--muted);font-size:0.78rem;text-transform:uppercase;margin-bottom:6px;">Role</div>
             <div id="overview-role" style="font-family:var(--font-display);font-size:1.5rem;color:var(--amber);">—</div>
+          </div>
+          <div class="card">
+            <div style="color:var(--muted);font-size:0.78rem;text-transform:uppercase;margin-bottom:6px;">AVAX Balance</div>
+            <div id="overview-balance" style="font-family:var(--font-display);font-size:1.4rem;color:var(--success);">—</div>
           </div>
         </div>
         <div class="card">
@@ -1535,7 +1776,7 @@ textarea { resize: vertical; min-height: 80px; }
             <label>Your Stream / Channel Link</label>
             <input type="url" id="post-stream-link" placeholder="https://blaze.stream/yourchannel or https://arena.social/live/..."/>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div class="post-bounty-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
             <div class="form-group">
               <label>Reward (AVAX)</label>
               <input type="number" id="post-reward" placeholder="0.5" min="0.01" step="0.01"/>
@@ -1549,7 +1790,7 @@ textarea { resize: vertical; min-height: 80px; }
               </select>
             </div>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div class="post-bounty-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
             <div class="form-group">
               <label>Resolution Mode</label>
               <select id="post-mode">
@@ -1635,11 +1876,39 @@ textarea { resize: vertical; min-height: 80px; }
         </div>
       </div>
 
+      <!-- TAB: My NFT Inventory -->
+      <div id="tab-inventory" class="dash-tab" style="display:none">
+        <div class="page-header">
+          <h2>My NFT</h2>
+          <p>Your ClipDAO membership NFT and on-chain stats</p>
+        </div>
+        <div id="inventory-content">
+          <div class="empty-state"><div class="spinner"></div><p>Loading NFT...</p></div>
+        </div>
+      </div>
+
     </main>
   </div>
 </div>
 
-<!-- ===================== PAGE: MINT ===================== -->
+<!-- Mobile Bottom Nav Bar -->
+<div class="mobile-bottom-nav" id="mobile-bottom-nav" style="display:none;">
+  <button class="mobile-nav-btn active" id="mob-overview" onclick="switchTab('tab-overview');setMobileActive('mob-overview')">
+    <span class="micon">⚡</span>Home
+  </button>
+  <button class="mobile-nav-btn" id="mob-bounties" onclick="switchTab('tab-bounties-dash');setMobileActive('mob-bounties')">
+    <span class="micon">🎯</span>Bounties
+  </button>
+  <button class="mobile-nav-btn" id="mob-post" onclick="switchTab('tab-post');setMobileActive('mob-post')">
+    <span class="micon">➕</span>Post
+  </button>
+  <button class="mobile-nav-btn" id="mob-nft" onclick="switchTab('tab-inventory');setMobileActive('mob-nft')">
+    <span class="micon">🖼️</span>NFT
+  </button>
+  <button class="mobile-nav-btn" id="mob-profile" onclick="switchTab('tab-profile');setMobileActive('mob-profile')">
+    <span class="micon">👤</span>Profile
+  </button>
+</div>
 <div id="page-mint" class="page">
   <div class="container" style="padding-top:40px;padding-bottom:60px;">
     <div class="page-header" style="margin-bottom:40px;">
