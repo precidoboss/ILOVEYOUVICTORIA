@@ -194,6 +194,12 @@ function updateNavWallet() {
   if (hd) hd.style.display = 'inline-flex';
   const mbn = document.getElementById('mobile-bottom-nav');
   if (mbn) mbn.style.display = 'flex';
+  // Show admin link if admin
+  const admLink = document.getElementById('nav-admin-link');
+  if (admLink) admLink.style.display = isAdmin() ? 'flex' : 'none';
+  // Show admin page button in nav  
+  const admNavBtn = document.getElementById('btn-admin-nav');
+  if (admNavBtn) admNavBtn.style.display = isAdmin() ? 'inline-flex' : 'none';
   // AVAX balance in overview only (not nav on mobile)
   provider.getBalance(account).then(bal => {
     const avax = parseFloat(ethers.formatEther(bal)).toFixed(3);
@@ -324,6 +330,8 @@ async function mintGenesis() {
     await tx.wait();
     setTxStatus('tx-genesis', '✅ Genesis NFT minted!', 'success');
     toast('Genesis NFT minted! Welcome to ClipDAO.', 'success');
+    await finalizeReferral('genesis', 0.5);
+    await logActivity('mint_genesis', { tier:'genesis' });
     await logActivity('mint_genesis', { username, xhandle });
     await loadMintStats();
     setTimeout(() => { showPage('dashboard'); loadDashboard(); }, 1500);
@@ -380,17 +388,18 @@ async function loadMintStats() {
 // =====================================================================
 async function saveProfile() {
   if (!signer) { toast('Connect wallet first', 'error'); return; }
-  const username = document.getElementById('edit-username').value.trim();
-  const xhandle  = document.getElementById('edit-xhandle').value.trim();
-  const platform = document.getElementById('edit-platform').value;
-  const channel  = document.getElementById('edit-channel').value.trim();
+  const username  = document.getElementById('edit-username').value.trim();
+  const xhandle   = document.getElementById('edit-xhandle').value.trim();
+  const ytUser    = document.getElementById('edit-youtube')?.value.trim() || '';
+  const platform  = document.getElementById('edit-platform').value;
+  const channel   = document.getElementById('edit-channel').value.trim();
   if (!username) { toast('Username required', 'error'); return; }
 
   try {
     setTxStatus('tx-profile', '⏳ Updating on-chain profile...', 'pending');
     const tx = await nftContract.updateProfile(username, xhandle, platform);
     await tx.wait();
-    userProfile = { ...userProfile, username, x_handle: xhandle, platform, channel };
+    userProfile = { ...userProfile, username, x_handle: xhandle, youtube_username: ytUser, platform, channel };
     await saveProfileToSupabase();
     setTxStatus('tx-profile', '✅ Profile updated!', 'success');
     toast('Profile updated!', 'success');
@@ -437,6 +446,9 @@ async function loadDashboard() {
     loadBounties(),
     loadRecentActivity()
   ]);
+  // Show welcome with username
+  const welcomeEl = document.getElementById('dash-welcome');
+  if (welcomeEl && userProfile?.username) welcomeEl.textContent = 'Welcome back, ' + userProfile.username;
 }
 
 async function loadRecentActivity() {
@@ -1030,7 +1042,7 @@ async function postBounty() {
   const note       = document.getElementById('post-note').value.trim();
 
   if (!title || !desc || !reward) { toast('Fill in title, description and reward', 'error'); return; }
-  if (parseFloat(reward) <= 0)    { toast('Reward must be > 0', 'error'); return; }
+  if (parseFloat(reward) < 0.1)   { toast('Minimum bounty is 0.1 AVAX', 'error'); return; }
 
   // Encode platform + stream link + note into description for on-chain storage
   const streamTime = document.getElementById('post-stream-time').value.trim();
@@ -1062,21 +1074,48 @@ async function postBounty() {
 // =====================================================================
 async function submitClip(bountyId) {
   if (!signer) { toast('Connect wallet first', 'error'); return; }
-  const link     = document.getElementById('clip-link-input').value.trim();
-  const platSel  = document.getElementById('clip-plat-sel')?.value || 'both';
+  const link    = document.getElementById('clip-link-input').value.trim();
+  const platSel = document.getElementById('clip-plat-sel')?.value || 'both';
   if (!link) { toast('Paste your clip link', 'error'); return; }
   if (!isValidClipLink(link)) { toast('Must be an X or YouTube link', 'error'); return; }
-  // Validate matches selected platform
   const isYT = link.includes('youtube') || link.includes('youtu.be');
   const isX  = link.includes('x.com')   || link.includes('twitter.com');
   if (platSel === 'youtube' && !isYT) { toast('Link must be a YouTube URL', 'error'); return; }
   if (platSel === 'x'       && !isX)  { toast('Link must be an X (Twitter) URL', 'error'); return; }
+
+  // Username validation — check clip link contains user's platform username
+  if (userProfile) {
+    const xHandle = (userProfile.x_handle || '').replace('@','').toLowerCase();
+    const ytUser  = (userProfile.youtube_username || '').toLowerCase();
+    if (isX && xHandle && !link.toLowerCase().includes(xHandle)) {
+      if (!confirm(`Your X username is @${xHandle} but this link doesn't seem to match. Are you sure this is your clip?`)) return;
+    }
+    if (isYT && ytUser && !link.toLowerCase().includes(ytUser)) {
+      if (!confirm(`Your YouTube username is @${ytUser} but this link doesn't seem to match. Is this your clip?`)) return;
+    }
+  }
+
+  // Free trial check — non-NFT holders get 1 free submission
+  const hasNft = nftContract ? await nftContract.hasNFT(account).catch(()=>false) : false;
+  if (!hasNft) {
+    const trialKey = 'cdao_trial_' + account.toLowerCase();
+    const usedTrial = localStorage.getItem(trialKey);
+    if (usedTrial) {
+      toast('Free trial used! Mint an NFT to keep submitting.', 'error');
+      setTimeout(()=>showPage('mint'), 1500);
+      return;
+    }
+    const confirmed = confirm('You\'re using your FREE TRIAL submission (1 per wallet). Mint an NFT to submit unlimited clips. Continue?');
+    if (!confirmed) return;
+    localStorage.setItem(trialKey, '1');
+  }
+
   try {
     setTxStatus('tx-submit', '⏳ Submitting clip on-chain...', 'pending');
     const tx = await escrowContract.submitClip(bountyId, link);
     await tx.wait();
     setTxStatus('tx-submit', '✅ Clip submitted!', 'success');
-    toast('Clip submitted!', 'success');
+    toast('Clip submitted! 🎉', 'success');
     await logActivity('submit_clip', { bountyId, link, platform: platSel });
     openBountyDetail(bountyId);
   } catch(e) {
@@ -1121,10 +1160,12 @@ async function pickWinner(bountyId, submissionId) {
     toast('Selecting winner...', 'info');
     const tx = await escrowContract.streamerPicksWinners(bountyId, [submissionId], [100]);
     await tx.wait();
-    toast('Winner selected! AVAX paid out.', 'success');
+    toast('🏆 Winner selected! AVAX paid out.', 'success');
     await logActivity('pick_winner', { bountyId, submissionId });
+    // Force reload bounty data from chain before refreshing modal
     await loadBounties();
-    openBountyDetail(bountyId);
+    // Small delay to let chain state settle
+    setTimeout(() => openBountyDetail(bountyId), 1200);
   } catch(e) {
     toast('Failed: ' + (e.reason || e.message), 'error');
   }
@@ -1193,7 +1234,8 @@ async function loadMySubmissions() {
 // =====================================================================
 function showPage(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.getElementById('page-' + page)?.classList.add('active');
+  const pageEl = document.getElementById('page-' + page);
+  if (pageEl) pageEl.classList.add('active');
   window.scrollTo(0, 0);
   const mbn = document.getElementById('mobile-bottom-nav');
   if (mbn) mbn.style.display = (page === 'dashboard' && account) ? 'flex' : 'none';
@@ -1201,11 +1243,13 @@ function showPage(page) {
   if (page === 'mint')       loadMintStats();
   if (page === 'bounties')   loadBounties();
   if (page === 'referrals')  loadReferrals();
+  if (page === 'admin') { if (isAdmin()) { loadAdminPage(); } else { toast('Access denied', 'error'); showPage('home'); } }
 }
 
 function switchTab(tabId) {
   document.querySelectorAll('.dash-tab').forEach(t => t.style.display = 'none');
-  document.getElementById(tabId).style.display = 'block';
+  const tabEl = document.getElementById(tabId);
+  if (tabEl) tabEl.style.display = 'block';
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   const map = {
     'tab-overview':      'nav-overview',
@@ -1213,19 +1257,26 @@ function switchTab(tabId) {
     'tab-submissions':   'nav-submissions',
     'tab-post':          'nav-post',
     'tab-profile':       'nav-profile',
-    'tab-inventory':     'nav-inventory'
+    'tab-inventory':     'nav-inventory',
+    'tab-feed':          'nav-feed',
+    'tab-discovery':     'nav-discovery',
+    'tab-streamer':      'nav-streamer',
+    'tab-marketplace':   'nav-marketplace',
   };
-  document.getElementById(map[tabId])?.classList.add('active');
-  if (tabId === 'tab-bounties-dash') loadBounties();
-  if (tabId === 'tab-submissions')   loadMySubmissions();
-  if (tabId === 'tab-inventory')     loadInventory();
-  // Scroll to top on mobile
+  const navId = map[tabId];
+  if (navId) document.getElementById(navId)?.classList.add('active');
+  if (tabId === 'tab-inventory')  loadInventory();
+  if (tabId === 'tab-submissions') loadMySubmissions();
+  if (tabId === 'tab-feed')       loadClipFeed();
+  if (tabId === 'tab-discovery')  loadClipperDiscovery('wins');
+  if (tabId === 'tab-streamer')   loadStreamerHQ();
   window.scrollTo(0, 0);
 }
 
-function setMobileActive(btnId) {
-  document.querySelectorAll('.mobile-nav-btn').forEach(b => b.classList.remove('active'));
+function setMob(btnId) {
+  document.querySelectorAll('.mob-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(btnId)?.classList.add('active');
+}
 }
 
 function openModal(id)  { document.getElementById(id).classList.add('active'); }
@@ -1417,43 +1468,369 @@ function updateReferralUI() {
 async function loadReferrals() {
   updateReferralUI();
   if (!db) return;
-  // Check who referred me (from URL on first visit)
-  const params = new URLSearchParams(window.location.search);
-  const refBy  = params.get('ref');
-  if (refBy && refBy !== account?.toLowerCase()) {
-    const refByEl = document.getElementById('ref-by');
-    if (refByEl) refByEl.textContent = 'Referred by: ' + refBy.slice(0,14)+'…';
-  }
-  // Load leaderboard
+  // Who referred me
   try {
-    const { data } = await db.from('referrals').select('referrer,count').order('count',{ascending:false}).limit(10);
-    const el = document.getElementById('ref-leaderboard');
-    if (!el) return;
-    if (!data||data.length===0) { el.innerHTML='<div class="empty-state" style="padding:20px;"><p>No referrals yet — be the first!</p></div>'; return; }
-    el.innerHTML = data.map((r,i)=>`
-      <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
-        <div style="font-family:var(--font-display);font-size:1.2rem;color:${i===0?'var(--amber)':i===1?'var(--muted)':i===2?'#cd7f32':'var(--border)'};width:24px;text-align:center;">${i+1}</div>
-        <div style="flex:1;font-family:var(--font-mono);font-size:0.8rem;">${r.referrer?.slice(0,16)}…</div>
-        <div style="font-family:var(--font-display);color:var(--orange);">${r.count} ref${r.count!==1?'s':''}</div>
-      </div>`).join('');
-    // My stats
-    if (account) {
-      const my = data.find(r=>r.referrer===account.toLowerCase());
-      const countEl = document.getElementById('ref-count');
-      if (countEl && my) countEl.textContent = my.count;
+    const { data: clickData } = await db.from('referral_clicks').select('referred_by').eq('wallet', account?.toLowerCase()||'').maybeSingle();
+    const refByEl = document.getElementById('ref-by');
+    if (refByEl && clickData?.referred_by) {
+      refByEl.textContent = 'Referred by: ' + clickData.referred_by.slice(0,16)+'…';
     }
   } catch(e) {}
+  // My referral stats
+  if (account) {
+    try {
+      const { data: myRefs } = await db.from('referrals').select('*').eq('referrer', account.toLowerCase());
+      const total = myRefs?.length || 0;
+      const earned = myRefs?.reduce((s,r)=>s+(r.reward_avax||0),0) || 0;
+      const countEl = document.getElementById('ref-count');
+      const earnEl  = document.getElementById('ref-earned');
+      if (countEl) countEl.textContent = total;
+      if (earnEl)  earnEl.textContent  = earned.toFixed(3);
+    } catch(e) {}
+  }
+  // Leaderboard
+  try {
+    const { data } = await db.from('referral_leaderboard').select('*').limit(10);
+    const el = document.getElementById('ref-leaderboard');
+    if (!el) return;
+    if (!data||data.length===0) {
+      el.innerHTML='<div class="empty-state" style="padding:20px;"><p>No referrals yet — be the first!</p></div>';
+      return;
+    }
+    const medals = ['🥇','🥈','🥉'];
+    el.innerHTML = data.map((r,i)=>`
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
+        <div style="font-size:1.2rem;width:26px;text-align:center;">${medals[i]||String(i+1)}</div>
+        <div style="flex:1;font-family:var(--font-mono);font-size:0.78rem;overflow:hidden;text-overflow:ellipsis;">${r.referrer?.slice(0,16)||'—'}…</div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;">
+          <div style="font-family:var(--font-display);color:var(--orange);">${r.count} ref${r.count!==1?'s':''}</div>
+          <div style="font-size:0.7rem;color:var(--success);">${(r.total_earned||0).toFixed(3)} AVAX</div>
+        </div>
+      </div>`).join('');
+  } catch(e) { console.warn('loadReferrals leaderboard failed', e); }
 }
 
-// Store referral on page load
+// Store referral click + process after mint
 async function storeReferral() {
   const params = new URLSearchParams(window.location.search);
   const ref = params.get('ref');
   if (!ref || !account || !db) return;
-  if (ref === account.toLowerCase()) return;
+  if (ref.toLowerCase() === account.toLowerCase()) return;
   try {
-    await db.from('referral_clicks').upsert({wallet:account.toLowerCase(),referred_by:ref,created_at:new Date().toISOString()},{onConflict:'wallet'});
-  } catch(e) {}
+    await db.from('referral_clicks').upsert(
+      { wallet: account.toLowerCase(), referred_by: ref.toLowerCase(), created_at: new Date().toISOString() },
+      { onConflict: 'wallet' }
+    );
+    console.log('Referral stored for', account, 'referred by', ref);
+  } catch(e) { console.warn('storeReferral failed', e); }
+}
+
+// Called after a successful mint to finalize the referral in the referrals table
+async function finalizeReferral(tier, mintAmount) {
+  if (!account || !db) return;
+  try {
+    const { data } = await db.from('referral_clicks').select('referred_by').eq('wallet', account.toLowerCase()).maybeSingle();
+    if (!data?.referred_by) return;
+    const rewardAvax = mintAmount * 0.05;
+    await db.from('referrals').upsert(
+      { referrer: data.referred_by, referred: account.toLowerCase(), tier, mint_amount: mintAmount, reward_avax: rewardAvax, paid: false, created_at: new Date().toISOString() },
+      { onConflict: 'referred' }
+    );
+    console.log('Referral finalized:', data.referred_by, '→', account, 'reward:', rewardAvax, 'AVAX');
+  } catch(e) { console.warn('finalizeReferral failed', e); }
+}
+
+// =====================================================================
+// CLIP FEED
+// =====================================================================
+async function loadClipFeed() {
+  const el = document.getElementById('clip-feed-content');
+  if (!el) return;
+  const winners = [];
+  try {
+    const total = Number(await escrowContract.totalBounties());
+    for (let id = Math.max(1, total-30); id <= total; id++) {
+      try {
+        const subs = await escrowContract.getSubmissions(id);
+        const b    = allBounties.find(x=>x.id===id);
+        subs.forEach((s,i) => {
+          if (s.isWinner) winners.push({ bountyId:id, subIdx:i, link:s.clipLink, clipper:s.clipper, timestamp:Number(s.timestamp), title:b?.title||'Bounty #'+id, reward:b?.reward||'?' });
+        });
+      } catch(e) {}
+    }
+  } catch(e) { el.innerHTML='<div class="empty-state"><p>Could not load feed</p></div>'; return; }
+
+  if (!winners.length) { el.innerHTML='<div class="empty-state"><div class="icon">🎬</div><p>No winning clips yet — be the first!</p></div>'; return; }
+  winners.sort((a,b)=>b.timestamp-a.timestamp);
+
+  el.innerHTML = winners.map(w => {
+    const isYT = w.link.includes('youtube')||w.link.includes('youtu.be');
+    const isX  = w.link.includes('x.com')||w.link.includes('twitter.com');
+    const ytId = isYT ? extractYouTubeId(w.link) : null;
+    const thumb = ytId ? `https://img.youtube.com/vi/${ytId}/mqdefault.jpg` : '';
+    return `<div class="feed-card" onclick="window.open('${escHtml(w.link)}','_blank')">
+      <div class="feed-card-media" style="background:var(--dark);">
+        ${thumb ? `<img src="${thumb}" alt="thumbnail" loading="lazy" onerror="this.style.display='none'"/>` : ''}
+        ${isX ? '<div style="font-size:2rem;">𝕏</div>' : ''}
+        ${!thumb&&!isX ? '<div style="font-size:2rem;">🎬</div>' : ''}
+        <div style="position:absolute;top:6px;left:6px;">${getPlatformLogo(w.link)}</div>
+        <div style="position:absolute;bottom:6px;right:6px;background:rgba(0,0,0,0.7);border-radius:4px;padding:2px 6px;font-family:var(--font-mono);font-size:0.65rem;color:var(--amber);">🏆 Winner</div>
+      </div>
+      <div class="feed-card-body">
+        <div style="font-weight:700;font-size:0.85rem;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(w.title)}</div>
+        <div style="font-size:0.75rem;color:var(--muted);">${w.clipper.slice(0,10)}… · ${w.reward} AVAX · ${new Date(w.timestamp*1000).toLocaleDateString()}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// =====================================================================
+// CLIPPER DISCOVERY
+// =====================================================================
+async function loadClipperDiscovery(sortBy='wins') {
+  const el = document.getElementById('clipper-discovery-grid');
+  if (!el) return;
+  el.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
+  try {
+    if (!db) { el.innerHTML='<div class="empty-state"><p>Supabase required for discovery</p></div>'; return; }
+    // Build leaderboard from submissions on-chain
+    const total = Number(await escrowContract.totalBounties());
+    const statsMap = {};
+    for (let id = 1; id <= total; id++) {
+      try {
+        const subs = await escrowContract.getSubmissions(id);
+        subs.forEach(s => {
+          const w = s.clipper.toLowerCase();
+          if (!statsMap[w]) statsMap[w] = { wallet:w, wins:0, submissions:0, votes:0 };
+          statsMap[w].submissions++;
+          if (s.isWinner) statsMap[w].wins++;
+          statsMap[w].votes += Number(s.voteCount)||0;
+        });
+      } catch(e) {}
+    }
+    // Fetch profiles
+    const wallets = Object.keys(statsMap);
+    if (!wallets.length) { el.innerHTML='<div class="empty-state"><div class="icon">🔍</div><p>No clippers yet</p></div>'; return; }
+    const { data: profiles } = await db.from('profiles').select('*').in('wallet', wallets);
+    const profileMap = {};
+    (profiles||[]).forEach(p => profileMap[p.wallet]=p);
+    let list = wallets.map(w => ({ ...statsMap[w], ...(profileMap[w]||{}) }));
+    if (sortBy==='wins')    list.sort((a,b)=>b.wins-a.wins);
+    if (sortBy==='votes')   list.sort((a,b)=>b.votes-a.votes);
+    if (sortBy==='rep')     list.sort((a,b)=>(b.wins*10+b.votes)-(a.wins*10+a.votes));
+    el.innerHTML = list.slice(0,24).map((c,i)=>{
+      const name = c.username || c.wallet.slice(0,10)+'…';
+      const tier = c.tier===1?'⭐':c.tier===2?'🔥':'';
+      return `<div class="clipper-card" onclick="openClipperProfile('${c.wallet}')">
+        <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--red),var(--orange));display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:1.4rem;margin:0 auto 10px;">
+          ${name[0]?.toUpperCase()||'?'}
+        </div>
+        ${i<3?`<div style="position:absolute;top:10px;right:10px;font-size:1.2rem;">${['🥇','🥈','🥉'][i]}</div>`:''}
+        <div style="font-weight:700;font-size:0.9rem;margin-bottom:2px;">${escHtml(name)} ${tier}</div>
+        ${c.x_handle?`<div style="font-size:0.75rem;color:var(--muted);margin-bottom:8px;">@${escHtml(c.x_handle)}</div>`:'<div style="margin-bottom:8px;"></div>'}
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px;">
+          <div><div style="font-family:var(--font-display);font-size:1.2rem;color:var(--orange);">${c.wins}</div><div style="font-size:0.62rem;color:var(--muted);text-transform:uppercase;">Wins</div></div>
+          <div><div style="font-family:var(--font-display);font-size:1.2rem;color:var(--amber);">${c.votes}</div><div style="font-size:0.62rem;color:var(--muted);text-transform:uppercase;">Votes</div></div>
+          <div><div style="font-family:var(--font-display);font-size:1.2rem;color:var(--red);">${c.submissions}</div><div style="font-size:0.62rem;color:var(--muted);text-transform:uppercase;">Clips</div></div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) { el.innerHTML='<div class="empty-state"><p>Error loading</p></div>'; console.error(e); }
+}
+
+function filterClippers(sortBy, btn) {
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  btn?.classList.add('active');
+  loadClipperDiscovery(sortBy);
+}
+
+// =====================================================================
+// STREAMER HQ
+// =====================================================================
+async function loadStreamerHQ() {
+  if (!account || !escrowContract) return;
+  const myBounties = allBounties.filter(b => b.streamer.toLowerCase() === account.toLowerCase());
+  const active   = myBounties.filter(b => b.status===0 && b.deadline>Math.floor(Date.now()/1000));
+  const closed   = myBounties.filter(b => b.status!==0 || b.deadline<=Math.floor(Date.now()/1000));
+  let totalSpent = 0, totalClips = 0, uniqueClippers = new Set();
+  for (const b of myBounties) {
+    totalSpent += parseFloat(b.reward)||0;
+    try {
+      const subs = await escrowContract.getSubmissions(b.id);
+      totalClips += subs.length;
+      subs.forEach(s=>uniqueClippers.add(s.clipper.toLowerCase()));
+    } catch(e) {}
+  }
+  const setEl = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
+  setEl('st-total-spent', totalSpent.toFixed(2));
+  setEl('st-active',  active.length);
+  setEl('st-closed',  closed.length);
+  setEl('st-clips',   totalClips);
+  setEl('st-reach',   uniqueClippers.size);
+  const listEl = id => document.getElementById(id);
+  if (listEl('st-active-list')) {
+    listEl('st-active-list').innerHTML = active.length ? active.map(b=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--dark);border-radius:6px;margin-bottom:8px;cursor:pointer;gap:10px;" onclick="openBountyDetail(${b.id})">
+        <div style="min-width:0;flex:1;"><div style="font-weight:700;font-size:0.88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(b.title)}</div>
+        <div style="font-size:0.75rem;color:var(--muted);">⏱ ${timeRemaining(b.deadline)} · ${b.winnerCount} winner${b.winnerCount>1?'s':''}</div></div>
+        <div style="font-family:var(--font-display);color:var(--orange);flex-shrink:0;">${parseFloat(b.reward).toFixed(2)} AVAX</div>
+      </div>`).join('') : '<div class="empty-state" style="padding:16px;"><p>No active bounties</p></div>';
+    listEl('st-closed-list').innerHTML = closed.length ? closed.map(b=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--dark);border-radius:6px;margin-bottom:8px;cursor:pointer;gap:10px;opacity:0.75;" onclick="openBountyDetail(${b.id})">
+        <div style="min-width:0;flex:1;"><div style="font-weight:700;font-size:0.88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(b.title)}</div>
+        <div style="font-size:0.75rem;color:var(--muted);">Completed · ${b.winnerCount} winner${b.winnerCount>1?'s':''}</div></div>
+        <div style="font-family:var(--font-display);color:var(--muted);flex-shrink:0;">${parseFloat(b.reward).toFixed(2)} AVAX</div>
+      </div>`).join('') : '<div class="empty-state" style="padding:16px;"><p>No completed bounties yet</p></div>';
+  }
+}
+
+// =====================================================================
+// FLAG CONTENT
+// =====================================================================
+async function flagContent(type, refId, description) {
+  if (!account) { toast('Connect wallet first','error'); return; }
+  if (!db) { toast('Supabase not configured','error'); return; }
+  const reason = prompt(`Why are you flagging this ${type}? (spam, inappropriate, fake, other)`);
+  if (!reason) return;
+  try {
+    await db.from('flags').insert({ type, ref_id: String(refId), flagged_by: account.toLowerCase(), reason, description: description||'', created_at: new Date().toISOString(), resolved: false });
+    toast('Flagged — admin will review within 24 hours','success');
+  } catch(e) { toast('Flag failed','error'); }
+}
+
+// =====================================================================
+// ADMIN FUNCTIONS
+// =====================================================================
+function isAdmin() {
+  return account && account.toLowerCase() === ADMIN_WALLET;
+}
+
+function adminTab(tab, btn) {
+  document.querySelectorAll('[id^="adm-tab-"]').forEach(el=>el.style.display='none');
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  const el = document.getElementById('adm-tab-'+tab);
+  if (el) el.style.display='block';
+  btn?.classList.add('active');
+  if (tab==='flags')     loadAdminFlags();
+  if (tab==='referrals') loadAdminReferrals();
+  if (tab==='users')     loadAdminUsers();
+  if (tab==='bounties')  loadAdminBounties();
+}
+
+async function loadAdminPage() {
+  if (!isAdmin()) return;
+  // Stats
+  const total = allBounties.length;
+  const avaxFlowed = allBounties.reduce((s,b)=>s+parseFloat(b.reward),0);
+  const setEl = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
+  setEl('adm-total-bounties', total);
+  setEl('adm-total-avax', avaxFlowed.toFixed(2));
+  if (db) {
+    try {
+      const { count:flags }   = await db.from('flags').select('*',{count:'exact',head:true}).eq('resolved',false);
+      const { count:pendRef } = await db.from('referrals').select('*',{count:'exact',head:true}).eq('paid',false);
+      setEl('adm-flags', flags||0);
+      setEl('adm-refs',  pendRef||0);
+    } catch(e){}
+  }
+  loadAdminFlags();
+}
+
+async function loadAdminFlags() {
+  const el = document.getElementById('adm-flags-list');
+  if (!el||!db) return;
+  try {
+    const { data } = await db.from('flags').select('*').eq('resolved',false).order('created_at',{ascending:false}).limit(30);
+    if (!data||!data.length) { el.innerHTML='<div class="empty-state"><div class="icon">✅</div><p>No open flags</p></div>'; return; }
+    el.innerHTML = data.map(f=>`
+      <div style="background:var(--dark);border:1px solid rgba(232,53,10,0.2);border-radius:8px;padding:12px;margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
+          <div>
+            <span class="badge badge-red">${f.type}</span>
+            <span class="badge badge-muted" style="margin-left:4px;">#${f.ref_id}</span>
+          </div>
+          <div style="font-size:0.72rem;color:var(--muted);">${new Date(f.created_at).toLocaleString()}</div>
+        </div>
+        <div style="font-size:0.85rem;margin:8px 0;"><strong>Reason:</strong> ${escHtml(f.reason)}</div>
+        <div style="font-size:0.78rem;color:var(--muted);margin-bottom:8px;">${escHtml(f.description||'')} — by ${f.flagged_by?.slice(0,12)}…</div>
+        <button class="btn btn-ghost btn-sm" onclick="resolveFlag('${f.id}')">✅ Mark Resolved</button>
+        <button class="btn btn-ghost btn-sm" style="margin-left:6px;color:var(--red);" onclick="dismissFlag('${f.id}')">✕ Dismiss</button>
+      </div>`).join('');
+  } catch(e) { el.innerHTML='<div class="empty-state"><p>Error loading flags</p></div>'; }
+}
+async function resolveFlag(id) {
+  if (!db||!isAdmin()) return;
+  await db.from('flags').update({resolved:true}).eq('id',id);
+  toast('Flag resolved','success'); loadAdminFlags();
+}
+async function dismissFlag(id) {
+  if (!db||!isAdmin()) return;
+  await db.from('flags').delete().eq('id',id);
+  toast('Flag dismissed','success'); loadAdminFlags();
+}
+
+async function loadAdminReferrals() {
+  const el = document.getElementById('adm-referrals-list');
+  if (!el||!db) return;
+  try {
+    const { data } = await db.from('referrals').select('*').eq('paid',false).order('created_at',{ascending:false});
+    if (!data||!data.length) { el.innerHTML='<div class="empty-state"><div class="icon">✅</div><p>No pending payouts</p></div>'; return; }
+    el.innerHTML = data.map(r=>`
+      <div style="background:var(--dark);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+        <div>
+          <div style="font-size:0.82rem;font-weight:700;">To: ${r.referrer?.slice(0,16)}…</div>
+          <div style="font-size:0.75rem;color:var(--muted);">Referred: ${r.referred?.slice(0,14)}… · ${r.tier} · ${r.mint_amount} AVAX mint</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-family:var(--font-display);color:var(--success);">+${(r.reward_avax||0).toFixed(4)} AVAX</div>
+          <button class="btn btn-ghost btn-sm" style="margin-top:4px;" onclick="markRefPaid('${r.id}')">✅ Mark Paid</button>
+        </div>
+      </div>`).join('');
+  } catch(e) { el.innerHTML='<div class="empty-state"><p>Error</p></div>'; }
+}
+async function markRefPaid(id) {
+  if (!db||!isAdmin()) return;
+  await db.from('referrals').update({paid:true}).eq('id',id);
+  toast('Marked as paid','success'); loadAdminReferrals();
+}
+
+async function loadAdminUsers() {
+  const el = document.getElementById('adm-users-list');
+  if (!el||!db) return;
+  try {
+    const { data } = await db.from('profiles').select('*').order('updated_at',{ascending:false}).limit(50);
+    if (!data||!data.length) { el.innerHTML='<div class="empty-state"><p>No profiles</p></div>'; return; }
+    el.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+      <tr style="color:var(--muted);border-bottom:1px solid var(--border);text-align:left;">
+        <th style="padding:6px 8px;">User</th><th>Wallet</th><th>Tier</th><th>Role</th><th>Actions</th>
+      </tr>
+      ${data.map(u=>`<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:8px;">${escHtml(u.username||'—')} ${u.x_handle?`<span style="color:var(--muted);">@${escHtml(u.x_handle)}</span>`:''}</td>
+        <td class="mono" style="padding:8px;">${u.wallet?.slice(0,12)}…</td>
+        <td style="padding:8px;">${u.tier===1?'⭐ Genesis':u.tier===2?'🔥 Early':'Free'}</td>
+        <td style="padding:8px;">${u.role===1?'Clipper':'Streamer'}</td>
+        <td style="padding:8px;"><button class="btn btn-ghost btn-sm" onclick="openClipperProfile('${u.wallet}')">View</button></td>
+      </tr>`).join('')}
+    </table>`;
+  } catch(e) { el.innerHTML='<div class="empty-state"><p>Error</p></div>'; }
+}
+
+async function loadAdminBounties() {
+  const el = document.getElementById('adm-bounties-list');
+  if (!el) return;
+  if (!allBounties.length) await loadBounties();
+  el.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+    <tr style="color:var(--muted);border-bottom:1px solid var(--border);text-align:left;">
+      <th style="padding:6px 8px;">#</th><th>Title</th><th>Streamer</th><th>Reward</th><th>Status</th>
+    </tr>
+    ${allBounties.slice().reverse().map(b=>`<tr style="border-bottom:1px solid var(--border);cursor:pointer;" onclick="openBountyDetail(${b.id})">
+      <td style="padding:8px;color:var(--muted);">${b.id}</td>
+      <td style="padding:8px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(b.title)}</td>
+      <td class="mono" style="padding:8px;">${b.streamer?.slice(0,10)}…</td>
+      <td style="padding:8px;color:var(--orange);">${parseFloat(b.reward).toFixed(2)}</td>
+      <td style="padding:8px;"><span class="badge ${b.status===0?'badge-green':'badge-muted'}">${b.status===0?'OPEN':'CLOSED'}</span></td>
+    </tr>`).join('')}
+  </table>`;
 }
 
 // =====================================================================
@@ -1477,8 +1854,9 @@ window.voteOnClip         = voteOnClip;
 window.pickWinner         = pickWinner;
 window.resolveVote        = resolveVote;
 window.filterBounties     = filterBounties;
+window.filterClippers     = filterClippers;
 window.openBountyDetail   = openBountyDetail;
-window.setMobileActive    = setMobileActive;
+window.setMob             = setMob;
 window.loadInventory      = loadInventory;
 window.openSubDetail      = openSubDetail;
 window.openHostProfile    = openHostProfile;
@@ -1492,6 +1870,12 @@ window.openEditBounty     = openEditBounty;
 window.copyReferralLink   = copyReferralLink;
 window.shareReferralLink  = shareReferralLink;
 window.loadReferrals      = loadReferrals;
+window.flagContent        = flagContent;
+window.adminTab           = adminTab;
+window.resolveFlag        = resolveFlag;
+window.dismissFlag        = dismissFlag;
+window.markRefPaid        = markRefPaid;
+window.loadClipperDiscovery = loadClipperDiscovery;
 
 // =====================================================================
 // INIT
@@ -1858,118 +2242,103 @@ textarea { resize: vertical; min-height: 80px; }
 }
 .filter-btn.active, .filter-btn:hover { border-color: var(--red); color: var(--red); background: rgba(232,53,10,0.08); }
 
-/* ── Responsive ── */
-@media (max-width: 768px) {
-  /* Nav */
-  nav { padding: 0 14px; height: 56px; }
-  nav svg { width: 90px !important; height: 26px !important; }
-  .nav-right { gap: 6px; }
-  .nav-addr { font-size: 0.68rem; padding: 3px 7px; max-width: 90px; overflow: hidden; text-overflow: ellipsis; }
-  #nav-balance { display: none !important; } /* hide balance on mobile — shown in dashboard */
-  .btn-sm { padding: 6px 10px; font-size: 0.75rem; }
+/* ──────── RESPONSIVE ──────── */
+/* Prevent ALL horizontal overflow */
+*{max-width:100%;box-sizing:border-box}
+html,body{overflow-x:hidden!important;position:relative}
+img,svg,video{max-width:100%}
+
+@media(max-width:768px){
+  /* Nav — compact, no overflow */
+  nav{padding:0 10px!important;gap:8px;height:52px}
+  .nav-logo svg{width:68px!important;height:20px!important}
+  .nav-right{gap:5px}
+  #nav-addr{display:none!important}
+  #nav-balance{display:none!important}
+  .btn-sm{padding:5px 9px;font-size:0.7rem}
+  .nav-docs-btn{display:none!important}
 
   /* Pages */
-  .page { padding-top: 56px; }
+  .page{padding-top:52px}
 
   /* Hero */
-  .hero-inner { padding: 40px 0 80px; }
-  .hero h1 { font-size: 3rem; }
-  .hero p { font-size: 0.95rem; }
-  .hero-stats { gap: 16px; flex-wrap: wrap; margin-top: 32px; padding-top: 24px; }
-  .stat-num { font-size: 1.6rem; }
-  .hero-cta-row { flex-direction: column !important; }
-  .hero-cta-row .btn { width: 100%; justify-content: center; }
+  .hero-inner,.hero{min-height:auto;padding:32px 0 44px;grid-template-columns:1fr}
+  .hero-visual{display:none}
+  .hero h1{font-size:clamp(2.8rem,9vw,4rem)}
+  .hero p{font-size:0.92rem;max-width:100%}
+  .hero-cta{flex-direction:column;gap:8px}
+  .hero-cta .btn{width:100%;justify-content:center}
+  .hero-stats{gap:16px;flex-wrap:wrap;margin-top:24px;padding-top:20px}
+  .stat-num{font-size:1.5rem}
 
-  /* Dashboard — bottom tab bar on mobile */
-  .dashboard-grid { grid-template-columns: 1fr; padding-bottom: 70px; }
-  .sidebar { display: none; } /* hide sidebar — use bottom bar */
-  .main-content { padding: 16px; }
+  /* Dashboard layout */
+  .dashboard-wrap{flex-direction:column}
+  .sidebar{display:none!important}
+  .dash-main{padding:12px 12px 74px}
 
-  /* Mobile bottom nav bar */
-  .mobile-bottom-nav {
-    display: flex !important;
-    position: fixed; bottom: 0; left: 0; right: 0; z-index: 99;
-    background: var(--dark); border-top: 1px solid var(--border);
-    height: 60px; align-items: stretch;
+  /* Mobile bottom nav */
+  .mobile-bottom-nav{
+    display:flex!important;position:fixed;bottom:0;left:0;right:0;z-index:150;
+    background:rgba(16,16,16,0.98);border-top:1px solid var(--border);
+    height:56px;align-items:stretch;
+    padding-bottom:env(safe-area-inset-bottom,0px);
   }
-  .mobile-nav-btn {
-    flex: 1; display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    gap: 3px; cursor: pointer; transition: all 0.15s;
-    color: var(--muted); font-size: 0.6rem; font-weight: 600;
-    text-transform: uppercase; letter-spacing: 0.5px;
-    border: none; background: none;
+  .mob-btn{
+    flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:2px;cursor:pointer;color:var(--muted);font-size:0.54rem;font-weight:700;
+    text-transform:uppercase;letter-spacing:0.3px;border:none;background:none;
+    padding:0;-webkit-tap-highlight-color:transparent;transition:color 0.15s;
   }
-  .mobile-nav-btn .micon { font-size: 1.2rem; }
-  .mobile-nav-btn.active { color: var(--red); }
-  .mobile-nav-btn:hover { color: var(--orange); }
+  .mob-btn .mi{font-size:1.1rem;line-height:1}
+  .mob-btn.active{color:var(--red)}
 
-  /* Mint grid */
-  .mint-grid { grid-template-columns: 1fr; gap: 16px; }
-  .mint-card { padding: 20px; }
-  .mint-price { font-size: 2rem; }
-
-  /* Modals */
-  .modal { padding: 20px; }
-  .modal h2 { font-size: 1.4rem; }
-  .role-cards { grid-template-columns: 1fr 1fr; gap: 8px; }
-  .role-card { padding: 14px 10px; }
+  /* Grids collapse */
+  .mint-grid{grid-template-columns:1fr!important;gap:14px}
+  .mint-card{padding:18px}
+  .post-bounty-grid{grid-template-columns:1fr!important}
+  .overview-stats-grid{grid-template-columns:1fr 1fr!important;gap:10px!important}
 
   /* Cards */
-  .card { padding: 16px; }
-  .profile-header { flex-direction: column; text-align: center; padding: 20px; gap: 16px; }
-  .profile-avatar { width: 80px; height: 80px; }
-  .bounty-card-top { flex-direction: column; gap: 8px; }
-  .bounty-reward { font-size: 1.2rem; }
+  .card{padding:14px}
+  .profile-header{flex-direction:column;text-align:center;padding:16px;gap:12px}
+  .modal{padding:18px 14px;margin:6px}
+  .modal h2{font-size:1.3rem}
+  .role-cards{grid-template-columns:1fr 1fr;gap:8px}
+  .role-card{padding:12px 8px}
 
-  /* Overview stats grid */
-  .overview-stats-grid { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
-
-  /* NFT inventory */
-  .nft-inventory-grid { grid-template-columns: 1fr !important; }
-
-  /* Post bounty form */
-  .post-bounty-grid { grid-template-columns: 1fr !important; }
-
-  /* Docs page */
-  #page-docs .container { padding-top: 28px; padding-bottom: 80px; }
-  #page-docs .card { padding: 14px; }
+  /* Bounty cards */
+  .bounty-card-top{flex-direction:column;gap:6px}
+  .bounty-reward{font-size:1.2rem}
 
   /* Submission cards */
-  .submission-card { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .submission-card{flex-direction:column;align-items:flex-start;gap:8px}
+
+  /* Feed/Discovery grids */
+  .feed-grid{grid-template-columns:1fr!important}
+  .clipper-grid{grid-template-columns:1fr 1fr}
 
   /* Page headers */
-  .page-header h2 { font-size: 1.5rem; }
+  .page-header h2{font-size:1.4rem}
+
+  /* Forms */
+  input,select,textarea{font-size:16px!important} /* prevent iOS zoom */
 }
 
-@media (max-width: 480px) {
-  .hero h1 { font-size: 2.4rem; }
-  .role-cards { grid-template-columns: 1fr; }
-  .hero-stats { gap: 12px; }
-  .stat-num { font-size: 1.4rem; }
+@media(max-width:480px){
+  .hero h1{font-size:2.5rem}
+  .role-cards{grid-template-columns:1fr}
+  .clipper-grid{grid-template-columns:1fr}
+  .hero-stats{gap:12px}
+  .stat-num{font-size:1.3rem}
 }
 
-/* Desktop — hide mobile bottom nav */
-@media (min-width: 769px) {
-  .mobile-bottom-nav { display: none !important; }
+@media(min-width:769px){
+  .mobile-bottom-nav{display:none!important}
+  #btn-dashboard{display:none!important}
+  .nav-mobile-only{display:none!important}
 }
 
-/* ── Nav ── */
-nav { overflow: hidden; flex-shrink: 0; }
-.nav-right { min-width: 0; flex-shrink: 0; display:flex; align-items:center; gap:6px; }
-@media (max-width: 640px) {
-  nav { padding: 0 10px; gap: 8px; }
-  .nav-logo svg { width: 72px !important; height: 22px !important; }
-  .btn-sm { padding: 5px 8px; font-size: 0.7rem; letter-spacing: 0; }
-  #nav-addr { max-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.65rem; padding: 3px 6px; }
-  .nav-dash-text { display: none; }
-  #btn-dashboard::after { content: "⚡"; }
-  #nav-balance { display: none !important; }
-}
-@media (max-width: 380px) {
-  #nav-addr { display: none !important; }
-  .nav-logo svg { width: 60px !important; }
-}
+
 
 /* ── Empty State ── */
 .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
@@ -2058,22 +2427,18 @@ nav { overflow: hidden; flex-shrink: 0; }
       </line>
     </svg>
   </div>
-  <div class="nav-right" id="nav-right">
-    <button class="btn btn-ghost btn-sm nav-docs-btn" onclick="showPage('referrals')" style="font-size:0.72rem;">💸 Refer</button>
-    <button class="btn btn-ghost btn-sm nav-docs-btn" onclick="showPage('docs')" style="font-size:0.72rem;">Docs</button>
-    <span id="nav-addr" class="nav-addr" style="display:none"></span>
-    <button id="btn-connect" class="btn btn-primary btn-sm" onclick="connectWallet()">Connect</button>
-    <button id="btn-dashboard" class="btn btn-ghost btn-sm" style="display:none" onclick="showPage('dashboard')">
-      <span class="nav-dash-text">Dashboard</span>
-    </button>
-    <button id="btn-disconnect" class="btn btn-ghost btn-sm" style="display:none" onclick="disconnectWallet()">⏻</button>
+  <div class="nav-right">
+    <span id="nav-addr" class="nav-addr" style="display:none;"></span>
+    <button id="btn-connect"    class="btn btn-primary btn-sm" onclick="connectWallet()">Connect</button>
+    <button id="btn-dashboard"  class="btn btn-ghost btn-sm"   style="display:none" onclick="showPage('dashboard')">Dashboard</button>
+    <button id="btn-disconnect" class="btn btn-ghost btn-sm"   style="display:none" onclick="disconnectWallet()">✕</button>
   </div>
 </nav>
 
 <!-- ===================== PAGE: HOME ===================== -->
 <div id="page-home" class="page active">
   <div class="container">
-    <div class="hero">
+    <div style="display:grid;grid-template-columns:1fr 1fr;align-items:center;min-height:calc(100vh - 56px);gap:40px;padding:60px 0;" class="hero-grid">
       <div class="hero-inner">
         <div class="hero-eyebrow">Built on Avalanche Fuji Testnet</div>
         <h1>Clip.<br>Submit.<br><em>Get Paid.</em></h1>
@@ -2084,6 +2449,16 @@ nav { overflow: hidden; flex-shrink: 0; }
           <button class="btn btn-ghost" onclick="showPage('mint')">Mint NFT</button>
           <button class="btn btn-ghost" onclick="showPage('bounties')">Browse Bounties</button>
         </div>
+        <!-- Platform logos -->
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:24px;flex-wrap:wrap;">
+          <span style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Live on</span>
+          <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_1_2026-02-24_07-10-44-removebg-preview.png" alt="Blaze" style="height:24px;object-fit:contain;filter:brightness(1.2);"/>
+          <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_2_2026-02-24_07-10-44-removebg-preview.png" alt="Arena" style="height:24px;object-fit:contain;filter:brightness(1.2);"/>
+          <span style="display:inline-flex;align-items:center;gap:5px;font-size:0.7rem;color:var(--muted);padding:3px 8px;border:1px solid var(--border);border-radius:20px;">
+            <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_3_2026-02-24_07-10-44-removebg-preview.png" alt="AVAX" style="height:14px;"/>
+            Avalanche
+          </span>
+        </div>
         <div class="hero-stats">
           <div class="stat-item">
             <div class="stat-num" id="stat-bounties">0</div>
@@ -2091,7 +2466,7 @@ nav { overflow: hidden; flex-shrink: 0; }
           </div>
           <div class="stat-item">
             <div class="stat-num" id="stat-genesis">500</div>
-            <div class="stat-label">Genesis Supply</div>
+            <div class="stat-label">Genesis Left</div>
           </div>
           <div class="stat-item">
             <div class="stat-num" id="stat-paid">0</div>
@@ -2099,122 +2474,85 @@ nav { overflow: hidden; flex-shrink: 0; }
           </div>
         </div>
       </div>
+      <!-- Hero right: isometric visual (desktop only) -->
+      <div class="hero-right" style="display:flex;align-items:center;justify-content:center;">
+        <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/24333f4f-66da-4d04-a37e-e03d4c992228-removebg-preview.png"
+             alt="ClipDAO Platform"
+             style="max-width:100%;height:auto;max-height:480px;object-fit:contain;filter:drop-shadow(0 20px 60px rgba(232,53,10,0.4));animation:heroFloat 6s ease-in-out infinite;"/>
+      </div>
     </div>
   </div>
 </div>
 
-<!-- AVAX Flow Diagram — home page -->
-<div style="background:var(--dark);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:48px 16px;">
-  <div style="max-width:760px;margin:0 auto;">
-    <div style="text-align:center;margin-bottom:32px;">
-      <div style="font-family:var(--font-mono);font-size:0.72rem;color:var(--orange);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;">How Value Flows</div>
-      <h3 style="font-size:1.4rem;">From Streamer to Clipper — Trustlessly</h3>
-    </div>
-    <div style="display:flex;align-items:center;justify-content:center;gap:0;overflow-x:auto;padding-bottom:8px;">
-      <div style="text-align:center;flex-shrink:0;width:100px;">
-        <div style="width:66px;height:66px;border-radius:50%;background:linear-gradient(135deg,#1a0a00,#2d1500);border:2px solid var(--orange);display:flex;align-items:center;justify-content:center;margin:0 auto 8px;animation:npulse 3s infinite;">
-          <span style="font-size:1.8rem;">📡</span>
-        </div>
-        <div style="font-weight:700;font-size:0.85rem;">Streamer</div>
-        <div style="font-family:var(--font-mono);font-size:0.68rem;color:var(--orange);margin-top:2px;">Locks AVAX</div>
+<style>
+@keyframes heroFloat{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-14px) rotate(1deg)}}
+@media(max-width:768px){.hero-right{display:none!important}.hero-grid{grid-template-columns:1fr!important;padding:36px 0 44px!important}}
+</style>
+
+<!-- Features strip under hero -->
+<div style="background:var(--dark);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:20px 0;overflow:hidden;">
+  <div class="container">
+    <div style="display:flex;gap:28px;align-items:center;justify-content:center;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:8px;font-size:0.82rem;color:var(--muted);white-space:nowrap;">
+        <span style="color:var(--success);">✓</span> Trustless escrow
       </div>
-      <div style="flex:1;min-width:40px;display:flex;flex-direction:column;align-items:center;gap:3px;">
-        <div style="font-family:var(--font-mono);font-size:0.66rem;color:var(--amber);">100% locked</div>
-        <div style="width:100%;height:2px;background:linear-gradient(90deg,var(--orange),var(--amber));position:relative;overflow:hidden;"><div style="position:absolute;inset:0;background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,0.6) 50%,transparent 100%);animation:flow 1.8s linear infinite;"></div></div>
-        <div style="color:var(--amber);font-size:0.9rem;">▶</div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:0.82rem;color:var(--muted);white-space:nowrap;">
+        <span style="color:var(--success);">✓</span> Auto payouts
       </div>
-      <div style="text-align:center;flex-shrink:0;width:110px;">
-        <div style="width:66px;height:66px;border-radius:50%;background:linear-gradient(135deg,#0a0010,#1a001a);border:2px solid var(--red);display:flex;align-items:center;justify-content:center;margin:0 auto 8px;animation:npulse 3s infinite 1s;">
-          <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_3_2026-02-24_07-10-44-removebg-preview.png" style="width:40px;height:40px;object-fit:contain;" alt="AVAX" onerror="this.outerHTML='<span style=font-size:1.8rem>⛓️</span>'"/>
-        </div>
-        <div style="font-weight:700;font-size:0.85rem;">Smart Contract</div>
-        <div style="font-family:var(--font-mono);font-size:0.68rem;color:var(--red);margin-top:2px;">Escrow</div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:0.82rem;color:var(--muted);white-space:nowrap;">
+        <span style="color:var(--success);">✓</span> On-chain reputation
       </div>
-      <div style="flex:1;min-width:40px;display:flex;flex-direction:column;align-items:center;gap:3px;">
-        <div style="font-family:var(--font-mono);font-size:0.66rem;color:var(--success);">96% to winner</div>
-        <div style="width:100%;height:2px;background:linear-gradient(90deg,var(--red),var(--success));position:relative;overflow:hidden;"><div style="position:absolute;inset:0;background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,0.6) 50%,transparent 100%);animation:flow 1.8s linear infinite 0.9s;"></div></div>
-        <div style="color:var(--success);font-size:0.9rem;">▶</div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:0.82rem;color:var(--muted);white-space:nowrap;">
+        <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_1_2026-02-24_07-10-44-removebg-preview.png" style="height:16px;object-fit:contain;vertical-align:middle;"/> <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_2_2026-02-24_07-10-44-removebg-preview.png" style="height:16px;object-fit:contain;vertical-align:middle;"/> Blaze & Arena
       </div>
-      <div style="text-align:center;flex-shrink:0;width:100px;">
-        <div style="width:66px;height:66px;border-radius:50%;background:linear-gradient(135deg,#001a0a,#002d15);border:2px solid var(--success);display:flex;align-items:center;justify-content:center;margin:0 auto 8px;animation:npulse 3s infinite 2s;">
-          <span style="font-size:1.8rem;">✂️</span>
-        </div>
-        <div style="font-weight:700;font-size:0.85rem;">Clipper</div>
-        <div style="font-family:var(--font-mono);font-size:0.68rem;color:var(--success);margin-top:2px;">Gets Paid</div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:0.82rem;color:var(--muted);white-space:nowrap;">
+        <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_3_2026-02-24_07-10-44-removebg-preview.png" style="height:16px;object-fit:contain;vertical-align:middle;"/> Avalanche Fuji
       </div>
-      <div style="flex:0.6;min-width:28px;display:flex;flex-direction:column;align-items:center;gap:3px;">
-        <div style="font-family:var(--font-mono);font-size:0.62rem;color:var(--muted);">4% fee</div>
-        <div style="width:100%;height:1px;background:var(--border);"></div>
-        <div style="color:var(--muted);font-size:0.8rem;">▶</div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:0.82rem;color:var(--muted);white-space:nowrap;">
+        <span style="color:var(--orange);">🔒</span> 0.1 AVAX minimum
       </div>
-      <div style="text-align:center;flex-shrink:0;width:80px;">
-        <div style="width:52px;height:52px;border-radius:50%;background:var(--dark);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;margin:0 auto 8px;">
-          <span style="font-size:1.3rem;">🏛️</span>
-        </div>
-        <div style="font-weight:600;font-size:0.76rem;color:var(--muted);">Treasury</div>
-        <div style="font-family:var(--font-mono);font-size:0.62rem;color:var(--muted);margin-top:1px;">→ Holders</div>
-      </div>
-    </div>
-    <style>
-      @keyframes flow { 0%{transform:translateX(-100%)} 100%{transform:translateX(200%)} }
-      @keyframes npulse { 0%,100%{box-shadow:0 0 0 0 rgba(255,107,26,0)} 50%{box-shadow:0 0 0 8px rgba(255,107,26,0.12)} }
-    </style>
-    <div style="display:flex;justify-content:center;gap:24px;margin-top:24px;flex-wrap:wrap;">
-      <div style="text-align:center;"><div style="font-family:var(--font-display);font-size:1.4rem;color:var(--success);">96%</div><div style="font-size:0.72rem;color:var(--muted);">Goes to Winner(s)</div></div>
-      <div style="text-align:center;"><div style="font-family:var(--font-display);font-size:1.4rem;color:var(--orange);">4%</div><div style="font-size:0.72rem;color:var(--muted);">Platform Fee</div></div>
-      <div style="text-align:center;"><div style="font-family:var(--font-display);font-size:1.4rem;color:var(--amber);">30%</div><div style="font-size:0.72rem;color:var(--muted);">Fee → Genesis Holders</div></div>
-      <div style="text-align:center;"><div style="font-family:var(--font-display);font-size:1.4rem;color:var(--red);">0</div><div style="font-size:0.72rem;color:var(--muted);">Middlemen</div></div>
     </div>
   </div>
 </div>
 
 <!-- ===================== PAGE: DASHBOARD ===================== -->
 <div id="page-dashboard" class="page">
-  <div class="dashboard-grid">
+  <div class="dashboard-wrap">
     <!-- Sidebar -->
     <aside class="sidebar">
       <div class="sidebar-section">
-        <div class="sidebar-label">Main</div>
-        <div class="nav-item active" onclick="switchTab('tab-overview')" id="nav-overview">
-          <span class="icon">⚡</span> Overview
-        </div>
-        <div class="nav-item" onclick="switchTab('tab-bounties-dash')" id="nav-bounties-dash">
-          <span class="icon">🎯</span> Bounty Board
-        </div>
-        <div class="nav-item" onclick="switchTab('tab-submissions')" id="nav-submissions">
-          <span class="icon">📎</span> My Submissions
-        </div>
-        <div class="nav-item" onclick="switchTab('tab-post')" id="nav-post">
-          <span class="icon">➕</span> Post Bounty
-        </div>
+        <div class="sidebar-label">Discover</div>
+        <div class="nav-item active" id="nav-overview" onclick="switchTab('tab-overview')"><span class="icon">⚡</span> Overview</div>
+        <div class="nav-item" id="nav-bounties-dash" onclick="switchTab('tab-bounties-dash')"><span class="icon">🎯</span> Bounty Board</div>
+        <div class="nav-item" id="nav-feed" onclick="switchTab('tab-feed')"><span class="icon">🎬</span> Clip Feed</div>
+        <div class="nav-item" id="nav-discovery" onclick="switchTab('tab-discovery')"><span class="icon">🔍</span> Find Clippers</div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">My Stuff</div>
+        <div class="nav-item" id="nav-submissions" onclick="switchTab('tab-submissions')"><span class="icon">📎</span> My Clips</div>
+        <div class="nav-item" id="nav-post" onclick="switchTab('tab-post')"><span class="icon">➕</span> Post Bounty</div>
+        <div class="nav-item" id="nav-streamer" onclick="switchTab('tab-streamer')"><span class="icon">📡</span> Streamer HQ</div>
       </div>
       <div class="sidebar-section">
         <div class="sidebar-label">Account</div>
-        <div class="nav-item" onclick="switchTab('tab-profile')" id="nav-profile">
-          <span class="icon">👤</span> Profile
+        <div class="nav-item" id="nav-profile" onclick="switchTab('tab-profile')"><span class="icon">👤</span> Profile</div>
+        <div class="nav-item" id="nav-inventory" onclick="switchTab('tab-inventory')"><span class="icon">🖼️</span> My NFT</div>
+        <div class="nav-item" id="nav-referrals-tab" onclick="showPage('referrals')"><span class="icon">💸</span> Referrals</div>
+        <div class="nav-item" id="nav-marketplace" onclick="switchTab('tab-marketplace')" style="position:relative;">
+          <span class="icon">🛒</span> NFT Market
+          <span class="badge badge-amber" style="position:absolute;right:8px;font-size:0.55rem;padding:2px 5px;">SOON</span>
         </div>
-        <div class="nav-item" onclick="switchTab('tab-inventory')" id="nav-inventory">
-          <span class="icon">🖼️</span> My NFT
-        </div>
-        <div class="nav-item" onclick="showPage('mint')" id="nav-mint">
-          <span class="icon">🔑</span> NFT Mint
-        </div>
-        <div class="nav-item" onclick="showPage('referrals')" id="nav-referrals">
-          <span class="icon">💸</span> Referrals
-        </div>
-        <div class="nav-item" onclick="showPage('docs')" id="nav-docs">
-          <span class="icon">📖</span> How It Works
-        </div>
+        <div class="nav-item" id="nav-admin-link" style="display:none;" onclick="showPage('admin')"><span class="icon">🛡️</span> Admin</div>
       </div>
-      <div class="sidebar-section" style="margin-top:auto;padding-top:20px;">
-        <div class="nav-item" style="color:var(--red);" onclick="disconnectWallet()">
-          <span class="icon">🚪</span> Disconnect
-        </div>
+      <div class="sidebar-section" style="padding-top:12px;">
+        <div class="nav-item" onclick="showPage('docs')"><span class="icon">📖</span> Docs</div>
+        <div class="nav-item" onclick="showPage('mint')"><span class="icon">🔑</span> Mint NFT</div>
+        <div class="nav-item" style="color:var(--red);" onclick="disconnectWallet()"><span class="icon">🚪</span> Disconnect</div>
       </div>
     </aside>
 
     <!-- Main content -->
-    <main class="main-content">
+    <main class="dash-main">
 
       <!-- TAB: Overview -->
       <div id="tab-overview" class="dash-tab">
@@ -2309,7 +2647,7 @@ nav { overflow: hidden; flex-shrink: 0; }
           <div class="post-bounty-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
             <div class="form-group">
               <label>Reward (AVAX)</label>
-              <input type="number" id="post-reward" placeholder="0.5" min="0.01" step="0.01"/>
+              <input type="number" id="post-reward" placeholder="0.5" min="0.1" step="0.01"/><div style="font-size:0.72rem;color:var(--muted);margin-top:4px;">Minimum 0.1 AVAX</div>
             </div>
             <div class="form-group">
               <label>Duration</label>
@@ -2399,8 +2737,12 @@ nav { overflow: hidden; flex-shrink: 0; }
             <input type="text" id="edit-username" placeholder="Your name"/>
           </div>
           <div class="form-group">
-            <label>X (Twitter) Handle</label>
+            <label>X (Twitter) Handle <span style="color:var(--muted);font-weight:400;font-size:0.75rem;">(must match X posts)</span></label>
             <input type="text" id="edit-xhandle" placeholder="@yourhandle"/>
+          </div>
+          <div class="form-group">
+            <label>YouTube Username <span style="color:var(--muted);font-weight:400;font-size:0.75rem;">(must match YouTube posts)</span></label>
+            <input type="text" id="edit-youtube" placeholder="@yourchannel"/>
           </div>
           <div class="form-group">
             <label>Platform</label>
@@ -2431,26 +2773,117 @@ nav { overflow: hidden; flex-shrink: 0; }
         </div>
       </div>
 
+
+
+      <!-- TAB: NFT Marketplace (Coming Soon) -->
+      <div id="tab-marketplace" class="dash-tab" style="display:none">
+        <div class="page-header">
+          <h2>🛒 NFT Marketplace</h2>
+          <p>Buy and sell ClipDAO NFTs with proven stats</p>
+        </div>
+        <div style="text-align:center;padding:60px 20px;max-width:560px;margin:0 auto;">
+          <div style="font-size:4rem;margin-bottom:16px;">🏪</div>
+          <h3 style="color:var(--orange);margin-bottom:12px;">Coming Soon</h3>
+          <p style="color:var(--muted);line-height:1.8;margin-bottom:20px;">The NFT Marketplace will let you buy and sell ClipDAO membership NFTs. Sellers list their NFT (with all its stats — wins, reputation, level). Buyers get a proven reputation headstart. After purchase, the new owner can update only their X username and streaming platform — keeping the stats but making it their identity.</p>
+          <div style="background:var(--dark);border:1px solid var(--border);border-radius:8px;padding:20px;text-align:left;margin-bottom:20px;">
+            <div style="font-weight:700;margin-bottom:10px;color:var(--orange);">How it will work</div>
+            <div style="font-size:0.85rem;color:var(--muted);line-height:1.9;">
+              1. Seller lists NFT with asking price in AVAX<br/>
+              2. Buyer browses listings with verifiable on-chain stats<br/>
+              3. Smart contract escrow handles the trade trustlessly<br/>
+              4. Buyer inherits: wins, reputation, level, votes<br/>
+              5. Buyer can only change: X username, platform, channel link<br/>
+              6. Stats and history are permanently locked on-chain
+            </div>
+          </div>
+          <button class="btn btn-ghost" onclick="toast('Notify feature coming soon!','info')">🔔 Notify Me When Live</button>
+        </div>
+      </div>
+
+      <!-- TAB: Clip Feed -->
+      <div id="tab-feed" class="dash-tab" style="display:none">
+        <div class="page-header">
+          <h2>🎬 Clip Feed</h2>
+          <p>Winning clips from completed bounties</p>
+        </div>
+        <div id="clip-feed-content" class="feed-grid">
+          <div class="empty-state"><div class="spinner"></div><p>Loading clips…</p></div>
+        </div>
+      </div>
+
+      <!-- TAB: Clipper Discovery -->
+      <div id="tab-discovery" class="dash-tab" style="display:none">
+        <div class="page-header">
+          <h2>🔍 Find Clippers</h2>
+          <p>Browse talented clippers ranked by wins, votes & reputation</p>
+        </div>
+        <!-- Hire-a-Clipper coming soon banner -->
+        <div style="background:linear-gradient(135deg,#1a0a00,#2a1000);border:1px solid rgba(255,149,0,0.3);border-radius:10px;padding:18px;margin-bottom:20px;display:flex;align-items:center;gap:14px;">
+          <div style="font-size:2rem;">🚀</div>
+          <div>
+            <div style="font-weight:700;color:var(--amber);margin-bottom:3px;">Hire-a-Clipper — Coming Soon</div>
+            <div style="font-size:0.82rem;color:var(--muted);">Set a rate, agree on a deadline, submit clips, get paid. Direct contracts between streamers and clippers. On-chain. No middlemen.</div>
+          </div>
+          <span class="badge badge-amber" style="flex-shrink:0;margin-left:auto;">SOON</span>
+        </div>
+        <div class="filter-row">
+          <button class="filter-btn active" onclick="filterClippers('wins',this)">Top Winners</button>
+          <button class="filter-btn" onclick="filterClippers('votes',this)">Most Voted</button>
+          <button class="filter-btn" onclick="filterClippers('rep',this)">Reputation</button>
+        </div>
+        <div id="clipper-discovery-grid" class="clipper-grid">
+          <div class="empty-state"><div class="spinner"></div><p>Loading clippers…</p></div>
+        </div>
+      </div>
+
+      <!-- TAB: Streamer HQ -->
+      <div id="tab-streamer" class="dash-tab" style="display:none">
+        <div class="page-header">
+          <h2>📡 Streamer HQ</h2>
+          <p>Your complete streamer command center</p>
+        </div>
+        <!-- Streamer stats -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:24px;">
+          <div class="streamer-stat"><div class="streamer-stat-val" id="st-total-spent">—</div><div class="streamer-stat-label">AVAX Spent</div></div>
+          <div class="streamer-stat"><div class="streamer-stat-val" id="st-active">—</div><div class="streamer-stat-label">Active Bounties</div></div>
+          <div class="streamer-stat"><div class="streamer-stat-val" id="st-closed">—</div><div class="streamer-stat-label">Completed</div></div>
+          <div class="streamer-stat"><div class="streamer-stat-val" id="st-clips">—</div><div class="streamer-stat-label">Clips Received</div></div>
+          <div class="streamer-stat"><div class="streamer-stat-val" id="st-reach">—</div><div class="streamer-stat-label">Clippers Reached</div></div>
+        </div>
+        <!-- Active bounties -->
+        <div class="card" style="margin-bottom:20px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+            <h3 style="color:var(--orange);">My Active Bounties</h3>
+            <button class="btn btn-primary btn-sm" onclick="switchTab('tab-post')">+ Post New</button>
+          </div>
+          <div id="st-active-list"><div class="empty-state" style="padding:20px;"><div class="icon">🎯</div><p>No active bounties</p></div></div>
+        </div>
+        <!-- Past bounties -->
+        <div class="card">
+          <h3 style="color:var(--orange);margin-bottom:14px;">Completed Bounties</h3>
+          <div id="st-closed-list"><div class="empty-state" style="padding:20px;"><div class="icon">✅</div><p>No completed bounties yet</p></div></div>
+        </div>
+      </div>
+
     </main>
   </div>
 </div>
-
-<!-- Mobile Bottom Nav Bar -->
+<!-- Mobile Bottom Nav -->
 <div class="mobile-bottom-nav" id="mobile-bottom-nav" style="display:none;">
-  <button class="mobile-nav-btn active" id="mob-overview" onclick="switchTab('tab-overview');setMobileActive('mob-overview')">
-    <span class="micon">⚡</span>Home
+  <button class="mob-btn active" id="mob-overview" onclick="switchTab('tab-overview');setMob('mob-overview')">
+    <span class="mi">⚡</span>Home
   </button>
-  <button class="mobile-nav-btn" id="mob-bounties" onclick="switchTab('tab-bounties-dash');setMobileActive('mob-bounties')">
-    <span class="micon">🎯</span>Bounties
+  <button class="mob-btn" id="mob-bounties" onclick="switchTab('tab-bounties-dash');setMob('mob-bounties')">
+    <span class="mi">🎯</span>Bounties
   </button>
-  <button class="mobile-nav-btn" id="mob-post" onclick="switchTab('tab-post');setMobileActive('mob-post')">
-    <span class="micon">➕</span>Post
+  <button class="mob-btn" id="mob-post" onclick="switchTab('tab-post');setMob('mob-post')">
+    <span class="mi">➕</span>Post
   </button>
-  <button class="mobile-nav-btn" id="mob-nft" onclick="switchTab('tab-inventory');setMobileActive('mob-nft')">
-    <span class="micon">🖼️</span>NFT
+  <button class="mob-btn" id="mob-feed" onclick="switchTab('tab-feed');setMob('mob-feed')">
+    <span class="mi">🎬</span>Feed
   </button>
-  <button class="mobile-nav-btn" id="mob-profile" onclick="switchTab('tab-profile');setMobileActive('mob-profile')">
-    <span class="micon">👤</span>Profile
+  <button class="mob-btn" id="mob-profile" onclick="switchTab('tab-profile');setMob('mob-profile')">
+    <span class="mi">👤</span>Me
   </button>
 </div>
 <div id="page-mint" class="page">
@@ -2731,10 +3164,16 @@ nav { overflow: hidden; flex-shrink: 0; }
 <div id="page-docs" class="page">
   <div class="container" style="padding-top:48px;padding-bottom:80px;max-width:860px;">
 
-    <div style="margin-bottom:48px;">
+    <div style="margin-bottom:40px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+        <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_1_2026-02-24_07-10-44-removebg-preview.png" alt="Blaze" style="height:28px;object-fit:contain;"/>
+        <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_2_2026-02-24_07-10-44-removebg-preview.png" alt="Arena" style="height:28px;object-fit:contain;"/>
+        <span style="color:var(--muted);">×</span>
+        <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_3_2026-02-24_07-10-44-removebg-preview.png" alt="AVAX" style="height:24px;object-fit:contain;"/>
+      </div>
       <div style="font-family:var(--font-mono);font-size:0.78rem;color:var(--orange);letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;">📖 Documentation</div>
       <h1 style="margin-bottom:12px;">How <em style="color:var(--red);font-style:normal;">ClipDAO</em> Works</h1>
-      <p style="color:var(--muted);font-size:1rem;max-width:600px;">A trustless marketplace connecting streamers on Blaze and Arena with skilled clippers — powered by Avalanche smart contracts.</p>
+      <p style="color:var(--muted);font-size:1rem;max-width:600px;line-height:1.7;">A trustless marketplace connecting streamers on Blaze and Arena with skilled clippers — powered by Avalanche smart contracts. No middlemen. Automatic AVAX payouts. On-chain reputation that compounds.</p>
     </div>
 
     <!-- What is ClipDAO -->
@@ -2743,9 +3182,65 @@ nav { overflow: hidden; flex-shrink: 0; }
       <p style="color:var(--muted);line-height:1.8;">ClipDAO is a decentralized bounty platform where streamers lock AVAX into smart contract escrow and clippers compete to make the best clips. No informal agreements. No waiting to get paid. No ghosting. The smart contract holds the funds and releases them automatically when a winner is selected.</p>
       <p style="color:var(--muted);line-height:1.8;margin-top:10px;">It's built specifically around <strong style="color:white;">Blaze</strong> and <strong style="color:white;">Arena</strong> — the two streaming platforms where the ClipDAO community is active.</p>
       <div style="display:flex;gap:12px;margin-top:16px;flex-wrap:wrap;">
-        <a href="https://blaze.stream/" target="_blank" class="btn btn-ghost btn-sm">🔥 blaze.stream</a>
-        <a href="https://arena.social/live" target="_blank" class="btn btn-ghost btn-sm">🏟️ arena.social/live</a>
+        <a href="https://blaze.stream/" target="_blank" class="btn btn-ghost btn-sm">
+          <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_1_2026-02-24_07-10-44-removebg-preview.png" style="width:14px;height:14px;object-fit:contain;margin-right:3px;vertical-align:middle;"/> blaze.stream
+        </a>
+        <a href="https://arena.social/live" target="_blank" class="btn btn-ghost btn-sm">
+          <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_2_2026-02-24_07-10-44-removebg-preview.png" style="width:14px;height:14px;object-fit:contain;margin-right:3px;vertical-align:middle;"/> arena.social/live
+        </a>
       </div>
+    </div>
+
+    <!-- AVAX Flow Diagram -->
+    <div class="card" style="margin-bottom:20px;border-left:3px solid var(--orange);overflow:hidden;">
+      <h3 style="color:var(--orange);margin-bottom:20px;">How Value Flows</h3>
+      <div style="display:flex;align-items:center;justify-content:center;gap:0;overflow-x:auto;padding-bottom:8px;flex-wrap:nowrap;">
+        <div style="text-align:center;flex-shrink:0;width:90px;">
+          <div style="width:58px;height:58px;border-radius:50%;background:linear-gradient(135deg,#1a0a00,#2d1500);border:2px solid var(--orange);display:flex;align-items:center;justify-content:center;margin:0 auto 8px;animation:docsPulse 3s infinite;">
+            <span style="font-size:1.6rem;">📡</span>
+          </div>
+          <div style="font-weight:700;font-size:0.8rem;">Streamer</div>
+          <div style="font-family:var(--font-mono);font-size:0.62rem;color:var(--orange);margin-top:2px;">Locks AVAX</div>
+        </div>
+        <div style="flex:1;min-width:32px;display:flex;flex-direction:column;align-items:center;gap:2px;">
+          <div style="font-size:0.6rem;color:var(--amber);font-family:var(--font-mono);white-space:nowrap;">100% locked</div>
+          <div style="width:100%;height:2px;background:linear-gradient(90deg,var(--orange),var(--amber));position:relative;overflow:hidden;border-radius:1px;">
+            <div style="position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.7),transparent);animation:docsFlow 1.6s linear infinite;"></div>
+          </div>
+          <div style="color:var(--amber);font-size:0.8rem;">▶</div>
+        </div>
+        <div style="text-align:center;flex-shrink:0;width:90px;">
+          <div style="width:58px;height:58px;border-radius:50%;background:linear-gradient(135deg,#0a0010,#1a001a);border:2px solid var(--red);display:flex;align-items:center;justify-content:center;margin:0 auto 8px;animation:docsPulse 3s infinite 1s;">
+            <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_3_2026-02-24_07-10-44-removebg-preview.png" style="width:32px;height:32px;object-fit:contain;" alt="AVAX" onerror="this.outerHTML='<span style=font-size:1.6rem>⛓️</span>'"/>
+          </div>
+          <div style="font-weight:700;font-size:0.8rem;">Escrow</div>
+          <div style="font-family:var(--font-mono);font-size:0.62rem;color:var(--red);margin-top:2px;">Smart Contract</div>
+        </div>
+        <div style="flex:1;min-width:32px;display:flex;flex-direction:column;align-items:center;gap:2px;">
+          <div style="font-size:0.6rem;color:var(--success);font-family:var(--font-mono);white-space:nowrap;">96% to winner</div>
+          <div style="width:100%;height:2px;background:linear-gradient(90deg,var(--red),var(--success));position:relative;overflow:hidden;border-radius:1px;">
+            <div style="position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.7),transparent);animation:docsFlow 1.6s linear infinite 0.8s;"></div>
+          </div>
+          <div style="color:var(--success);font-size:0.8rem;">▶</div>
+        </div>
+        <div style="text-align:center;flex-shrink:0;width:90px;">
+          <div style="width:58px;height:58px;border-radius:50%;background:linear-gradient(135deg,#001a0a,#002d15);border:2px solid var(--success);display:flex;align-items:center;justify-content:center;margin:0 auto 8px;animation:docsPulse 3s infinite 2s;">
+            <span style="font-size:1.6rem;">✂️</span>
+          </div>
+          <div style="font-weight:700;font-size:0.8rem;">Clipper</div>
+          <div style="font-family:var(--font-mono);font-size:0.62rem;color:var(--success);margin-top:2px;">Gets Paid</div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:center;gap:20px;margin-top:18px;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:14px;">
+        <div style="text-align:center;"><div style="font-family:var(--font-display);font-size:1.3rem;color:var(--success);">96%</div><div style="font-size:0.68rem;color:var(--muted);">To Winner(s)</div></div>
+        <div style="text-align:center;"><div style="font-family:var(--font-display);font-size:1.3rem;color:var(--orange);">4%</div><div style="font-size:0.68rem;color:var(--muted);">Platform Fee</div></div>
+        <div style="text-align:center;"><div style="font-family:var(--font-display);font-size:1.3rem;color:var(--amber);">30%</div><div style="font-size:0.68rem;color:var(--muted);">Fee → Holders</div></div>
+        <div style="text-align:center;"><div style="font-family:var(--font-display);font-size:1.3rem;color:var(--red);">0</div><div style="font-size:0.68rem;color:var(--muted);">Middlemen</div></div>
+      </div>
+      <style>
+        @keyframes docsFlow{0%{transform:translateX(-100%)}100%{transform:translateX(200%)}}
+        @keyframes docsPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,107,26,0)}50%{box-shadow:0 0 0 6px rgba(255,107,26,0.12)}}
+      </style>
     </div>
 
     <!-- The Flow -->
@@ -2951,4 +3446,53 @@ nav { overflow: hidden; flex-shrink: 0; }
   </div>
 </div>
 
+
+<!-- ===================== PAGE: ADMIN ===================== -->
+<div id="page-admin" class="page">
+  <div class="container" style="padding-top:40px;padding-bottom:80px;max-width:900px;">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:28px;">
+      <span style="font-size:2rem;">🛡️</span>
+      <div>
+        <h2 style="color:#a855f7;">Admin Panel</h2>
+        <div class="mono" style="font-size:0.72rem;color:var(--muted);">Only visible to: 0x46914...60dF0</div>
+      </div>
+      <span class="badge badge-admin" style="margin-left:auto;">ADMIN</span>
+    </div>
+
+    <!-- Stats overview -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:24px;">
+      <div class="card" style="border-color:rgba(147,51,234,0.3)"><div style="font-family:var(--font-display);font-size:1.8rem;color:#a855f7;" id="adm-total-bounties">—</div><div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;">Total Bounties</div></div>
+      <div class="card" style="border-color:rgba(147,51,234,0.3)"><div style="font-family:var(--font-display);font-size:1.8rem;color:#a855f7;" id="adm-total-users">—</div><div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;">NFT Holders</div></div>
+      <div class="card" style="border-color:rgba(147,51,234,0.3)"><div style="font-family:var(--font-display);font-size:1.8rem;color:#a855f7;" id="adm-total-avax">—</div><div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;">AVAX Flowed</div></div>
+      <div class="card" style="border-color:rgba(147,51,234,0.3)"><div style="font-family:var(--font-display);font-size:1.8rem;color:#a855f7;" id="adm-flags">—</div><div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;">Flagged Items</div></div>
+      <div class="card" style="border-color:rgba(147,51,234,0.3)"><div style="font-family:var(--font-display);font-size:1.8rem;color:#a855f7;" id="adm-refs">—</div><div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;">Pending Payouts</div></div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tab-row">
+      <button class="tab-btn active" onclick="adminTab('flags',this)">🚩 Flagged Content</button>
+      <button class="tab-btn" onclick="adminTab('referrals',this)">💸 Referral Payouts</button>
+      <button class="tab-btn" onclick="adminTab('users',this)">👥 Users</button>
+      <button class="tab-btn" onclick="adminTab('bounties',this)">🎯 Bounties</button>
+    </div>
+
+    <!-- Flagged content -->
+    <div id="adm-tab-flags">
+      <div id="adm-flags-list"><div class="empty-state"><div class="spinner"></div></div></div>
+    </div>
+    <!-- Referral payouts -->
+    <div id="adm-tab-referrals" style="display:none;">
+      <div style="margin-bottom:12px;font-size:0.85rem;color:var(--muted);">Unpaid referral rewards. Send AVAX manually then mark as paid.</div>
+      <div id="adm-referrals-list"><div class="empty-state"><div class="spinner"></div></div></div>
+    </div>
+    <!-- Users -->
+    <div id="adm-tab-users" style="display:none;">
+      <div id="adm-users-list"><div class="empty-state"><div class="spinner"></div></div></div>
+    </div>
+    <!-- Bounties -->
+    <div id="adm-tab-bounties" style="display:none;">
+      <div id="adm-bounties-list"><div class="empty-state"><div class="spinner"></div></div></div>
+    </div>
+  </div>
+</div>
 </body>
