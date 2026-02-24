@@ -188,20 +188,15 @@ function updateNavWallet() {
   document.getElementById('btn-connect').style.display = 'none';
   document.getElementById('btn-dashboard').style.display = 'inline-flex';
   document.getElementById('btn-disconnect').style.display = 'inline-flex';
-  // Hero CTA: swap to "connected" state
   const hc = document.getElementById('hero-connect-btn');
   const hd = document.getElementById('hero-dashboard-btn');
   if (hc) hc.style.display = 'none';
   if (hd) hd.style.display = 'inline-flex';
-  // Show mobile bottom nav when on dashboard
   const mbn = document.getElementById('mobile-bottom-nav');
   if (mbn) mbn.style.display = 'flex';
-  // Fetch and show AVAX balance
+  // AVAX balance in overview only (not nav on mobile)
   provider.getBalance(account).then(bal => {
     const avax = parseFloat(ethers.formatEther(bal)).toFixed(3);
-    const el = document.getElementById('nav-balance');
-    if (el) { el.textContent = avax + ' AVAX'; el.style.display = 'inline-block'; }
-    // Also update overview balance card
     const ob = document.getElementById('overview-balance');
     if (ob) ob.textContent = avax + ' AVAX';
   }).catch(() => {});
@@ -249,6 +244,7 @@ async function checkAndShowDashboard() {
   if (hasNft) {
     showPage('dashboard');
     loadDashboard();
+    storeReferral();
   } else {
     openModal('modal-onboard');
   }
@@ -363,12 +359,20 @@ async function mintEarlyAccess() {
 
 async function loadMintStats() {
   try {
-    const minted = await nftContract.genesisMinted();
+    const roProvider = window.ethereum
+      ? new ethers.BrowserProvider(window.ethereum)
+      : new ethers.JsonRpcProvider(FUJI_RPC);
+    const roNft = new ethers.Contract(NFT_ADDRESS, NFT_ABI, roProvider);
+    const minted = await roNft.genesisMinted();
     const n = Number(minted);
-    document.getElementById('genesis-minted').textContent = n;
-    document.getElementById('genesis-bar').style.width = (n/500*100) + '%';
-    document.getElementById('stat-genesis').textContent = 500 - n;
-  } catch(e) {}
+    const remaining = 500 - n;
+    const el = document.getElementById('genesis-minted');
+    const bar = document.getElementById('genesis-bar');
+    const stat = document.getElementById('stat-genesis');
+    if (el)   el.textContent = n;
+    if (bar)  bar.style.width = (n / 500 * 100) + '%';
+    if (stat) stat.textContent = remaining;
+  } catch(e) { console.warn('loadMintStats failed', e); }
 }
 
 // =====================================================================
@@ -430,8 +434,39 @@ async function loadDashboard() {
   await Promise.all([
     loadReputation(),
     loadNFTStats(),
-    loadBounties()
+    loadBounties(),
+    loadRecentActivity()
   ]);
+}
+
+async function loadRecentActivity() {
+  const el = document.getElementById('recent-activity');
+  if (!el) return;
+  const acts = [];
+  // Pull from Supabase if available
+  if (db && account) {
+    try {
+      const { data } = await db.from('activity').select('*')
+        .eq('wallet', account.toLowerCase())
+        .order('created_at', { ascending: false }).limit(10);
+      if (data && data.length > 0) {
+        el.innerHTML = data.map(a => {
+          const icons = { post_bounty:'🎯', submit_clip:'📎', pick_winner:'🏆', vote:'🗳️', mint_genesis:'⭐', mint_early:'🔥' };
+          const labels = { post_bounty:'Posted bounty', submit_clip:'Submitted clip', pick_winner:'Picked winner', vote:'Cast vote', mint_genesis:'Minted Genesis NFT', mint_early:'Minted Early Access NFT' };
+          return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
+            <div style="width:32px;height:32px;border-radius:50%;background:rgba(255,107,26,0.1);display:flex;align-items:center;justify-content:center;flex-shrink:0;">${icons[a.type]||'📋'}</div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:0.88rem;font-weight:600;">${labels[a.type]||a.type}${a.meta?.title?' — '+escHtml(String(a.meta.title)):''}</div>
+              <div style="font-size:0.75rem;color:var(--muted);">${new Date(a.created_at).toLocaleString()}</div>
+            </div>
+            ${a.meta?.reward?`<div style="font-family:var(--font-mono);font-size:0.8rem;color:var(--orange);">${a.meta.reward} AVAX</div>`:''}
+          </div>`;
+        }).join('');
+        return;
+      }
+    } catch(e) {}
+  }
+  el.innerHTML = `<div class="empty-state" style="padding:30px 0;"><div class="icon">📋</div><p>No activity yet — post a bounty or submit a clip to get started</p></div>`;
 }
 
 async function loadReputation() {
@@ -462,42 +497,36 @@ async function loadNFTStats() {
 // =====================================================================
 async function loadBounties() {
   if (!escrowContract) {
-    // Read-only provider for public page
     try {
       const ro = new ethers.JsonRpcProvider(FUJI_RPC);
       escrowContract = new ethers.Contract(ESCROW_ADDRESS, ESCROW_ABI, ro);
     } catch(e) { return; }
   }
-
   try {
-    const total    = Number(await escrowContract.totalBounties());
-    const openIds  = await escrowContract.getOpenBounties();
-
+    const total   = Number(await escrowContract.totalBounties());
+    const openIds = await escrowContract.getOpenBounties();
     allBounties = [];
-    const ids = Array.from({ length: total }, (_, i) => i + 1);
-    for (const id of ids) {
+    let totalPaid = 0;
+    for (let id = 1; id <= total; id++) {
       try {
         const b = await escrowContract.getBounty(id);
-        allBounties.push({
-          id: Number(b.id),
-          streamer: b.streamer,
-          title: b.title,
-          description: b.description,
-          reward: ethers.formatEther(b.reward),
-          deadline: Number(b.deadline),
-          mode: Number(b.mode),
-          status: Number(b.status),
-          winnerCount: Number(b.winnerCount),
+        const bObj = {
+          id: Number(b.id), streamer: b.streamer, title: b.title,
+          description: b.description, reward: ethers.formatEther(b.reward),
+          deadline: Number(b.deadline), mode: Number(b.mode),
+          status: Number(b.status), winnerCount: Number(b.winnerCount),
           createdAt: Number(b.createdAt)
-        });
+        };
+        allBounties.push(bObj);
+        if (bObj.status === 1) totalPaid += parseFloat(bObj.reward);
       } catch(e) {}
     }
-
-    document.getElementById('stat-bounties').textContent = openIds.length;
+    const statBounties = document.getElementById('stat-bounties');
+    const statPaid     = document.getElementById('stat-paid');
+    if (statBounties) statBounties.textContent = openIds.length;
+    if (statPaid)     statPaid.textContent = totalPaid.toFixed(1);
     renderBounties();
-  } catch(e) {
-    console.error('loadBounties', e);
-  }
+  } catch(e) { console.error('loadBounties', e); }
 }
 
 function filterBounties(filter, btn) {
@@ -526,17 +555,38 @@ function renderBounties() {
 }
 
 function parseBountyMeta(desc) {
-  const platform   = (desc.match(/\[PLATFORM:([^\]]+)\]/) || [])[1] || '';
-  const streamLink = (desc.match(/\[STREAM:([^\]]+)\]/) || [])[1] || '';
-  const note       = (desc.match(/\[NOTE:([^\]]+)\]/) || [])[1] || '';
-  const cleanDesc  = desc.replace(/\[PLATFORM:[^\]]*\]|\[STREAM:[^\]]*\]|\[NOTE:[^\]]*\]/g,'').trim();
-  return { platform, streamLink, note, cleanDesc };
+  const platform        = (desc.match(/\[PLATFORM:([^\]]+)\]/) || [])[1] || '';
+  const streamLink      = (desc.match(/\[STREAM:([^\]]+)\]/) || [])[1] || '';
+  const note            = (desc.match(/\[NOTE:([^\]]+)\]/) || [])[1] || '';
+  const streamTime      = (desc.match(/\[TIME:([^\]]+)\]/) || [])[1] || '';
+  const allowedPlatforms= (desc.match(/\[ALLOWED:([^\]]+)\]/) || [])[1] || 'both';
+  const cleanDesc       = desc.replace(/\[PLATFORM:[^\]]*\]|\[STREAM:[^\]]*\]|\[NOTE:[^\]]*\]|\[TIME:[^\]]*\]|\[ALLOWED:[^\]]*\]/g,'').trim();
+  return { platform, streamLink, note, streamTime, allowedPlatforms, cleanDesc };
 }
 
+function getPlatformLogo(link) {
+  if (!link) return '';
+  const isYT = link.includes('youtube') || link.includes('youtu.be');
+  const isX  = link.includes('x.com') || link.includes('twitter.com');
+  if (isYT) return '<span style="display:inline-flex;align-items:center;gap:3px;background:rgba(255,0,0,0.12);border:1px solid rgba(255,0,0,0.25);border-radius:4px;padding:2px 6px;font-size:0.68rem;font-weight:700;color:#ff4444;">▶ YouTube</span>';
+  if (isX)  return '<span style="display:inline-flex;align-items:center;gap:3px;background:rgba(29,161,242,0.1);border:1px solid rgba(29,161,242,0.3);border-radius:4px;padding:2px 6px;font-size:0.68rem;font-weight:700;color:#1da1f2;">𝕏 Twitter</span>';
+  return '';
+}
+
+function extractYouTubeId(url) {
+  const m = url.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+
+const BLAZE_LOGO = 'https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_1_2026-02-24_07-10-44-removebg-preview.png';
+const ARENA_LOGO = 'https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_2_2026-02-24_07-10-44-removebg-preview.png';
+const AVAX_LOGO  = 'https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_3_2026-02-24_07-10-44-removebg-preview.png';
+
 function platformBadge(platform) {
-  if (platform === 'blaze')  return '<span class="badge badge-red">🔥 Blaze</span>';
-  if (platform === 'arena')  return '<span class="badge badge-amber">🏟️ Arena</span>';
-  if (platform === 'both')   return '<span class="badge badge-orange">🔥🏟️ Blaze + Arena</span>';
+  const img = (src,alt) => `<img src="${src}" alt="${alt}" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;margin-right:3px;"/>`;
+  if (platform === 'blaze') return `<span class="badge badge-red">${img(BLAZE_LOGO,'Blaze')}Blaze</span>`;
+  if (platform === 'arena') return `<span class="badge badge-amber">${img(ARENA_LOGO,'Arena')}Arena</span>`;
+  if (platform === 'both')  return `<span class="badge badge-orange">${img(BLAZE_LOGO,'Blaze')}${img(ARENA_LOGO,'Arena')}Both</span>`;
   return '';
 }
 
@@ -574,96 +624,397 @@ function bountyCardHTML(b) {
     </div>`;
 }
 
+// Multi-winner pending state
+let pendingWinners = {};
+
 async function openBountyDetail(bountyId) {
   const b = allBounties.find(x => x.id === bountyId);
   if (!b) return;
-
+  // Shareable hash
+  history.replaceState(null,'',window.location.pathname + '#bounty-' + bountyId);
   openModal('modal-bounty');
-  document.getElementById('modal-bounty-content').innerHTML = `<div class="empty-state"><div class="spinner"></div></div>`;
-
+  const mc = document.getElementById('modal-bounty-content');
+  mc.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
   try {
     const subs = await escrowContract.getSubmissions(bountyId);
-    const now  = Math.floor(Date.now() / 1000);
+    const now  = Math.floor(Date.now()/1000);
     const isOpen = b.status === 0 && b.deadline > now;
     const isStreamer = account && b.streamer.toLowerCase() === account.toLowerCase();
     const modeName = b.mode === 0 ? 'Streamer Picks' : 'Community Vote';
+    const { platform, streamLink, note, streamTime, allowedPlatforms, cleanDesc } = parseBountyMeta(b.description);
+    const editDeadline = b.createdAt + 3600;
+    const canEdit = isStreamer && now < editDeadline;
+    const shareUrl = window.location.origin + window.location.pathname + '#bounty-' + bountyId;
+    if (!pendingWinners[bountyId]) pendingWinners[bountyId] = [];
 
-    let subsHTML = '';
-    if (subs.length === 0) {
-      subsHTML = `<div class="empty-state" style="padding:30px"><div class="icon">📎</div><p>No submissions yet</p></div>`;
-    } else {
-      subsHTML = subs.map((s, i) => {
-        const isWinner = s.isWinner;
-        const canVote  = isOpen && b.mode === 1 && account && !isStreamer;
-        const canPick  = isOpen && b.mode === 0 && isStreamer;
-        return `
-          <div class="submission-card ${isWinner ? 'winner' : ''}">
-            <div style="flex:1;min-width:0;">
-              ${isWinner ? '<span class="badge badge-amber" style="margin-bottom:4px;display:inline-block;">🏆 Winner</span><br/>' : ''}
-              <a href="${escHtml(s.clipLink)}" target="_blank" class="sub-link">${escHtml(s.clipLink)}</a>
-              <div class="sub-meta" style="margin-top:4px;">${s.clipper.slice(0,10)}... · ${new Date(Number(s.timestamp)*1000).toLocaleDateString()}</div>
+    // Load host profile
+    let hostData = null;
+    if (db) { try { const r = await db.from('profiles').select('*').eq('wallet', b.streamer.toLowerCase()).maybeSingle(); hostData = r.data; } catch(e){} }
+    const hostName = hostData?.username || b.streamer.slice(0,10)+'...';
+    const hostX    = hostData?.x_handle || '';
+
+    // Submissions HTML
+    let subsHTML = subs.length === 0
+      ? '<div class="empty-state" style="padding:24px"><div class="icon">📎</div><p>No submissions yet. Be first!</p></div>'
+      : subs.map((s,i) => {
+          const isWinner  = s.isWinner;
+          const isPending = pendingWinners[bountyId].includes(i);
+          const canVote   = isOpen && b.mode===1 && account && !isStreamer && s.clipper.toLowerCase()!==account?.toLowerCase();
+          const canPick   = isOpen && b.mode===0 && isStreamer;
+          const pLogo     = getPlatformLogo(s.clipLink);
+          const shortLink = s.clipLink.length > 38 ? s.clipLink.slice(0,38)+'…' : s.clipLink;
+          return `<div class="submission-card ${isWinner?'winner':''} ${isPending?'pending-winner':''}" onclick="openSubDetail(${bountyId},${i})" style="cursor:pointer;">
+            <div style="flex:1;min-width:0;overflow:hidden;">
+              ${isWinner?'<span class="badge badge-amber" style="margin-bottom:4px;display:inline-block;">🏆 Winner</span><br/>':''}
+              ${isPending?'<span class="badge badge-orange" style="margin-bottom:4px;display:inline-block;">⏳ Selected</span><br/>':''}
+              <div style="margin-bottom:4px;">${pLogo}</div>
+              <div style="font-family:var(--font-mono);font-size:0.76rem;color:var(--orange);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(shortLink)}</div>
+              <div class="sub-meta" style="margin-top:3px;">${s.clipper.slice(0,8)}… · ${new Date(Number(s.timestamp)*1000).toLocaleDateString()}</div>
             </div>
-            <div style="text-align:right;flex-shrink:0;">
-              ${b.mode === 1 ? `<div class="vote-count">${s.voteCount}</div><div class="sub-meta">votes</div>` : ''}
-              ${canVote ? `<button class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="voteOnClip(${bountyId},${i})">Vote</button>` : ''}
-              ${canPick && !s.isWinner ? `<button class="btn btn-primary btn-sm" style="margin-top:6px;" onclick="pickWinner(${bountyId},${i})">Pick</button>` : ''}
+            <div style="flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+              ${b.mode===1?`<div class="vote-count">${s.voteCount}</div><div class="sub-meta">votes</div>`:''}
+              ${canVote?`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();voteOnClip(${bountyId},${i})">Vote</button>`:''}
+              ${canPick&&!isWinner&&!isPending?`<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();addPendingWinner(${bountyId},${i})">${b.winnerCount>1?'Select':'Pick'}</button>`:''}
+              ${canPick&&isPending?`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();removePendingWinner(${bountyId},${i})">Deselect</button>`:''}
             </div>
           </div>`;
-      }).join('');
+        }).join('');
+
+    // Multi-winner bar
+    const pw = pendingWinners[bountyId]||[];
+    let multiBar = '';
+    if (isStreamer && b.mode===0 && isOpen && b.winnerCount>1) {
+      multiBar = `<div style="background:rgba(255,107,26,0.1);border:1px solid rgba(255,107,26,0.35);border-radius:6px;padding:12px;margin-bottom:12px;">
+        <div style="font-weight:700;margin-bottom:4px;">🏆 Pick ${b.winnerCount} winners (${pw.length}/${b.winnerCount} selected)</div>
+        <div style="font-size:0.8rem;color:var(--muted);margin-bottom:8px;">Tap each clip card to select. Splits: ${b.winnerCount===2?'60/40':'60/30/10'}.</div>
+        ${pw.length===b.winnerCount?`<button class="btn btn-primary" style="width:100%;" onclick="confirmMultiWinners(${bountyId})">✅ Confirm & Pay Out Winners</button>`:`<div style="font-size:0.78rem;color:var(--orange);">Select ${b.winnerCount-pw.length} more…</div>`}
+      </div>`;
     }
 
+    // Submit form
+    const ap = allowedPlatforms||'both';
     let actionHTML = '';
     if (isOpen && account && !isStreamer) {
-      actionHTML = `
-        <div class="divider"></div>
-        <h3 style="margin-bottom:12px;color:var(--orange);">Submit Your Clip</h3>
-        <div class="form-group">
-          <label>X or YouTube Link</label>
-          <input type="url" id="clip-link-input" placeholder="https://x.com/... or https://youtube.com/..."/>
+      const opts = ap==='youtube' ? '<option value="youtube">YouTube</option>'
+                 : ap==='x'      ? '<option value="x">X (Twitter)</option>'
+                 : '<option value="x">X (Twitter)</option><option value="youtube">YouTube</option>';
+      actionHTML = `<div class="divider"></div>
+        <h3 style="margin-bottom:10px;color:var(--orange);">Submit Your Clip</h3>
+        <div style="background:rgba(255,107,26,0.05);border:1px solid rgba(255,107,26,0.2);border-radius:5px;padding:10px;margin-bottom:10px;font-size:0.8rem;color:var(--muted);">
+          Clip from the stream → post on ${ap==='both'?'X or YouTube':ap} → paste link below
         </div>
+        <div class="form-group"><label>Platform you posted to</label><select id="clip-plat-sel">${opts}</select></div>
+        <div class="form-group"><label>Your clip link</label><input type="url" id="clip-link-input" placeholder="Paste X or YouTube link" style="font-size:0.85rem;"/></div>
         <div id="tx-submit" class="tx-status"></div>
-        <button class="btn btn-primary" onclick="submitClip(${bountyId})" style="width:100%">Submit Clip</button>`;
+        <button class="btn btn-primary" onclick="submitClip(${bountyId})" style="width:100%;">📤 Submit Clip</button>`;
     }
-    if (isOpen && b.mode === 1 && account && (b.deadline <= now || isStreamer)) {
-      actionHTML += `<button class="btn btn-ghost" style="width:100%;margin-top:8px;" onclick="resolveVote(${bountyId})">Resolve Vote</button>`;
+    if (isOpen && b.mode===1 && account && b.deadline<=now) {
+      actionHTML += `<button class="btn btn-ghost" style="width:100%;margin-top:8px;" onclick="resolveVote(${bountyId})">Resolve Vote & Pay Out</button>`;
     }
 
-    const { platform, streamLink, note, cleanDesc } = parseBountyMeta(b.description);
+    // Comments
+    let commentsHTML = '<div style="font-size:0.8rem;color:var(--muted);padding:6px 0;">Connect Supabase for comments.</div>';
+    if (db) {
+      try {
+        const { data:cmts } = await db.from('comments').select('*').eq('bounty_id', String(bountyId)).order('created_at',{ascending:true}).limit(20);
+        commentsHTML = cmts&&cmts.length ? cmts.map(c=>`
+          <div style="display:flex;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
+            <div style="width:26px;height:26px;border-radius:50%;background:var(--dark);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:0.72rem;flex-shrink:0;">${(c.username||'?')[0].toUpperCase()}</div>
+            <div style="flex:1;min-width:0;"><div style="font-size:0.78rem;font-weight:600;color:var(--orange);">${escHtml(c.username||c.wallet?.slice(0,8)+'…')}</div>
+            <div style="font-size:0.84rem;word-break:break-word;">${escHtml(c.content)}</div>
+            <div style="font-size:0.68rem;color:var(--muted);">${new Date(c.created_at).toLocaleString()}</div></div>
+          </div>`).join('')
+          : '<div style="font-size:0.82rem;color:var(--muted);padding:6px 0;">No comments yet.</div>';
+      } catch(e){}
+    }
 
-    document.getElementById('modal-bounty-content').innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;gap:12px;">
-        <div>
-          <h2 style="color:var(--orange);font-size:1.6rem;margin-bottom:8px;">${escHtml(b.title)}</h2>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            <span class="badge ${isOpen ? 'badge-green' : 'badge-muted'}">${isOpen ? 'OPEN' : 'CLOSED'}</span>
+    mc.innerHTML = `<div>
+      <!-- Title row -->
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;gap:8px;">
+        <div style="flex:1;min-width:0;">
+          <h2 style="color:var(--orange);font-size:1.3rem;margin-bottom:6px;word-break:break-word;">${escHtml(b.title)}</h2>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;">
+            <span class="badge ${isOpen?'badge-green':'badge-muted'}">${isOpen?'OPEN':'CLOSED'}</span>
             <span class="badge badge-orange">${modeName}</span>
             ${platformBadge(platform)}
           </div>
         </div>
         <div style="text-align:right;flex-shrink:0;">
-          <div style="font-family:var(--font-display);font-size:2rem;color:var(--orange);">${parseFloat(b.reward).toFixed(2)}</div>
-          <div style="font-size:0.78rem;color:var(--muted);">AVAX Locked</div>
+          <div style="font-family:var(--font-display);font-size:1.7rem;color:var(--orange);line-height:1;">${parseFloat(b.reward).toFixed(2)}</div>
+          <div style="font-size:0.7rem;color:var(--muted);">AVAX</div>
         </div>
       </div>
-      <p style="color:var(--muted);font-size:0.9rem;margin-bottom:12px;">${escHtml(cleanDesc)}</p>
-      ${streamLink ? `<div style="margin-bottom:12px;"><span style="font-size:0.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;">Stream Link</span><br/><a href="${escHtml(streamLink)}" target="_blank" style="color:var(--orange);font-family:var(--font-mono);font-size:0.8rem;">${escHtml(streamLink)} ↗</a></div>` : ''}
-      ${note ? `<div style="background:rgba(255,107,26,0.08);border:1px solid rgba(255,107,26,0.25);border-radius:6px;padding:12px;margin-bottom:12px;"><div style="font-size:0.75rem;color:var(--orange);text-transform:uppercase;margin-bottom:4px;">📋 Streamer's Note</div><div style="font-size:0.88rem;color:var(--text);">${escHtml(note)}</div></div>` : ''}
-      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px;">
-        <div class="bounty-meta-item">⏱ ${timeRemaining(b.deadline)}</div>
-        <div class="bounty-meta-item">🏆 ${b.winnerCount} winner${b.winnerCount > 1 ? 's' : ''}</div>
-        <div class="bounty-meta-item mono">${b.streamer.slice(0,14)}...</div>
+
+      <!-- Actions row -->
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
+        <button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText('${shareUrl}').then(()=>toast('Link copied!','success'))">🔗 Share</button>
+        ${canEdit?`<button class="btn btn-ghost btn-sm" onclick="openEditBounty(${bountyId})">✏️ Edit (${Math.max(0,Math.floor((editDeadline-now)/60))}m left)</button>`:''}
       </div>
+
+      <!-- Host card -->
+      <div style="background:var(--dark);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:12px;cursor:pointer;display:flex;align-items:center;gap:10px;" onclick="openHostProfile('${b.streamer}')">
+        <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--red),var(--orange));display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;">${hostName[0]?.toUpperCase()||'?'}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;font-size:0.9rem;">${escHtml(hostName)}</div>
+          <div style="font-size:0.72rem;color:var(--muted);">${platform} streamer${hostX?' · @'+escHtml(hostX):''}${streamTime?' · 🕐 '+escHtml(streamTime)+' UTC':''}</div>
+        </div>
+        <div style="font-size:0.75rem;color:var(--orange);flex-shrink:0;">Profile →</div>
+      </div>
+
+      <!-- Meta -->
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;font-size:0.8rem;color:var(--muted);">
+        <span>⏱ ${timeRemaining(b.deadline)}</span>
+        <span>🏆 ${b.winnerCount} winner${b.winnerCount>1?'s':''}</span>
+        ${streamTime?`<span>🕐 ${escHtml(streamTime)} UTC</span>`:''}
+      </div>
+
+      <!-- Desc -->
+      <p style="color:var(--muted);font-size:0.88rem;line-height:1.7;margin-bottom:10px;">${escHtml(cleanDesc)}</p>
+
+      <!-- Stream link -->
+      ${streamLink?`<div style="background:rgba(255,107,26,0.06);border:1px solid rgba(255,107,26,0.2);border-radius:6px;padding:10px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+        <div style="min-width:0;flex:1;"><div style="font-size:0.7rem;color:var(--orange);text-transform:uppercase;margin-bottom:2px;">Stream Source</div>
+        <div style="font-family:var(--font-mono);font-size:0.75rem;word-break:break-all;color:var(--text);">${escHtml(streamLink)}</div></div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;">
+          <button class="btn btn-ghost btn-sm" onclick="openStreamViewer('${escHtml(streamLink)}','${escHtml(hostName)}')">📺 View</button>
+          <a href="${escHtml(streamLink)}" target="_blank" class="btn btn-ghost btn-sm">↗</a>
+        </div>
+      </div>`:''}
+      <div id="stream-viewer-container"></div>
+
+      <!-- Note -->
+      ${note?`<div style="background:rgba(255,107,26,0.08);border:1px solid rgba(255,107,26,0.25);border-radius:6px;padding:10px;margin-bottom:10px;">
+        <div style="font-size:0.7rem;color:var(--orange);text-transform:uppercase;margin-bottom:4px;">📋 Host Requirements</div>
+        <div style="font-size:0.85rem;">${escHtml(note)}</div>
+      </div>`:''}
+
+      ${multiBar}
+
       <div class="divider"></div>
-      <h3 style="margin-bottom:12px;">Submissions (${subs.length})</h3>
+      <h3 style="margin-bottom:10px;">Submissions (${subs.length}) <span style="font-size:0.75rem;font-weight:400;color:var(--muted);">Tap to view details</span></h3>
       ${subsHTML}
-      ${actionHTML}`;
+      ${actionHTML}
+
+      <!-- Comments -->
+      <div class="divider"></div>
+      <h3 style="margin-bottom:10px;">💬 Comments</h3>
+      <div id="comments-list-${bountyId}">${commentsHTML}</div>
+      ${account?`<div style="display:flex;gap:8px;margin-top:8px;">
+        <input type="text" id="comment-input-${bountyId}" placeholder="Write a comment…" style="flex:1;font-size:0.85rem;"/>
+        <button class="btn btn-ghost btn-sm" onclick="postComment(${bountyId})">Post</button>
+      </div>`:'<div style="font-size:0.8rem;color:var(--muted);text-align:center;margin-top:8px;">Connect wallet to comment</div>'}
+    </div>`;
   } catch(e) {
-    document.getElementById('modal-bounty-content').innerHTML = `<div class="empty-state"><p>Failed to load bounty</p></div>`;
+    document.getElementById('modal-bounty-content').innerHTML = '<div class="empty-state"><p>Failed to load bounty</p></div>';
     console.error(e);
   }
 }
 
+// Submission detail subpage
+async function openSubDetail(bountyId, subIndex) {
+  const b = allBounties.find(x=>x.id===bountyId);
+  if (!b) return;
+  const mc = document.getElementById('modal-bounty-content');
+  mc.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
+  try {
+    const subs = await escrowContract.getSubmissions(bountyId);
+    const s    = subs[subIndex];
+    const pLogo = getPlatformLogo(s.clipLink);
+    const now   = Math.floor(Date.now()/1000);
+    const editDl = Number(s.timestamp)+3600;
+    const canEdit = account && s.clipper.toLowerCase()===account?.toLowerCase() && now<editDl;
+    let profileData=null;
+    if(db){try{const r=await db.from('profiles').select('*').eq('wallet',s.clipper.toLowerCase()).maybeSingle();profileData=r.data;}catch(e){}}
+    const clipperName = profileData?.username || s.clipper.slice(0,10)+'…';
+    const isYT = s.clipLink.includes('youtube')||s.clipLink.includes('youtu.be');
+    const ytId = isYT ? extractYouTubeId(s.clipLink) : null;
+    mc.innerHTML = `<div>
+      <button class="btn btn-ghost btn-sm" onclick="openBountyDetail(${bountyId})" style="margin-bottom:12px;">← Back to Bounty</button>
+      <!-- Submitter -->
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;cursor:pointer;" onclick="openClipperProfile('${s.clipper}')">
+        <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--red),var(--orange));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1.2rem;flex-shrink:0;">${clipperName[0]?.toUpperCase()||'?'}</div>
+        <div><div style="font-weight:700;">${escHtml(clipperName)}</div>
+          <div style="font-size:0.75rem;color:var(--muted);">${s.clipper.slice(0,14)}… · View Profile →</div>
+        </div>
+        ${s.isWinner?'<span class="badge badge-amber" style="margin-left:auto;">🏆 Winner</span>':''}
+      </div>
+      <!-- YouTube embed -->
+      ${ytId?`<div style="position:relative;padding-bottom:56.25%;height:0;border-radius:8px;overflow:hidden;margin-bottom:12px;">
+        <iframe src="https://www.youtube.com/embed/${ytId}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;" allowfullscreen></iframe>
+      </div>`:''}
+      <!-- Platform badge -->
+      <div style="margin-bottom:10px;">${pLogo}</div>
+      <!-- Link card -->
+      <div style="background:var(--dark);border:1px solid var(--border);border-radius:6px;padding:12px;margin-bottom:10px;">
+        <div style="font-size:0.7rem;color:var(--muted);margin-bottom:4px;">Clip Link</div>
+        <div style="word-break:break-all;font-family:var(--font-mono);font-size:0.8rem;color:var(--orange);">${escHtml(s.clipLink)}</div>
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
+          <a href="${escHtml(s.clipLink)}" target="_blank" class="btn btn-ghost btn-sm">↗ Open</a>
+          <button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText('${escHtml(s.clipLink)}').then(()=>toast('Copied!','success'))">📋 Copy</button>
+          ${canEdit?`<button class="btn btn-ghost btn-sm" onclick="alert('Edit: paste new link in chat — on-chain edits not yet supported')">✏️ Edit (${Math.max(0,Math.floor((editDl-now)/60))}m left)</button>`:''}
+        </div>
+      </div>
+      ${b.mode===1?`<div style="text-align:center;padding:14px;background:var(--dark);border-radius:6px;margin-bottom:10px;">
+        <div style="font-family:var(--font-display);font-size:2rem;color:var(--orange);">${s.voteCount}</div>
+        <div style="font-size:0.78rem;color:var(--muted);">Community Votes</div>
+      </div>`:''}
+      <div style="font-size:0.75rem;color:var(--muted);">Submitted: ${new Date(Number(s.timestamp)*1000).toLocaleString()}</div>
+    </div>`;
+  } catch(e){ mc.innerHTML='<div class="empty-state"><p>Error</p></div>'; }
+}
+
+// Host profile subpage
+async function openHostProfile(wallet) {
+  const mc = document.getElementById('modal-bounty-content');
+  mc.innerHTML='<div class="empty-state"><div class="spinner"></div></div>';
+  let data=null;
+  if(db){try{const r=await db.from('profiles').select('*').eq('wallet',wallet.toLowerCase()).maybeSingle();data=r.data;}catch(e){}}
+  const name=data?.username||wallet.slice(0,10)+'…';
+  const platform=data?.platform||'blaze';
+  const channel=data?.channel||'';
+  const xHandle=data?.x_handle||'';
+  mc.innerHTML=`<div>
+    <div style="text-align:center;padding:20px 0 14px;">
+      <div style="width:70px;height:70px;border-radius:50%;background:linear-gradient(135deg,var(--red),var(--orange));display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:2rem;margin:0 auto 10px;">${name[0]?.toUpperCase()||'?'}</div>
+      <h2 style="margin-bottom:2px;">${escHtml(name)}</h2>
+      ${xHandle?`<div style="color:var(--muted);font-size:0.85rem;">@${escHtml(xHandle)}</div>`:''}
+      <div style="display:flex;gap:6px;justify-content:center;margin-top:8px;flex-wrap:wrap;">
+        ${platformBadge(platform)}
+      </div>
+    </div>
+    ${channel?`<div style="margin-bottom:14px;">
+      <div style="font-size:0.75rem;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Stream Channel</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+        <a href="${escHtml(channel)}" target="_blank" class="btn btn-primary btn-sm">▶ Open on ${escHtml(platform)}</a>
+        <button class="btn btn-ghost btn-sm" onclick="openStreamViewer('${escHtml(channel)}','${escHtml(name)}')">📺 View Here</button>
+      </div>
+    </div>
+    <div id="stream-viewer-container"></div>`:''}
+    <div style="background:var(--dark);border:1px solid var(--border);border-radius:6px;padding:12px;">
+      <div style="font-size:0.7rem;color:var(--muted);margin-bottom:4px;">Wallet</div>
+      <div style="font-family:var(--font-mono);font-size:0.78rem;word-break:break-all;">${wallet}</div>
+      <a href="https://testnet.snowtrace.io/address/${wallet}" target="_blank" style="font-size:0.75rem;color:var(--orange);">Explorer ↗</a>
+    </div>
+  </div>`;
+}
+
+// Clipper profile subpage
+async function openClipperProfile(wallet) {
+  const mc = document.getElementById('modal-bounty-content');
+  mc.innerHTML='<div class="empty-state"><div class="spinner"></div></div>';
+  let data=null,tokenData=null;
+  if(db){try{const r=await db.from('profiles').select('*').eq('wallet',wallet.toLowerCase()).maybeSingle();data=r.data;}catch(e){}}
+  try{
+    const ro=new ethers.JsonRpcProvider(FUJI_RPC);
+    const roNft=new ethers.Contract(NFT_ADDRESS,NFT_ABI,ro);
+    const hasNft=await roNft.hasNFT(wallet);
+    if(hasNft){const tid=await roNft.walletToToken(wallet);tokenData=await roNft.getTokenData(tid);}
+  }catch(e){}
+  const name=data?.username||tokenData?.username||wallet.slice(0,10)+'…';
+  const xHandle=data?.x_handle||tokenData?.xHandle||'';
+  const won=tokenData?Number(tokenData.bountiesWon):0;
+  const votes=tokenData?Number(tokenData.votesReceived):0;
+  const level=tokenData?Number(tokenData.level):0;
+  const tier=tokenData?Number(tokenData.tier):0;
+  mc.innerHTML=`<div>
+    <div style="text-align:center;padding:20px 0 14px;">
+      <div style="width:70px;height:70px;border-radius:50%;background:linear-gradient(135deg,var(--red),var(--orange));display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:2rem;margin:0 auto 10px;">${name[0]?.toUpperCase()||'?'}</div>
+      <h2 style="margin-bottom:2px;">${escHtml(name)}</h2>
+      ${xHandle?`<div style="color:var(--muted);font-size:0.85rem;">@${escHtml(xHandle)}</div>`:''}
+      <div style="display:flex;gap:6px;justify-content:center;margin-top:8px;flex-wrap:wrap;">
+        ${tier===1?'<span class="badge badge-amber">⭐ Genesis</span>':tier===2?'<span class="badge badge-red">🔥 Early Access</span>':''}
+        ${level?`<span class="badge badge-orange">Level ${level}</span>`:''}
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
+      <div class="card" style="text-align:center;padding:12px;"><div style="font-family:var(--font-display);font-size:1.6rem;color:var(--orange);">${won}</div><div style="font-size:0.7rem;color:var(--muted);">Wins</div></div>
+      <div class="card" style="text-align:center;padding:12px;"><div style="font-family:var(--font-display);font-size:1.6rem;color:var(--amber);">${votes}</div><div style="font-size:0.7rem;color:var(--muted);">Votes</div></div>
+      <div class="card" style="text-align:center;padding:12px;"><div style="font-family:var(--font-display);font-size:1.6rem;color:var(--red);">${level||'—'}</div><div style="font-size:0.7rem;color:var(--muted);">Level</div></div>
+    </div>
+    <div style="background:var(--dark);border:1px solid var(--border);border-radius:6px;padding:12px;">
+      <div style="font-size:0.7rem;color:var(--muted);margin-bottom:4px;">Wallet</div>
+      <div style="font-family:var(--font-mono);font-size:0.78rem;word-break:break-all;">${wallet}</div>
+      <a href="https://testnet.snowtrace.io/address/${wallet}" target="_blank" style="font-size:0.75rem;color:var(--orange);">Explorer ↗</a>
+    </div>
+  </div>`;
+}
+
+// Stream viewer
+function openStreamViewer(url, name) {
+  const el = document.getElementById('stream-viewer-container');
+  if(!el) { window.open(url,'_blank'); return; }
+  const isBlaze=url.includes('blaze.stream'), isArena=url.includes('arena.social');
+  if(!isBlaze&&!isArena) { window.open(url,'_blank'); return; }
+  el.innerHTML=`<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:12px;">
+    <div style="background:var(--dark);padding:8px 12px;display:flex;justify-content:space-between;align-items:center;">
+      <div style="font-size:0.82rem;font-weight:600;">📺 ${escHtml(name)}'s Stream</div>
+      <button onclick="this.closest('div').parentElement.innerHTML=''" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem;">✕</button>
+    </div>
+    <iframe src="${escHtml(url)}" style="width:100%;height:min(320px,50vw);border:none;display:block;" allowfullscreen sandbox="allow-scripts allow-same-origin allow-popups allow-forms"></iframe>
+  </div>`;
+  el.scrollIntoView({behavior:'smooth'});
+}
+
+// Multi-winner helpers
+function addPendingWinner(bountyId, subIndex) {
+  const b=allBounties.find(x=>x.id===bountyId);
+  if(!b) return;
+  if(!pendingWinners[bountyId]) pendingWinners[bountyId]=[];
+  if(pendingWinners[bountyId].length>=b.winnerCount){toast(`Max ${b.winnerCount} — deselect one first`,'error');return;}
+  if(!pendingWinners[bountyId].includes(subIndex)) pendingWinners[bountyId].push(subIndex);
+  toast(`${pendingWinners[bountyId].length}/${b.winnerCount} selected`,'info');
+  openBountyDetail(bountyId);
+}
+function removePendingWinner(bountyId, subIndex) {
+  if(pendingWinners[bountyId]) pendingWinners[bountyId]=pendingWinners[bountyId].filter(i=>i!==subIndex);
+  openBountyDetail(bountyId);
+}
+async function confirmMultiWinners(bountyId) {
+  const b=allBounties.find(x=>x.id===bountyId);
+  const pw=pendingWinners[bountyId]||[];
+  if(!signer){toast('Connect wallet','error');return;}
+  if(pw.length!==b.winnerCount){toast(`Need exactly ${b.winnerCount} winners`,'error');return;}
+  if(!confirm(`Pay out ${b.winnerCount} winners? This cannot be undone.`)) return;
+  const splits=b.winnerCount===2?[60,40]:b.winnerCount===3?[60,30,10]:[100];
+  try{
+    toast('Sending payout…','info');
+    const tx=await escrowContract.streamerPicksWinners(bountyId,pw,splits);
+    await tx.wait();
+    pendingWinners[bountyId]=[];
+    toast('Winners paid out!','success');
+    await logActivity('pick_winner',{bountyId,winners:pw});
+    await loadBounties();
+    openBountyDetail(bountyId);
+  }catch(e){toast('Failed: '+(e.reason||e.message),'error');}
+}
+
+// Comments
+async function postComment(bountyId) {
+  const input=document.getElementById(`comment-input-${bountyId}`);
+  const content=input?.value?.trim();
+  if(!content||!account) return;
+  if(!db){toast('Supabase not connected','error');return;}
+  try{
+    await db.from('comments').insert({bounty_id:String(bountyId),wallet:account.toLowerCase(),username:userProfile?.username||account.slice(0,8),content,created_at:new Date().toISOString()});
+    input.value='';
+    toast('Comment posted!','success');
+    openBountyDetail(bountyId);
+  }catch(e){toast('Failed','error');}
+}
+
+// Edit bounty (1hr window)
+async function openEditBounty(bountyId) {
+  const b=allBounties.find(x=>x.id===bountyId);
+  if(!b) return;
+  const {cleanDesc,note}=parseBountyMeta(b.description);
+  const newTitle=prompt('Edit title:',b.title);
+  if(newTitle===null) return;
+  toast('On-chain bounty editing not yet in contract — logged to Supabase','info');
+  if(db&&account) await db.from('activity').insert({wallet:account.toLowerCase(),type:'edit_bounty',meta:{bountyId,newTitle},created_at:new Date().toISOString()});
+}
+
 // =====================================================================
+// POST BOUNTY// =====================================================================
 // POST BOUNTY
 // =====================================================================
 async function postBounty() {
@@ -682,7 +1033,9 @@ async function postBounty() {
   if (parseFloat(reward) <= 0)    { toast('Reward must be > 0', 'error'); return; }
 
   // Encode platform + stream link + note into description for on-chain storage
-  const fullDesc = `${desc}\n\n[PLATFORM:${platform}]\n[STREAM:${streamLink}]\n[NOTE:${note}]`;
+  const streamTime = document.getElementById('post-stream-time').value.trim();
+  const allowedPlatforms = document.getElementById('post-allowed-platforms').value;
+  const fullDesc = `${desc}\n\n[PLATFORM:${platform}][STREAM:${streamLink}][NOTE:${note}][TIME:${streamTime}][ALLOWED:${allowedPlatforms}]`;
 
   try {
     setTxStatus('tx-post', '⏳ Posting bounty...', 'pending');
@@ -709,18 +1062,22 @@ async function postBounty() {
 // =====================================================================
 async function submitClip(bountyId) {
   if (!signer) { toast('Connect wallet first', 'error'); return; }
-  const link = document.getElementById('clip-link-input').value.trim();
+  const link     = document.getElementById('clip-link-input').value.trim();
+  const platSel  = document.getElementById('clip-plat-sel')?.value || 'both';
   if (!link) { toast('Paste your clip link', 'error'); return; }
   if (!isValidClipLink(link)) { toast('Must be an X or YouTube link', 'error'); return; }
-
+  // Validate matches selected platform
+  const isYT = link.includes('youtube') || link.includes('youtu.be');
+  const isX  = link.includes('x.com')   || link.includes('twitter.com');
+  if (platSel === 'youtube' && !isYT) { toast('Link must be a YouTube URL', 'error'); return; }
+  if (platSel === 'x'       && !isX)  { toast('Link must be an X (Twitter) URL', 'error'); return; }
   try {
     setTxStatus('tx-submit', '⏳ Submitting clip on-chain...', 'pending');
     const tx = await escrowContract.submitClip(bountyId, link);
     await tx.wait();
     setTxStatus('tx-submit', '✅ Clip submitted!', 'success');
     toast('Clip submitted!', 'success');
-    await logActivity('submit_clip', { bountyId, link });
-    // Refresh modal
+    await logActivity('submit_clip', { bountyId, link, platform: platSel });
     openBountyDetail(bountyId);
   } catch(e) {
     setTxStatus('tx-submit', '❌ ' + (e.reason || e.message || 'Error'), 'error');
@@ -751,11 +1108,15 @@ async function voteOnClip(bountyId, submissionId) {
 }
 
 // =====================================================================
-// PICK WINNER (streamer)
+// PICK WINNER (single winner shortcut - multi handled by confirmMultiWinners)
 // =====================================================================
 async function pickWinner(bountyId, submissionId) {
+  // For single-winner bounties, fire directly. Multi-winner uses addPendingWinner flow.
+  const b = allBounties.find(x=>x.id===bountyId);
+  if (!b) return;
+  if (b.winnerCount > 1) { addPendingWinner(bountyId, submissionId); return; }
   if (!signer) { toast('Connect wallet first', 'error'); return; }
-  if (!confirm('Pick this clip as the winner? This will trigger the payout.')) return;
+  if (!confirm('Pick this clip as the winner? AVAX will be sent immediately.')) return;
   try {
     toast('Selecting winner...', 'info');
     const tx = await escrowContract.streamerPicksWinners(bountyId, [submissionId], [100]);
@@ -833,9 +1194,13 @@ async function loadMySubmissions() {
 function showPage(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + page)?.classList.add('active');
-  if (page === 'mint')     loadMintStats();
-  if (page === 'bounties') { loadBounties(); }
   window.scrollTo(0, 0);
+  const mbn = document.getElementById('mobile-bottom-nav');
+  if (mbn) mbn.style.display = (page === 'dashboard' && account) ? 'flex' : 'none';
+  if (page === 'dashboard')  loadDashboard();
+  if (page === 'mint')       loadMintStats();
+  if (page === 'bounties')   loadBounties();
+  if (page === 'referrals')  loadReferrals();
 }
 
 function switchTab(tabId) {
@@ -1024,29 +1389,109 @@ async function loadInventory() {
 }
 
 // =====================================================================
+// REFERRALS
+// =====================================================================
+function getReferralLink() {
+  if (!account) return null;
+  const base = window.location.origin + window.location.pathname;
+  return base + '?ref=' + account.toLowerCase();
+}
+function copyReferralLink() {
+  const link = getReferralLink();
+  if (!link) { toast('Connect wallet first','error'); return; }
+  navigator.clipboard.writeText(link).then(()=>toast('Referral link copied!','success'));
+  updateReferralUI();
+}
+function shareReferralLink() {
+  const link = getReferralLink();
+  if (!link) { toast('Connect wallet first','error'); return; }
+  const text = `Join ClipDAO — the decentralized clipping marketplace! Mint your NFT and start earning: ${link}`;
+  if (navigator.share) navigator.share({title:'ClipDAO Referral',text,url:link});
+  else navigator.clipboard.writeText(text).then(()=>toast('Copied share text!','success'));
+}
+function updateReferralUI() {
+  const link = getReferralLink();
+  const el = document.getElementById('referral-link-box');
+  if (el && link) el.textContent = link;
+}
+async function loadReferrals() {
+  updateReferralUI();
+  if (!db) return;
+  // Check who referred me (from URL on first visit)
+  const params = new URLSearchParams(window.location.search);
+  const refBy  = params.get('ref');
+  if (refBy && refBy !== account?.toLowerCase()) {
+    const refByEl = document.getElementById('ref-by');
+    if (refByEl) refByEl.textContent = 'Referred by: ' + refBy.slice(0,14)+'…';
+  }
+  // Load leaderboard
+  try {
+    const { data } = await db.from('referrals').select('referrer,count').order('count',{ascending:false}).limit(10);
+    const el = document.getElementById('ref-leaderboard');
+    if (!el) return;
+    if (!data||data.length===0) { el.innerHTML='<div class="empty-state" style="padding:20px;"><p>No referrals yet — be the first!</p></div>'; return; }
+    el.innerHTML = data.map((r,i)=>`
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
+        <div style="font-family:var(--font-display);font-size:1.2rem;color:${i===0?'var(--amber)':i===1?'var(--muted)':i===2?'#cd7f32':'var(--border)'};width:24px;text-align:center;">${i+1}</div>
+        <div style="flex:1;font-family:var(--font-mono);font-size:0.8rem;">${r.referrer?.slice(0,16)}…</div>
+        <div style="font-family:var(--font-display);color:var(--orange);">${r.count} ref${r.count!==1?'s':''}</div>
+      </div>`).join('');
+    // My stats
+    if (account) {
+      const my = data.find(r=>r.referrer===account.toLowerCase());
+      const countEl = document.getElementById('ref-count');
+      if (countEl && my) countEl.textContent = my.count;
+    }
+  } catch(e) {}
+}
+
+// Store referral on page load
+async function storeReferral() {
+  const params = new URLSearchParams(window.location.search);
+  const ref = params.get('ref');
+  if (!ref || !account || !db) return;
+  if (ref === account.toLowerCase()) return;
+  try {
+    await db.from('referral_clicks').upsert({wallet:account.toLowerCase(),referred_by:ref,created_at:new Date().toISOString()},{onConflict:'wallet'});
+  } catch(e) {}
+}
+
+// =====================================================================
 // EXPOSE FUNCTIONS TO WINDOW (fixes onclick not defined errors)
 // =====================================================================
-window.connectWallet    = connectWallet;
-window.disconnectWallet = disconnectWallet;
-window.showPage         = showPage;
-window.switchTab        = switchTab;
-window.openModal        = openModal;
-window.closeModal       = closeModal;
-window.selectRole       = selectRole;
-window.onboardNext      = onboardNext;
-window.finishOnboarding = finishOnboarding;
-window.mintGenesis      = mintGenesis;
-window.mintEarlyAccess  = mintEarlyAccess;
-window.saveProfile      = saveProfile;
-window.postBounty       = postBounty;
-window.submitClip       = submitClip;
-window.voteOnClip       = voteOnClip;
-window.pickWinner       = pickWinner;
-window.resolveVote      = resolveVote;
-window.filterBounties   = filterBounties;
-window.openBountyDetail = openBountyDetail;
-window.setMobileActive  = setMobileActive;
-window.loadInventory    = loadInventory;
+window.connectWallet      = connectWallet;
+window.disconnectWallet   = disconnectWallet;
+window.showPage           = showPage;
+window.switchTab          = switchTab;
+window.openModal          = openModal;
+window.closeModal         = closeModal;
+window.selectRole         = selectRole;
+window.onboardNext        = onboardNext;
+window.finishOnboarding   = finishOnboarding;
+window.mintGenesis        = mintGenesis;
+window.mintEarlyAccess    = mintEarlyAccess;
+window.saveProfile        = saveProfile;
+window.postBounty         = postBounty;
+window.submitClip         = submitClip;
+window.voteOnClip         = voteOnClip;
+window.pickWinner         = pickWinner;
+window.resolveVote        = resolveVote;
+window.filterBounties     = filterBounties;
+window.openBountyDetail   = openBountyDetail;
+window.setMobileActive    = setMobileActive;
+window.loadInventory      = loadInventory;
+window.openSubDetail      = openSubDetail;
+window.openHostProfile    = openHostProfile;
+window.openClipperProfile = openClipperProfile;
+window.openStreamViewer   = openStreamViewer;
+window.addPendingWinner   = addPendingWinner;
+window.removePendingWinner= removePendingWinner;
+window.confirmMultiWinners= confirmMultiWinners;
+window.postComment        = postComment;
+window.openEditBounty     = openEditBounty;
+window.copyReferralLink   = copyReferralLink;
+window.shareReferralLink  = shareReferralLink;
+window.loadReferrals      = loadReferrals;
 
 // =====================================================================
 // INIT
@@ -1368,6 +1813,7 @@ textarea { resize: vertical; min-height: 80px; }
   gap: 12px; margin-bottom: 10px;
 }
 .submission-card.winner { border-color: var(--amber); background: rgba(255,149,0,0.05); }
+.submission-card.pending-winner { border-color: var(--orange); background: rgba(255,107,26,0.07); }
 .sub-link { font-family: var(--font-mono); font-size: 0.78rem; color: var(--orange); }
 .sub-meta { font-size: 0.78rem; color: var(--muted); }
 .vote-count { font-family: var(--font-display); font-size: 1.2rem; color: var(--orange); }
@@ -1508,8 +1954,22 @@ textarea { resize: vertical; min-height: 80px; }
   .mobile-bottom-nav { display: none !important; }
 }
 
-/* ── Divider ── */
-.divider { height: 1px; background: var(--border); margin: 24px 0; }
+/* ── Nav ── */
+nav { overflow: hidden; flex-shrink: 0; }
+.nav-right { min-width: 0; flex-shrink: 0; display:flex; align-items:center; gap:6px; }
+@media (max-width: 640px) {
+  nav { padding: 0 10px; gap: 8px; }
+  .nav-logo svg { width: 72px !important; height: 22px !important; }
+  .btn-sm { padding: 5px 8px; font-size: 0.7rem; letter-spacing: 0; }
+  #nav-addr { max-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.65rem; padding: 3px 6px; }
+  .nav-dash-text { display: none; }
+  #btn-dashboard::after { content: "⚡"; }
+  #nav-balance { display: none !important; }
+}
+@media (max-width: 380px) {
+  #nav-addr { display: none !important; }
+  .nav-logo svg { width: 60px !important; }
+}
 
 /* ── Empty State ── */
 .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
@@ -1598,13 +2058,15 @@ textarea { resize: vertical; min-height: 80px; }
       </line>
     </svg>
   </div>
-  <div class="nav-right">
-    <button class="btn btn-ghost btn-sm" onclick="showPage('docs')" style="display:inline-flex;">Docs</button>
-    <span id="nav-balance" class="nav-addr" style="display:none;color:var(--amber);border-color:rgba(255,149,0,0.3);background:rgba(255,149,0,0.08);"></span>
+  <div class="nav-right" id="nav-right">
+    <button class="btn btn-ghost btn-sm nav-docs-btn" onclick="showPage('referrals')" style="font-size:0.72rem;">💸 Refer</button>
+    <button class="btn btn-ghost btn-sm nav-docs-btn" onclick="showPage('docs')" style="font-size:0.72rem;">Docs</button>
     <span id="nav-addr" class="nav-addr" style="display:none"></span>
-    <button id="btn-connect" class="btn btn-primary btn-sm" onclick="connectWallet()">Connect Wallet</button>
-    <button id="btn-dashboard" class="btn btn-ghost btn-sm" style="display:none" onclick="showPage('dashboard')">Dashboard</button>
-    <button id="btn-disconnect" class="btn btn-ghost btn-sm" style="display:none" onclick="disconnectWallet()">Disconnect</button>
+    <button id="btn-connect" class="btn btn-primary btn-sm" onclick="connectWallet()">Connect</button>
+    <button id="btn-dashboard" class="btn btn-ghost btn-sm" style="display:none" onclick="showPage('dashboard')">
+      <span class="nav-dash-text">Dashboard</span>
+    </button>
+    <button id="btn-disconnect" class="btn btn-ghost btn-sm" style="display:none" onclick="disconnectWallet()">⏻</button>
   </div>
 </nav>
 
@@ -1641,6 +2103,71 @@ textarea { resize: vertical; min-height: 80px; }
   </div>
 </div>
 
+<!-- AVAX Flow Diagram — home page -->
+<div style="background:var(--dark);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:48px 16px;">
+  <div style="max-width:760px;margin:0 auto;">
+    <div style="text-align:center;margin-bottom:32px;">
+      <div style="font-family:var(--font-mono);font-size:0.72rem;color:var(--orange);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;">How Value Flows</div>
+      <h3 style="font-size:1.4rem;">From Streamer to Clipper — Trustlessly</h3>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:center;gap:0;overflow-x:auto;padding-bottom:8px;">
+      <div style="text-align:center;flex-shrink:0;width:100px;">
+        <div style="width:66px;height:66px;border-radius:50%;background:linear-gradient(135deg,#1a0a00,#2d1500);border:2px solid var(--orange);display:flex;align-items:center;justify-content:center;margin:0 auto 8px;animation:npulse 3s infinite;">
+          <span style="font-size:1.8rem;">📡</span>
+        </div>
+        <div style="font-weight:700;font-size:0.85rem;">Streamer</div>
+        <div style="font-family:var(--font-mono);font-size:0.68rem;color:var(--orange);margin-top:2px;">Locks AVAX</div>
+      </div>
+      <div style="flex:1;min-width:40px;display:flex;flex-direction:column;align-items:center;gap:3px;">
+        <div style="font-family:var(--font-mono);font-size:0.66rem;color:var(--amber);">100% locked</div>
+        <div style="width:100%;height:2px;background:linear-gradient(90deg,var(--orange),var(--amber));position:relative;overflow:hidden;"><div style="position:absolute;inset:0;background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,0.6) 50%,transparent 100%);animation:flow 1.8s linear infinite;"></div></div>
+        <div style="color:var(--amber);font-size:0.9rem;">▶</div>
+      </div>
+      <div style="text-align:center;flex-shrink:0;width:110px;">
+        <div style="width:66px;height:66px;border-radius:50%;background:linear-gradient(135deg,#0a0010,#1a001a);border:2px solid var(--red);display:flex;align-items:center;justify-content:center;margin:0 auto 8px;animation:npulse 3s infinite 1s;">
+          <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_3_2026-02-24_07-10-44-removebg-preview.png" style="width:40px;height:40px;object-fit:contain;" alt="AVAX" onerror="this.outerHTML='<span style=font-size:1.8rem>⛓️</span>'"/>
+        </div>
+        <div style="font-weight:700;font-size:0.85rem;">Smart Contract</div>
+        <div style="font-family:var(--font-mono);font-size:0.68rem;color:var(--red);margin-top:2px;">Escrow</div>
+      </div>
+      <div style="flex:1;min-width:40px;display:flex;flex-direction:column;align-items:center;gap:3px;">
+        <div style="font-family:var(--font-mono);font-size:0.66rem;color:var(--success);">96% to winner</div>
+        <div style="width:100%;height:2px;background:linear-gradient(90deg,var(--red),var(--success));position:relative;overflow:hidden;"><div style="position:absolute;inset:0;background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,0.6) 50%,transparent 100%);animation:flow 1.8s linear infinite 0.9s;"></div></div>
+        <div style="color:var(--success);font-size:0.9rem;">▶</div>
+      </div>
+      <div style="text-align:center;flex-shrink:0;width:100px;">
+        <div style="width:66px;height:66px;border-radius:50%;background:linear-gradient(135deg,#001a0a,#002d15);border:2px solid var(--success);display:flex;align-items:center;justify-content:center;margin:0 auto 8px;animation:npulse 3s infinite 2s;">
+          <span style="font-size:1.8rem;">✂️</span>
+        </div>
+        <div style="font-weight:700;font-size:0.85rem;">Clipper</div>
+        <div style="font-family:var(--font-mono);font-size:0.68rem;color:var(--success);margin-top:2px;">Gets Paid</div>
+      </div>
+      <div style="flex:0.6;min-width:28px;display:flex;flex-direction:column;align-items:center;gap:3px;">
+        <div style="font-family:var(--font-mono);font-size:0.62rem;color:var(--muted);">4% fee</div>
+        <div style="width:100%;height:1px;background:var(--border);"></div>
+        <div style="color:var(--muted);font-size:0.8rem;">▶</div>
+      </div>
+      <div style="text-align:center;flex-shrink:0;width:80px;">
+        <div style="width:52px;height:52px;border-radius:50%;background:var(--dark);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;margin:0 auto 8px;">
+          <span style="font-size:1.3rem;">🏛️</span>
+        </div>
+        <div style="font-weight:600;font-size:0.76rem;color:var(--muted);">Treasury</div>
+        <div style="font-family:var(--font-mono);font-size:0.62rem;color:var(--muted);margin-top:1px;">→ Holders</div>
+      </div>
+    </div>
+    <style>
+      @keyframes flow { 0%{transform:translateX(-100%)} 100%{transform:translateX(200%)} }
+      @keyframes npulse { 0%,100%{box-shadow:0 0 0 0 rgba(255,107,26,0)} 50%{box-shadow:0 0 0 8px rgba(255,107,26,0.12)} }
+    </style>
+    <div style="display:flex;justify-content:center;gap:24px;margin-top:24px;flex-wrap:wrap;">
+      <div style="text-align:center;"><div style="font-family:var(--font-display);font-size:1.4rem;color:var(--success);">96%</div><div style="font-size:0.72rem;color:var(--muted);">Goes to Winner(s)</div></div>
+      <div style="text-align:center;"><div style="font-family:var(--font-display);font-size:1.4rem;color:var(--orange);">4%</div><div style="font-size:0.72rem;color:var(--muted);">Platform Fee</div></div>
+      <div style="text-align:center;"><div style="font-family:var(--font-display);font-size:1.4rem;color:var(--amber);">30%</div><div style="font-size:0.72rem;color:var(--muted);">Fee → Genesis Holders</div></div>
+      <div style="text-align:center;"><div style="font-family:var(--font-display);font-size:1.4rem;color:var(--red);">0</div><div style="font-size:0.72rem;color:var(--muted);">Middlemen</div></div>
+    </div>
+  </div>
+</div>
+
 <!-- ===================== PAGE: DASHBOARD ===================== -->
 <div id="page-dashboard" class="page">
   <div class="dashboard-grid">
@@ -1671,6 +2198,9 @@ textarea { resize: vertical; min-height: 80px; }
         </div>
         <div class="nav-item" onclick="showPage('mint')" id="nav-mint">
           <span class="icon">🔑</span> NFT Mint
+        </div>
+        <div class="nav-item" onclick="showPage('referrals')" id="nav-referrals">
+          <span class="icon">💸</span> Referrals
         </div>
         <div class="nav-item" onclick="showPage('docs')" id="nav-docs">
           <span class="icon">📖</span> How It Works
@@ -1815,9 +2345,23 @@ textarea { resize: vertical; min-height: 80px; }
               <option value="3" selected>3 submissions</option>
             </select>
           </div>
+          <div class="post-bounty-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div class="form-group">
+              <label>Your Stream Time (UTC)</label>
+              <input type="text" id="post-stream-time" placeholder="e.g. 8pm–11pm Mon/Wed/Fri"/>
+            </div>
+            <div class="form-group">
+              <label>Clip Submission Platform</label>
+              <select id="post-allowed-platforms">
+                <option value="both">X (Twitter) or YouTube</option>
+                <option value="x">X (Twitter) only</option>
+                <option value="youtube">YouTube only</option>
+              </select>
+            </div>
+          </div>
           <div class="form-group">
             <label>Special Requirements / Note to Clippers</label>
-            <textarea id="post-note" placeholder="e.g. Must be from my stream on [date]. Clip must include the chat reaction. No music edits. Portrait format preferred for X posts..." style="min-height:70px;"></textarea>
+            <textarea id="post-note" placeholder="e.g. Must include chat reaction. No music edits. Portrait format preferred for X posts. Min 30 seconds..." style="min-height:70px;"></textarea>
           </div>
           <div style="background:rgba(255,107,26,0.06);border:1px solid rgba(255,107,26,0.2);border-radius:6px;padding:12px;margin-bottom:16px;font-size:0.82rem;color:var(--muted);">
             💡 Clippers submit their video post link from <strong style="color:var(--orange);">X or YouTube</strong> — they clip from your Blaze or Arena stream, post it, then submit the link here.
@@ -2117,6 +2661,72 @@ textarea { resize: vertical; min-height: 80px; }
 </div>
 
 // =====================================================================
+<!-- ===================== PAGE: REFERRALS ===================== -->
+<div id="page-referrals" class="page">
+  <div class="container" style="padding-top:48px;padding-bottom:80px;max-width:720px;">
+    <div style="margin-bottom:36px;">
+      <div style="font-family:var(--font-mono);font-size:0.72rem;color:var(--orange);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;">💸 Referrals</div>
+      <h2 style="margin-bottom:8px;">Invite & Earn</h2>
+      <p style="color:var(--muted);">Refer someone who mints a Genesis or Early Access NFT and you earn 5% of their mint price — paid out manually every week.</p>
+    </div>
+
+    <!-- Your referral link -->
+    <div class="card" style="margin-bottom:20px;border-left:3px solid var(--orange);">
+      <div style="font-weight:700;margin-bottom:12px;color:var(--orange);">Your Invite Link</div>
+      <div id="referral-link-box" style="background:var(--dark);border:1px solid var(--border);border-radius:6px;padding:12px;font-family:var(--font-mono);font-size:0.8rem;color:var(--text);word-break:break-all;margin-bottom:10px;">
+        Connect wallet to get your link
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-primary" onclick="copyReferralLink()">📋 Copy Link</button>
+        <button class="btn btn-ghost" onclick="shareReferralLink()">🔗 Share</button>
+      </div>
+      <div style="margin-top:10px;font-size:0.8rem;color:var(--muted);">Link only counts when your referral mints a Genesis (0.5 AVAX) or Early Access (0.1 AVAX) NFT. You earn 5% — paid weekly to your wallet.</div>
+    </div>
+
+    <!-- Stats -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px;">
+      <div class="card" style="text-align:center;">
+        <div style="font-family:var(--font-display);font-size:2rem;color:var(--orange);" id="ref-count">0</div>
+        <div style="font-size:0.75rem;color:var(--muted);text-transform:uppercase;">Referrals</div>
+      </div>
+      <div class="card" style="text-align:center;">
+        <div style="font-family:var(--font-display);font-size:2rem;color:var(--success);" id="ref-earned">0</div>
+        <div style="font-size:0.75rem;color:var(--muted);text-transform:uppercase;">AVAX Earned</div>
+      </div>
+      <div class="card" style="text-align:center;">
+        <div style="font-family:var(--font-display);font-size:2rem;color:var(--amber);" id="ref-pending">—</div>
+        <div style="font-size:0.75rem;color:var(--muted);text-transform:uppercase;">Next Payout</div>
+      </div>
+    </div>
+
+    <!-- Who referred you -->
+    <div class="card" style="margin-bottom:20px;">
+      <div style="font-weight:700;margin-bottom:8px;">Who Referred You</div>
+      <div id="ref-by" style="font-size:0.88rem;color:var(--muted);">Not referred via a link — or not connected</div>
+    </div>
+
+    <!-- Leaderboard -->
+    <div class="card">
+      <div style="font-weight:700;margin-bottom:12px;color:var(--orange);">🏆 Referral Leaderboard</div>
+      <div id="ref-leaderboard">
+        <div class="empty-state" style="padding:20px;"><div class="spinner"></div><p>Loading…</p></div>
+      </div>
+    </div>
+
+    <!-- How it works -->
+    <div class="card" style="margin-top:16px;background:rgba(255,107,26,0.05);border:1px solid rgba(255,107,26,0.2);">
+      <div style="font-weight:700;margin-bottom:8px;color:var(--orange);">How Referrals Work</div>
+      <div style="font-size:0.85rem;color:var(--muted);line-height:1.8;">
+        1. Copy your invite link and share it on X, Discord, or anywhere.<br/>
+        2. When someone clicks your link and mints an NFT, your wallet is recorded as the referrer.<br/>
+        3. Genesis mint = 0.5 AVAX → you earn 0.025 AVAX. Early Access = 0.1 AVAX → you earn 0.005 AVAX.<br/>
+        4. Every week on Sunday, payouts are sent manually to all referrers.<br/>
+        5. Referrals only count for first-time NFT mints — no re-minting loophole.
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ===================== PAGE: DOCS ===================== -->
 <div id="page-docs" class="page">
   <div class="container" style="padding-top:48px;padding-bottom:80px;max-width:860px;">
