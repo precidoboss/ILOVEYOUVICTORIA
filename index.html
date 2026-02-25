@@ -34,11 +34,17 @@ const NFT_ABI = [
   "function votingPower(address wallet) view returns (uint256)",
   "function walletToToken(address) view returns (uint256)",
   "function getTokenData(uint256 tokenId) view returns (tuple(uint8 tier, uint8 role, uint256 level, uint256 bountiesWon, uint256 bountiesPosted, uint256 votesReceived, uint256 mintedAt, string username, string platform, string xHandle))",
-  "function updateProfile(string _username, string _xHandle, string _platform) nonpayable",
+  "function updateProfile(string _username, string _xHandle, string _platform)",
   "function genesisMinted() view returns (uint256)",
   "function GENESIS_MAX() view returns (uint256)",
   "function GENESIS_PRICE() view returns (uint256)",
   "function EARLY_ACCESS_PRICE() view returns (uint256)",
+  "function isApprovedForAll(address owner, address operator) view returns (bool)",
+  "function setApprovalForAll(address operator, bool approved)",
+  "function approve(address to, uint256 tokenId)",
+  "function getApproved(uint256 tokenId) view returns (address)",
+  "function tokenURI(uint256 tokenId) view returns (string)",
+  "function ownerOf(uint256 tokenId) view returns (address)",
   "event Minted(address indexed to, uint256 tokenId, uint8 tier)"
 ];
 
@@ -67,12 +73,12 @@ const TREASURY_ABI = [
 ];
 
 const MARKETPLACE_ABI = [
-  "function listNFT(uint256 tokenId, uint256 price) nonpayable",
-  "function delistNFT(uint256 tokenId) nonpayable",
-  "function updatePrice(uint256 tokenId, uint256 newPrice) nonpayable",
+  "function listNFT(uint256 tokenId, uint256 price)",
+  "function delistNFT(uint256 tokenId)",
+  "function updatePrice(uint256 tokenId, uint256 newPrice)",
   "function buyNFT(uint256 tokenId) payable",
-  "function equipToken(uint256 tokenId) nonpayable",
-  "function unequipToken() nonpayable",
+  "function equipToken(uint256 tokenId)",
+  "function unequipToken()",
   "function getActiveToken(address wallet) view returns (uint256)",
   "function getActiveListings(uint256 offset, uint256 limit) view returns (tuple(address seller, uint256 tokenId, uint256 price, bool active, uint256 listedAt)[] result, uint256 total)",
   "function activeListingsCount() view returns (uint256)",
@@ -1801,6 +1807,27 @@ let mktTotalListings  = 0;
 let mktPage           = 0;
 const MKT_PAGE_SIZE   = 12;
 
+// Fetch NFT image from tokenURI — returns img URL or null
+async function mktGetNFTImage(tokenId) {
+  try {
+    const roProvider = new ethers.JsonRpcProvider(FUJI_RPC);
+    const roNft = new ethers.Contract(NFT_ADDRESS, NFT_ABI, roProvider);
+    const uri = await roNft.tokenURI(tokenId);
+    if (!uri) return null;
+    // Handle IPFS URIs
+    const httpUri = uri.startsWith('ipfs://')
+      ? 'https://ipfs.io/ipfs/' + uri.slice(7)
+      : uri;
+    // Fetch metadata JSON
+    const res = await fetch(httpUri);
+    if (!res.ok) return null;
+    const meta = await res.json();
+    let img = meta.image || meta.image_url || null;
+    if (img && img.startsWith('ipfs://')) img = 'https://ipfs.io/ipfs/' + img.slice(7);
+    return img;
+  } catch(e) { return null; }
+}
+
 async function loadMarketplace() {
   if (!account || !marketplaceContract) {
     document.getElementById('mkt-require-wallet').style.display = 'flex';
@@ -1868,11 +1895,12 @@ async function mktLoadBrowse(page = 0) {
       return;
     }
 
-    // Enrich with NFT data
+    // Enrich with NFT data + images in parallel
     const cards = await Promise.all(result.map(async (l, i) => {
-      let nftData = null;
+      let nftData = null, nftImage = null;
       try { nftData = await nftContract.getTokenData(l.tokenId); } catch(e) {}
-      return mktBuildCard(l, nftData, i);
+      try { nftImage = await mktGetNFTImage(Number(l.tokenId)); } catch(e) {}
+      return mktBuildCard(l, nftData, i, nftImage);
     }));
 
     grid.innerHTML = cards.join('');
@@ -1901,7 +1929,7 @@ async function mktLoadBrowse(page = 0) {
   }
 }
 
-function mktBuildCard(listing, nftData, idx) {
+function mktBuildCard(listing, nftData, idx, nftImage) {
   const tokenId  = Number(listing.tokenId);
   const price    = parseFloat(ethers.formatEther(listing.price)).toFixed(3);
   const seller   = listing.seller.slice(0,6) + '…' + listing.seller.slice(-4);
@@ -1930,13 +1958,18 @@ function mktBuildCard(listing, nftData, idx) {
       <div class="mkt-card-nft-id">#${tokenId}</div>
       <div class="mkt-card-tier">${tierName}</div>
       <div class="mkt-card-avatar">
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none">
-          <circle cx="30" cy="30" r="29" fill="#0d0d0d" stroke="${tier===0?'#FF9500':'#E8350A'}" stroke-width="1.5"/>
-          <circle cx="30" cy="24" r="10" fill="#333"/>
-          <path d="M14 48 Q30 40 46 48" fill="#333"/>
-          ${tier===0?'<circle cx="30" cy="24" r="5" fill="#FF9500" opacity="0.5"/>':''}
-          <text x="50%" y="58" dominant-baseline="middle" text-anchor="middle" font-size="9" fill="${tier===0?'#FF9500':'#E8350A'}" font-family="monospace" font-weight="bold">${tier===0?'GEN':'EA'}</text>
-        </svg>
+        ${nftImage
+          ? `<div style="width:70px;height:70px;border-radius:50%;overflow:hidden;border:2px solid ${tier===0?'#FF9500':'#E8350A'};box-shadow:0 0 16px ${tier===0?'rgba(255,149,0,0.3)':'rgba(232,53,10,0.3)'};">
+               <img src="${nftImage}" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML='<svg width=70 height=70 viewBox=\'0 0 60 60\' fill=\'none\'><circle cx=30 cy=30 r=29 fill=\'#0d0d0d\' stroke=\'#E8350A\' stroke-width=\'1.5\'/><circle cx=30 cy=24 r=10 fill=\'#333\'/><path d=\'M14 48 Q30 40 46 48\' fill=\'#333\'/></svg>'"/>
+             </div>`
+          : `<svg width="60" height="60" viewBox="0 0 60 60" fill="none">
+               <circle cx="30" cy="30" r="29" fill="#0d0d0d" stroke="${tier===0?'#FF9500':'#E8350A'}" stroke-width="1.5"/>
+               <circle cx="30" cy="24" r="10" fill="#333"/>
+               <path d="M14 48 Q30 40 46 48" fill="#333"/>
+               ${tier===0?'<circle cx="30" cy="24" r="5" fill="#FF9500" opacity="0.5"/>':''}
+               <text x="50%" y="58" dominant-baseline="middle" text-anchor="middle" font-size="9" fill="${tier===0?'#FF9500':'#E8350A'}" font-family="monospace" font-weight="bold">${tier===0?'GEN':'EA'}</text>
+             </svg>`
+        }
       </div>
     </div>
     <div class="mkt-card-body">
@@ -2022,6 +2055,21 @@ async function mktLoadMyNFTs() {
         c.classList.add('mkt-card-enter');
       });
     }, 10);
+    // Load NFT images async after cards render
+    ownedTokens.forEach(async (tid) => {
+      try {
+        const img = await mktGetNFTImage(tid);
+        if (!img) return;
+        const slot = document.getElementById('mkt-inv-img-' + tid);
+        if (!slot) return;
+        const tier = slot.closest('.mkt-inv-card')?.querySelector('.mkt-inv-tier')?.textContent?.includes('Genesis') ? 0 : 1;
+        const borderColor = tier === 0 ? '#FF9500' : '#E8350A';
+        const glowColor   = tier === 0 ? 'rgba(255,149,0,0.35)' : 'rgba(232,53,10,0.35)';
+        slot.innerHTML = `<div style="width:90px;height:90px;border-radius:50%;overflow:hidden;border:2px solid ${borderColor};box-shadow:0 0 24px ${glowColor};">
+          <img src="${img}" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.style.display='none'"/>
+        </div>`;
+      } catch(e) {}
+    });
   } catch(e) {
     grid.innerHTML = `<div class="mkt-empty"><div class="mkt-empty-icon">❌</div><div class="mkt-empty-title">Error loading NFTs</div><div class="mkt-empty-sub">${e.message?.slice(0,80)||''}</div></div>`;
     console.warn('mktLoadMyNFTs', e);
@@ -2046,13 +2094,12 @@ function mktBuildInventoryCard(tokenId, nftData, listingData, equippedId) {
     <div class="mkt-inv-header ${tierClass}">
       <div class="mkt-inv-nft-id">#${tokenId}</div>
       ${isEquipped?'<div class="mkt-inv-equip-tag">✓ EQUIPPED</div>':''}
-      <div class="mkt-inv-avatar">
+      <div class="mkt-inv-avatar" id="mkt-inv-img-${tokenId}">
         <svg width="80" height="80" viewBox="0 0 80 80" fill="none">
           <circle cx="40" cy="40" r="38" fill="#0d0d0d" stroke="${tier===0?'#FF9500':'#E8350A'}" stroke-width="2"/>
           <circle cx="40" cy="32" r="13" fill="#333"/>
           <path d="M18 65 Q40 54 62 65" fill="#333"/>
           ${tier===0?'<circle cx="40" cy="32" r="7" fill="#FF9500" opacity="0.4"/><circle cx="40" cy="32" r="3" fill="#FF9500" opacity="0.8"/>':''}
-          ${tier===0?'<path d="M28 20 L32 26 L40 22 L48 26 L52 20" stroke="#FF9500" stroke-width="1.5" fill="none" opacity="0.6"/>':''}
           <text x="50%" y="76" dominant-baseline="middle" text-anchor="middle" font-size="10" fill="${tier===0?'#FF9500':'#E8350A'}" font-family="monospace" font-weight="bold">${tier===0?'GENESIS':'EARLY'}</text>
         </svg>
       </div>
@@ -2089,16 +2136,11 @@ async function mktLoadActivity() {
     const roProvider = new ethers.JsonRpcProvider(FUJI_RPC);
     const roMarket = new ethers.Contract(MARKETPLACE_ADDRESS, MARKETPLACE_ABI, roProvider);
     const currentBlock = await roProvider.getBlockNumber();
-    const fromBlock = Math.max(0, currentBlock - 50000);
+    const fromBlock = Math.max(0, currentBlock - 2000); // Fuji max is 2048
 
-    const [soldFilter, listedFilter] = [
-      roMarket.filters.Sold(),
-      roMarket.filters.Listed()
-    ];
-    const [soldEvents, listedEvents] = await Promise.all([
-      roMarket.queryFilter(soldFilter, fromBlock),
-      roMarket.queryFilter(listedFilter, fromBlock)
-    ]);
+    let soldEvents = [], listedEvents = [];
+    try { soldEvents   = await roMarket.queryFilter(roMarket.filters.Sold(),   fromBlock); } catch(e2) { console.warn('sold events', e2.message?.slice(0,60)); }
+    try { listedEvents = await roMarket.queryFilter(roMarket.filters.Listed(), fromBlock); } catch(e2) { console.warn('listed events', e2.message?.slice(0,60)); }
 
     const all = [
       ...soldEvents.map(e  => ({ type:'sold',   tokenId:Number(e.args.tokenId), buyer:e.args.buyer, seller:e.args.seller, price:e.args.price, block:e.blockNumber })),
