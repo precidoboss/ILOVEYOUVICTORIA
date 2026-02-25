@@ -272,17 +272,18 @@ async function mintGenesis() {
   const role     = document.getElementById('gen-role').value;
   if (!username || !xhandle) { toast('Fill in username and X handle', 'error'); return; }
   try {
-    setTxStatus('tx-genesis', '⏳ Minting Genesis NFT...', 'pending');
+    setTxStatus('tx-genesis', '⏳ Minting Genesis NFT...', 'pending'); showTxClapper('Minting Genesis NFT…');
     const price = await nftContract.GENESIS_PRICE();
     const tx    = await nftContract.mintGenesis(role, username, xhandle, platform, { value: price });
-    setTxStatus('tx-genesis', '⏳ Transaction pending...', 'pending');
+    setTxStatus('tx-genesis', '⏳ Transaction pending...', 'pending'); showTxClapper('Confirming on Avalanche…');
     await tx.wait();
     setTxStatus('tx-genesis', '✅ Genesis NFT minted!', 'success');
-    toast('Genesis NFT minted! Welcome to ClipDAO.', 'success');
+    hideTxClapper(); toast('Genesis NFT minted! Welcome to ClipDAO.', 'success');
     await logActivity('mint_genesis', { username, xhandle });
     await loadMintStats();
     setTimeout(() => { showPage('dashboard'); loadDashboard(); }, 1500);
   } catch(e) {
+    hideTxClapper();
     const msg = friendlyError(e);
     setTxStatus('tx-genesis', msg, 'error');
     toast(msg, 'error');
@@ -297,18 +298,19 @@ async function mintEarlyAccess() {
   const role     = document.getElementById('ea-role').value;
   if (!username || !xhandle) { toast('Fill in username and X handle', 'error'); return; }
   try {
-    setTxStatus('tx-early', '⏳ Minting Early Access NFT...', 'pending');
+    setTxStatus('tx-early', '⏳ Minting Early Access NFT...', 'pending'); showTxClapper('Minting Early Access NFT…');
     const price = await nftContract.EARLY_ACCESS_PRICE();
     const tx    = await nftContract.mintEarlyAccess(role, username, xhandle, platform, { value: price });
-    setTxStatus('tx-early', '⏳ Transaction pending...', 'pending');
+    setTxStatus('tx-early', '⏳ Transaction pending...', 'pending'); showTxClapper('Confirming on Avalanche…');
     await tx.wait();
     setTxStatus('tx-early', '✅ Early Access NFT minted!', 'success');
-    toast('Early Access NFT minted! Welcome to ClipDAO.', 'success');
+    hideTxClapper(); toast('Early Access NFT minted! Welcome to ClipDAO.', 'success');
     await logActivity('mint_early', { username, xhandle });
     // Credit referral if applicable
     await creditReferral();
     setTimeout(() => { showPage('dashboard'); loadDashboard(); }, 1500);
   } catch(e) {
+    hideTxClapper();
     const msg = friendlyError(e);
     setTxStatus('tx-early', msg, 'error');
     toast(msg, 'error');
@@ -319,17 +321,36 @@ async function creditReferral() {
   if (!db || !account) return;
   try {
     const params = new URLSearchParams(window.location.search);
-    const ref = params.get('ref') || localStorage.getItem('clipdao_ref');
+    const ref = (params.get('ref') || localStorage.getItem('clipdao_ref') || '').toLowerCase().trim();
     if (!ref || ref === account.toLowerCase()) return;
-    // Upsert referral click
-    await db.from('referral_clicks').upsert({ wallet: account.toLowerCase(), referred_by: ref.toLowerCase(), minted: true, created_at: new Date().toISOString() }, { onConflict: 'wallet' });
-    // Update referral count for the referrer
-    const { data: existing } = await db.from('referrals').select('*').eq('referrer', ref.toLowerCase()).single();
-    if (existing) {
-      await db.from('referrals').update({ count: (existing.count||0)+1 }).eq('referrer', ref.toLowerCase());
-    } else {
-      await db.from('referrals').insert({ referrer: ref.toLowerCase(), count: 1 });
+
+    // Check if already credited — prevent double counting
+    const { data: alreadyCredited } = await db.from('referral_clicks')
+      .select('minted').eq('wallet', account.toLowerCase()).maybeSingle();
+    if (alreadyCredited && alreadyCredited.minted) {
+      console.log('Referral already credited for this wallet, skipping.');
+      return;
     }
+
+    // Mark this wallet referral click as minted
+    const { error: clickErr } = await db.from('referral_clicks').upsert(
+      { wallet: account.toLowerCase(), referred_by: ref, minted: true, created_at: new Date().toISOString() },
+      { onConflict: 'wallet' }
+    );
+    if (clickErr) console.warn('referral_clicks upsert error:', clickErr);
+
+    // Increment referrer count
+    const { data: existing, error: fetchErr } = await db.from('referrals')
+      .select('count').eq('referrer', ref).maybeSingle();
+    if (fetchErr) console.warn('referrals fetch error:', fetchErr);
+    if (existing) {
+      const { error: upErr } = await db.from('referrals').update({ count: (existing.count||0)+1 }).eq('referrer', ref);
+      if (upErr) console.warn('referrals update error:', upErr);
+    } else {
+      const { error: inErr } = await db.from('referrals').insert({ referrer: ref, count: 1 });
+      if (inErr) console.warn('referrals insert error:', inErr);
+    }
+    console.log('Referral credited to', ref);
   } catch(e) { console.warn('Referral credit failed', e); }
 }
 
@@ -1088,18 +1109,19 @@ async function postBounty() {
   const streamerYT       = document.getElementById('post-streamer-yt')?.value.trim() || '';
   const fullDesc = `${desc}\n\n[PLATFORM:${platform}][STREAM:${streamLink}][STREAM2:${streamLink2}][NOTE:${note}][TIME:${streamTime}][ALLOWED:${allowedPlatforms}][SX:${streamerX}][SYT:${streamerYT}]`;
   try {
-    setTxStatus('tx-post', '⏳ Posting bounty...', 'pending');
+    setTxStatus('tx-post', '⏳ Posting bounty...', 'pending'); showTxClapper('Locking AVAX in escrow…');
     const value = ethers.parseEther(reward.toString());
     const tx    = await escrowContract.postBounty(title, fullDesc, duration, mode, winners, { value });
-    setTxStatus('tx-post', '⏳ Transaction pending...', 'pending');
+    setTxStatus('tx-post', '⏳ Transaction pending...', 'pending'); showTxClapper('Confirming on-chain…');
     await tx.wait();
     setTxStatus('tx-post', '✅ Bounty posted!', 'success');
-    toast('Bounty posted! AVAX locked in escrow.', 'success');
+    hideTxClapper(); toast('Bounty posted! AVAX locked in escrow.', 'success');
     await logActivity('post_bounty', { title, reward, platform, streamLink });
     ['post-title','post-desc','post-reward','post-stream-link','post-note'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
     await loadBounties();
     switchTab('tab-bounties-dash');
   } catch(e) {
+    hideTxClapper();
     const msg = friendlyError(e);
     setTxStatus('tx-post', msg, 'error');
     toast(msg, 'error');
@@ -1146,14 +1168,15 @@ async function submitClip(bountyId) {
   } catch(e) {}
 
   try {
-    setTxStatus('tx-submit', '⏳ Submitting clip on-chain...', 'pending');
+    setTxStatus('tx-submit', '⏳ Submitting clip on-chain...', 'pending'); showTxClapper('Submitting clip…');
     const tx = await escrowContract.submitClip(bountyId, link);
     await tx.wait();
     setTxStatus('tx-submit', '✅ Clip submitted!', 'success');
-    toast('Clip submitted!', 'success');
+    hideTxClapper(); toast('Clip submitted!', 'success');
     await logActivity('submit_clip', { bountyId, link, platform: platSel });
     openBountyDetail(bountyId);
   } catch(e) {
+    hideTxClapper();
     const msg = friendlyError(e);
     setTxStatus('tx-submit', msg, 'error');
     toast(msg, 'error');
@@ -1952,6 +1975,98 @@ textarea { resize: vertical; min-height: 76px; }
 </head>
 <body>
 
+<!-- CLAPPERBOARD SPLASH -->
+<div id="splash-screen" style="position:fixed;inset:0;background:#0A0A0A;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity 0.5s ease;">
+  <div id="clapper-wrap" style="position:relative;width:120px;height:90px;">
+    <!-- Clapper SVG animated -->
+    <svg id="clapper-svg" width="120" height="90" viewBox="0 0 120 90" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- body -->
+      <rect x="10" y="30" width="100" height="55" rx="4" fill="#1a1a1a" stroke="#333" stroke-width="1.5"/>
+      <rect x="10" y="30" width="100" height="14" fill="#111" rx="2"/>
+      <!-- stripes on board -->
+      <rect x="10" y="30" width="14" height="14" fill="#E8350A" rx="1"/>
+      <rect x="28" y="30" width="14" height="14" fill="#E8350A" rx="1"/>
+      <rect x="46" y="30" width="14" height="14" fill="#E8350A" rx="1"/>
+      <rect x="64" y="30" width="14" height="14" fill="#E8350A" rx="1"/>
+      <rect x="82" y="30" width="14" height="14" fill="#E8350A" rx="1"/>
+      <!-- dividing line -->
+      <rect x="10" y="43" width="100" height="2" fill="#222"/>
+      <!-- horizontal lines inside body -->
+      <rect x="18" y="52" width="84" height="3" rx="1" fill="#2a2a2a"/>
+      <rect x="18" y="61" width="60" height="3" rx="1" fill="#2a2a2a"/>
+      <rect x="18" y="70" width="72" height="3" rx="1" fill="#2a2a2a"/>
+      <!-- clapper arm - animated -->
+      <g id="clapper-arm" transform-origin="10 30" style="transform-origin:10px 30px;">
+        <rect x="10" y="10" width="100" height="22" rx="3" fill="#222" stroke="#444" stroke-width="1"/>
+        <!-- diagonal stripes on arm -->
+        <clipPath id="armclip"><rect x="10" y="10" width="100" height="22" rx="3"/></clipPath>
+        <g clip-path="url(#armclip)">
+          <rect x="0" y="8" width="16" height="28" fill="#E8350A" transform="skewX(-20)"/>
+          <rect x="22" y="8" width="16" height="28" fill="#E8350A" transform="skewX(-20)"/>
+          <rect x="44" y="8" width="16" height="28" fill="#E8350A" transform="skewX(-20)"/>
+          <rect x="66" y="8" width="16" height="28" fill="#E8350A" transform="skewX(-20)"/>
+          <rect x="88" y="8" width="16" height="28" fill="#E8350A" transform="skewX(-20)"/>
+          <rect x="110" y="8" width="16" height="28" fill="#E8350A" transform="skewX(-20)"/>
+        </g>
+        <!-- hinge dot -->
+        <circle cx="10" cy="30" r="4" fill="#FF6B1A"/>
+      </g>
+    </svg>
+  </div>
+  <div style="margin-top:18px;font-family:'Bebas Neue',sans-serif;font-size:1.8rem;letter-spacing:3px;background:linear-gradient(90deg,#E8350A,#FF9500);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">ClipDAO</div>
+  <div style="margin-top:6px;font-family:'DM Mono',monospace;font-size:0.65rem;color:#444;letter-spacing:2px;">LOADING...</div>
+</div>
+<style>
+@keyframes clapperClap {
+  0%   { transform: rotate(0deg); }
+  15%  { transform: rotate(-42deg); }
+  30%  { transform: rotate(0deg); }
+  45%  { transform: rotate(-38deg); }
+  60%  { transform: rotate(0deg); }
+  100% { transform: rotate(0deg); }
+}
+#clapper-arm { animation: clapperClap 1.1s ease-in-out 1 forwards; }
+</style>
+<script>
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    const s = document.getElementById('splash-screen');
+    if(s){ s.style.opacity='0'; setTimeout(()=>s.remove(),500); }
+  }, 1800);
+});
+// TX pending clapperboard — replaces generic spinner during tx
+function showTxClapper(msg) {
+  let el = document.getElementById('tx-clapper-overlay');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'tx-clapper-overlay';
+    el.innerHTML = `<div style="text-align:center;">
+      <svg width="80" height="60" viewBox="0 0 120 90" fill="none">
+        <rect x="10" y="30" width="100" height="55" rx="4" fill="#1a1a1a" stroke="#333" stroke-width="1.5"/>
+        <rect x="10" y="30" width="14" height="14" fill="#E8350A" rx="1"/><rect x="28" y="30" width="14" height="14" fill="#E8350A" rx="1"/><rect x="46" y="30" width="14" height="14" fill="#E8350A" rx="1"/><rect x="64" y="30" width="14" height="14" fill="#E8350A" rx="1"/><rect x="82" y="30" width="14" height="14" fill="#E8350A" rx="1"/>
+        <rect x="10" y="43" width="100" height="2" fill="#222"/>
+        <rect x="18" y="52" width="84" height="3" rx="1" fill="#2a2a2a"/><rect x="18" y="61" width="60" height="3" rx="1" fill="#2a2a2a"/><rect x="18" y="70" width="72" height="3" rx="1" fill="#2a2a2a"/>
+        <g id="txa" style="transform-origin:10px 30px;animation:clapperClap 1s ease-in-out infinite;">
+          <rect x="10" y="10" width="100" height="22" rx="3" fill="#222" stroke="#444" stroke-width="1"/>
+          <clipPath id="tac"><rect x="10" y="10" width="100" height="22" rx="3"/></clipPath>
+          <g clip-path="url(#tac)"><rect x="0" y="8" width="16" height="28" fill="#E8350A" transform="skewX(-20)"/><rect x="22" y="8" width="16" height="28" fill="#E8350A" transform="skewX(-20)"/><rect x="44" y="8" width="16" height="28" fill="#E8350A" transform="skewX(-20)"/><rect x="66" y="8" width="16" height="28" fill="#E8350A" transform="skewX(-20)"/><rect x="88" y="8" width="16" height="28" fill="#E8350A" transform="skewX(-20)"/></g>
+          <circle cx="10" cy="30" r="4" fill="#FF6B1A"/>
+        </g>
+      </svg>
+      <div id="tx-clapper-msg" style="margin-top:10px;font-family:'Barlow',sans-serif;font-size:0.85rem;color:#aaa;">Waiting for wallet...</div>
+    </div>`;
+    el.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.82);z-index:8888;display:flex;align-items:center;justify-content:center;';
+    document.body.appendChild(el);
+  }
+  document.getElementById('tx-clapper-msg').textContent = msg || 'Waiting for wallet...';
+  el.style.display = 'flex';
+}
+function hideTxClapper() {
+  const el = document.getElementById('tx-clapper-overlay');
+  if (el) el.style.display = 'none';
+}
+</script>
+
 <div id="toast-container"></div>
 
 <!-- NAV -->
@@ -2358,23 +2473,89 @@ textarea { resize: vertical; min-height: 76px; }
 
 <!-- ==================== MODAL: ONBOARDING ==================== -->
 <div class="modal-overlay" id="modal-onboard">
-  <div class="modal">
-    <h2>Welcome to ClipDAO</h2>
+  <div class="modal" style="max-width:420px;">
     <div class="step-indicator">
       <div class="step-dot active" id="step-dot-1"></div>
       <div class="step-dot" id="step-dot-2"></div>
       <div class="step-dot" id="step-dot-3"></div>
     </div>
+
+    <!-- STEP 1: Choose Role -->
     <div id="onboard-step-1">
-      <p style="color:var(--muted);margin-bottom:16px;font-size:0.88rem;">Choose your primary role on ClipDAO</p>
+      <!-- Illustration: two silhouettes -->
+      <div style="display:flex;justify-content:center;margin-bottom:14px;">
+        <svg width="200" height="90" viewBox="0 0 200 90" fill="none">
+          <!-- left: streamer with mic -->
+          <circle cx="60" cy="22" r="12" fill="#333"/>
+          <path d="M44 42 Q60 36 76 42 L80 70 H40 Z" fill="#2a2a2a"/>
+          <!-- streaming mic -->
+          <rect cx="60" y="48" x="72" width="3" height="14" rx="1" fill="#888"/>
+          <circle cx="73" cy="47" r="4" fill="#E8350A" opacity="0.8"/>
+          <!-- glow ring on mic -->
+          <circle cx="73" cy="47" r="6" fill="none" stroke="#E8350A" stroke-width="1" opacity="0.4"/>
+          <!-- label below -->
+          <rect x="40" y="74" width="40" height="12" rx="6" fill="#E8350A" opacity="0.15"/>
+          <text x="47" y="83" font-size="7" fill="#E8350A" font-family="sans-serif" font-weight="700">STREAMER</text>
+          <!-- vs text -->
+          <text x="93" y="45" font-size="11" fill="#555" font-family="sans-serif" font-weight="900">VS</text>
+          <!-- right: clipper with scissors -->
+          <circle cx="140" cy="22" r="12" fill="#333"/>
+          <path d="M124 42 Q140 36 156 42 L160 70 H120 Z" fill="#2a2a2a"/>
+          <!-- scissors -->
+          <g transform="translate(148,44) rotate(-30)">
+            <circle cx="0" cy="0" r="4" fill="none" stroke="#FF9500" stroke-width="1.5"/>
+            <circle cx="8" cy="0" r="4" fill="none" stroke="#FF9500" stroke-width="1.5"/>
+            <line x1="3" y1="-2" x2="10" y2="-12" stroke="#FF9500" stroke-width="1.5"/>
+            <line x1="5" y1="2" x2="10" y2="12" stroke="#FF9500" stroke-width="1.5"/>
+          </g>
+          <!-- clapperboard in other hand -->
+          <rect x="120" y="48" width="14" height="10" rx="1" fill="#222" stroke="#FF9500" stroke-width="1"/>
+          <rect x="120" y="48" width="5" height="5" fill="#FF9500" rx="0.5"/>
+          <rect x="126" y="48" width="5" height="5" fill="#FF9500" rx="0.5"/>
+          <!-- label -->
+          <rect x="120" y="74" width="40" height="12" rx="6" fill="#FF9500" opacity="0.15"/>
+          <text x="128" y="83" font-size="7" fill="#FF9500" font-family="sans-serif" font-weight="700">CLIPPER</text>
+        </svg>
+      </div>
+      <h2 style="margin-bottom:4px;">Welcome to ClipDAO</h2>
+      <p style="color:var(--muted);margin-bottom:16px;font-size:0.88rem;">Choose your primary role</p>
       <div class="role-cards">
         <div class="role-card" onclick="selectRole('clipper',this)"><div class="role-icon">✂️</div><h4>Clipper</h4><p>Submit clips, win bounties, earn AVAX</p></div>
         <div class="role-card" onclick="selectRole('streamer',this)"><div class="role-icon">📡</div><h4>Streamer</h4><p>Post bounties, get clips made, pay winners</p></div>
       </div>
       <button class="btn btn-primary" style="width:100%" onclick="onboardNext(2)">Continue →</button>
     </div>
+
+    <!-- STEP 2: Profile Setup -->
     <div id="onboard-step-2" style="display:none">
-      <p style="color:var(--muted);margin-bottom:16px;font-size:0.88rem;">Set up your profile</p>
+      <!-- Illustration: glowing user card -->
+      <div style="display:flex;justify-content:center;margin-bottom:14px;">
+        <svg width="180" height="80" viewBox="0 0 180 80" fill="none">
+          <!-- card glow -->
+          <rect x="20" y="8" width="140" height="64" rx="10" fill="#0d0d0d" stroke="#FF6B1A" stroke-width="1.5"/>
+          <rect x="20" y="8" width="140" height="64" rx="10" fill="url(#cardglow)" opacity="0.12"/>
+          <defs><radialGradient id="cardglow" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#FF6B1A" stop-opacity="1"/><stop offset="100%" stop-color="#FF6B1A" stop-opacity="0"/></radialGradient></defs>
+          <!-- avatar circle -->
+          <circle cx="52" cy="38" r="18" fill="#1a1a1a" stroke="#FF6B1A" stroke-width="1.5"/>
+          <circle cx="52" cy="33" r="7" fill="#444"/>
+          <path d="M36 55 Q52 47 68 55" fill="#444"/>
+          <!-- name line -->
+          <rect x="76" y="24" width="60" height="7" rx="3" fill="#FF6B1A" opacity="0.6"/>
+          <!-- handle line -->
+          <rect x="76" y="36" width="44" height="5" rx="2" fill="#333"/>
+          <!-- platform badge -->
+          <rect x="76" y="46" width="32" height="12" rx="6" fill="#E8350A" opacity="0.2"/>
+          <rect x="78" y="48" width="8" height="8" rx="4" fill="#E8350A" opacity="0.7"/>
+          <rect x="89" y="50" width="16" height="4" rx="2" fill="#E8350A" opacity="0.6"/>
+          <!-- verified tick -->
+          <circle cx="143" cy="24" r="8" fill="#22C55E" opacity="0.2"/>
+          <path d="M139 24 L142 27 L148 21" stroke="#22C55E" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <!-- outer glow border animation shimmer -->
+          <rect x="20" y="8" width="140" height="64" rx="10" fill="none" stroke="#FF9500" stroke-width="0.5" opacity="0.3" stroke-dasharray="8 6"/>
+        </svg>
+      </div>
+      <h2 style="margin-bottom:4px;">Set Up Your Profile</h2>
+      <p style="color:var(--muted);margin-bottom:14px;font-size:0.88rem;">This syncs to your NFT on-chain</p>
       <div class="form-group"><label>Username</label><input type="text" id="ob-username" placeholder="Your name"/></div>
       <div class="form-group"><label>X (Twitter) Handle</label><input type="text" id="ob-xhandle" placeholder="@yourhandle"/></div>
       <div class="form-group"><label>Platform</label>
@@ -2386,12 +2567,70 @@ textarea { resize: vertical; min-height: 76px; }
         <button class="btn btn-primary" onclick="onboardNext(3)" style="flex:2">Continue →</button>
       </div>
     </div>
+
+    <!-- STEP 3: NFT Check -->
     <div id="onboard-step-3" style="display:none">
       <div id="ob-has-nft" style="display:none">
-        <div style="text-align:center;padding:16px 0;"><div style="font-size:2.5rem;margin-bottom:10px;">✅</div><h3 style="color:var(--success);margin-bottom:6px;">NFT Detected!</h3><p style="color:var(--muted);font-size:0.88rem;">You already have a ClipDAO NFT.</p><button class="btn btn-primary" style="width:100%;margin-top:16px;" onclick="finishOnboarding()">Enter ClipDAO →</button></div>
+        <!-- Illustration: key unlocking door (success variant) -->
+        <div style="display:flex;justify-content:center;margin-bottom:14px;">
+          <svg width="120" height="100" viewBox="0 0 120 100" fill="none">
+            <rect x="35" y="20" width="50" height="65" rx="6" fill="#0d0d0d" stroke="#22C55E" stroke-width="2"/>
+            <rect x="38" y="23" width="44" height="59" rx="4" fill="#111"/>
+            <!-- door handle -->
+            <circle cx="73" cy="55" r="4" fill="#22C55E" opacity="0.8"/>
+            <!-- door ajar (slightly open) -->
+            <rect x="35" y="20" width="25" height="65" rx="5" fill="#0a1a0a" stroke="#22C55E" stroke-width="1.5"/>
+            <!-- checkmark inside door -->
+            <circle cx="47" cy="52" r="10" fill="#22C55E" opacity="0.15"/>
+            <path d="M42 52 L46 56 L53 46" stroke="#22C55E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <!-- key coming out -->
+            <circle cx="92" cy="38" r="9" fill="none" stroke="#FF9500" stroke-width="2.5"/>
+            <circle cx="92" cy="38" r="4" fill="#FF9500" opacity="0.4"/>
+            <rect x="98" y="36" width="18" height="4" rx="2" fill="#FF9500"/>
+            <rect x="112" y="40" width="4" height="6" rx="1" fill="#FF9500"/>
+            <rect x="106" y="40" width="4" height="4" rx="1" fill="#FF9500"/>
+            <!-- glow -->
+            <ellipse cx="60" cy="86" rx="22" ry="5" fill="#22C55E" opacity="0.15"/>
+          </svg>
+        </div>
+        <h3 style="color:var(--success);margin-bottom:6px;text-align:center;">NFT Detected!</h3>
+        <p style="color:var(--muted);font-size:0.88rem;text-align:center;">You already have a ClipDAO NFT. You're all set.</p>
+        <button class="btn btn-primary" style="width:100%;margin-top:16px;" onclick="finishOnboarding()">Enter ClipDAO →</button>
       </div>
       <div id="ob-no-nft">
-        <div style="text-align:center;padding:16px 0;"><div style="font-size:2.5rem;margin-bottom:10px;">🔑</div><h3 style="color:var(--orange);margin-bottom:6px;">Mint Your NFT</h3><p style="color:var(--muted);font-size:0.88rem;margin-bottom:6px;">Get an NFT to post bounties, submit clips, and vote.</p><p style="color:var(--success);font-size:0.82rem;margin-bottom:16px;">🎁 Or use your 1 free trial first!</p><button class="btn btn-primary" style="width:100%" onclick="closeModal('modal-onboard');showPage('mint')">Go to Mint Page →</button><button class="btn btn-ghost" style="width:100%;margin-top:8px;" onclick="finishOnboarding()">Browse / Use Free Trial</button></div>
+        <!-- Illustration: key unlocking door -->
+        <div style="display:flex;justify-content:center;margin-bottom:14px;">
+          <svg width="120" height="100" viewBox="0 0 120 100" fill="none">
+            <!-- door closed -->
+            <rect x="35" y="20" width="50" height="65" rx="6" fill="#0d0d0d" stroke="#E8350A" stroke-width="2"/>
+            <rect x="38" y="23" width="44" height="59" rx="4" fill="#111"/>
+            <!-- door handle / lock -->
+            <circle cx="73" cy="55" r="5" fill="#333" stroke="#E8350A" stroke-width="1.5"/>
+            <rect x="71" y="55" width="4" height="7" rx="1" fill="#E8350A" opacity="0.7"/>
+            <!-- keyhole -->
+            <circle cx="60" cy="50" r="5" fill="none" stroke="#444" stroke-width="1.5"/>
+            <rect x="58" y="50" width="4" height="7" rx="1" fill="#333"/>
+            <!-- floating key -->
+            <g style="animation:keyFloat 2s ease-in-out infinite;">
+              <circle cx="88" cy="32" r="9" fill="none" stroke="#FF9500" stroke-width="2.5"/>
+              <circle cx="88" cy="32" r="4" fill="#FF9500" opacity="0.5"/>
+              <rect x="94" y="30" width="18" height="4" rx="2" fill="#FF9500"/>
+              <rect x="108" y="34" width="4" height="6" rx="1" fill="#FF9500"/>
+              <rect x="102" y="34" width="4" height="4" rx="1" fill="#FF9500"/>
+            </g>
+            <!-- arrow pointing key to door -->
+            <path d="M82 38 Q70 46 65 50" stroke="#FF9500" stroke-width="1.5" fill="none" stroke-dasharray="3 3" opacity="0.6"/>
+            <polygon points="65,46 65,53 69,50" fill="#FF9500" opacity="0.6"/>
+            <!-- glow under door -->
+            <ellipse cx="60" cy="86" rx="22" ry="5" fill="#E8350A" opacity="0.1"/>
+          </svg>
+        </div>
+        <style>@keyframes keyFloat{0%,100%{transform:translateY(0);}50%{transform:translateY(-6px);}}</style>
+        <h3 style="color:var(--orange);margin-bottom:6px;text-align:center;">Mint Your NFT</h3>
+        <p style="color:var(--muted);font-size:0.88rem;text-align:center;margin-bottom:6px;">Get your on-chain identity. Unlock bounties, submissions, and votes.</p>
+        <p style="color:var(--success);font-size:0.82rem;text-align:center;margin-bottom:16px;">🎁 Or use your 1 free trial first!</p>
+        <button class="btn btn-primary" style="width:100%" onclick="closeModal('modal-onboard');showPage('mint')">Go to Mint Page →</button>
+        <button class="btn btn-ghost" style="width:100%;margin-top:8px;" onclick="finishOnboarding()">Browse / Use Free Trial</button>
       </div>
     </div>
   </div>
@@ -2501,36 +2740,274 @@ textarea { resize: vertical; min-height: 76px; }
       </div>
     </div>
 
-    <!-- FULL FLOW -->
-    <div class="card" style="margin-bottom:16px;border-left:3px solid var(--orange);">
-      <h3 style="color:var(--orange);margin-bottom:18px;">The Full Flow</h3>
-      <div style="display:flex;flex-direction:column;gap:0;">
-        <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:18px;">
-          <div style="width:34px;height:34px;border-radius:50%;background:var(--red);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:1rem;flex-shrink:0;">1</div>
-          <div><div style="font-weight:700;margin-bottom:3px;">Mint Your NFT</div><div style="color:var(--muted);font-size:0.84rem;line-height:1.65;">Genesis (500 max, 0.5 AVAX) or Early Access (0.1 AVAX). Your identity, voting power, and reputation in one token. New users get 1 free trial bounty/submission before needing an NFT.</div></div>
+    <!-- FULL FLOW — Illustrated Connected Graphic -->
+    <div class="card" style="margin-bottom:16px;border-left:3px solid var(--orange);overflow:hidden;">
+      <div style="font-family:var(--font-mono);font-size:0.7rem;color:var(--orange);letter-spacing:2px;text-transform:uppercase;margin-bottom:4px;">End-to-End</div>
+      <h3 style="color:var(--orange);margin-bottom:22px;">The Full Flow</h3>
+
+      <!-- Desktop: horizontal chain. Mobile: vertical stack. -->
+      <div class="flow-outer">
+
+        <!-- STEP 1 -->
+        <div class="flow-step">
+          <div class="flow-icon-wrap" style="border-color:#E8350A;">
+            <!-- Clapperboard / Film Reel SVG -->
+            <svg width="54" height="54" viewBox="0 0 54 54" fill="none">
+              <rect x="7" y="20" width="40" height="28" rx="3" fill="#1a0a00" stroke="#E8350A" stroke-width="1.5"/>
+              <rect x="7" y="20" width="9" height="9" fill="#E8350A" rx="1"/>
+              <rect x="19" y="20" width="9" height="9" fill="#E8350A" rx="1"/>
+              <rect x="31" y="20" width="9" height="9" fill="#E8350A" rx="1"/>
+              <rect x="7" y="29" width="40" height="1.5" fill="#333"/>
+              <rect x="13" y="34" width="28" height="2" rx="1" fill="#2a2a2a"/>
+              <rect x="13" y="39" width="20" height="2" rx="1" fill="#2a2a2a"/>
+              <rect x="13" y="44" width="24" height="2" rx="1" fill="#2a2a2a"/>
+              <g style="transform-origin:7px 20px;transform:rotate(-28deg);">
+                <rect x="7" y="10" width="40" height="12" rx="2" fill="#222" stroke="#444" stroke-width="1"/>
+                <rect x="9" y="11" width="8" height="10" fill="#E8350A" rx="1"/>
+                <rect x="21" y="11" width="8" height="10" fill="#E8350A" rx="1"/>
+                <rect x="33" y="11" width="8" height="10" fill="#E8350A" rx="1"/>
+                <circle cx="7" cy="20" r="3" fill="#FF6B1A"/>
+              </g>
+            </svg>
+          </div>
+          <div class="flow-num" style="background:#E8350A;">1</div>
+          <div class="flow-label">Mint NFT</div>
+          <div class="flow-desc">Genesis (0.5Ξ) or Early Access (0.1Ξ). Your on-chain identity.</div>
         </div>
-        <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:18px;">
-          <div style="width:34px;height:34px;border-radius:50%;background:var(--orange);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:1rem;flex-shrink:0;">2</div>
-          <div><div style="font-weight:700;margin-bottom:3px;">Streamer Posts a Bounty</div><div style="color:var(--muted);font-size:0.84rem;line-height:1.65;">A streamer goes live on Blaze or Arena, then posts a bounty on ClipDAO. AVAX is locked in escrow instantly. Minimum reward: 0.1 AVAX. Streamers can provide two stream links (e.g. one Blaze, one Arena) and their X/YouTube handles for clippers to tag them.</div></div>
+
+        <div class="flow-connector"><svg width="32" height="16" viewBox="0 0 32 16"><path d="M0 8 Q8 2 16 8 Q24 14 32 8" stroke="#E8350A" stroke-width="2" fill="none" stroke-dasharray="4 3"/><polygon points="28,5 32,8 28,11" fill="#E8350A"/></svg></div>
+
+        <!-- STEP 2 -->
+        <div class="flow-step">
+          <div class="flow-icon-wrap" style="border-color:#FF6B1A;">
+            <!-- Streamer at glowing desk SVG -->
+            <svg width="54" height="54" viewBox="0 0 54 54" fill="none">
+              <!-- monitor glow -->
+              <rect x="9" y="10" width="36" height="24" rx="3" fill="#0d0d0d" stroke="#FF6B1A" stroke-width="1.5"/>
+              <rect x="11" y="12" width="32" height="20" rx="2" fill="#FF6B1A" opacity="0.15"/>
+              <!-- screen content -->
+              <rect x="14" y="15" width="26" height="13" rx="1" fill="#111"/>
+              <circle cx="27" cy="21" r="5" fill="#FF6B1A" opacity="0.7"/>
+              <polygon points="25,19 25,23 30,21" fill="white"/>
+              <!-- LIVE badge -->
+              <rect x="15" y="16" width="12" height="5" rx="1" fill="#E8350A"/>
+              <text x="17" y="20" fill="white" font-size="4" font-family="monospace">LIVE</text>
+              <!-- stand -->
+              <rect x="25" y="34" width="4" height="5" fill="#333"/>
+              <rect x="19" y="39" width="16" height="2" rx="1" fill="#444"/>
+              <!-- person silhouette -->
+              <circle cx="27" cy="48" r="3" fill="#555"/>
+              <rect x="23" y="51" width="8" height="2" rx="1" fill="#555"/>
+              <!-- mic -->
+              <rect x="36" y="36" width="2" height="8" rx="1" fill="#888"/>
+              <circle cx="37" cy="35" r="2" fill="#aaa"/>
+              <!-- orange glow -->
+              <ellipse cx="27" cy="22" rx="14" ry="6" fill="#FF6B1A" opacity="0.06"/>
+            </svg>
+          </div>
+          <div class="flow-num" style="background:#FF6B1A;">2</div>
+          <div class="flow-label">Post Bounty</div>
+          <div class="flow-desc">Streamer goes live, locks AVAX in escrow. Min 0.1 AVAX.</div>
         </div>
-        <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:18px;">
-          <div style="width:34px;height:34px;border-radius:50%;background:var(--amber);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:1rem;flex-shrink:0;color:#000;">3</div>
-          <div><div style="font-weight:700;margin-bottom:3px;">Clippers Watch &amp; Clip</div><div style="color:var(--muted);font-size:0.84rem;line-height:1.65;">Watch the Blaze/Arena stream, find the best moments, create the clip, tag the streamer, and post it to X or YouTube.</div></div>
+
+        <div class="flow-connector"><svg width="32" height="16" viewBox="0 0 32 16"><path d="M0 8 Q8 2 16 8 Q24 14 32 8" stroke="#FF6B1A" stroke-width="2" fill="none" stroke-dasharray="4 3"/><polygon points="28,5 32,8 28,11" fill="#FF6B1A"/></svg></div>
+
+        <!-- STEP 3 -->
+        <div class="flow-step">
+          <div class="flow-icon-wrap" style="border-color:#FF9500;">
+            <!-- Person watching phone SVG -->
+            <svg width="54" height="54" viewBox="0 0 54 54" fill="none">
+              <!-- person head -->
+              <circle cx="27" cy="14" r="6" fill="#444"/>
+              <!-- body -->
+              <path d="M20 24 Q27 21 34 24 L36 38 H18 Z" fill="#333"/>
+              <!-- phone in hands -->
+              <rect x="20" y="32" width="14" height="20" rx="2" fill="#1a1a1a" stroke="#FF9500" stroke-width="1.2"/>
+              <rect x="22" y="34" width="10" height="15" rx="1" fill="#0d0d0d"/>
+              <!-- screen content on phone -->
+              <rect x="22" y="34" width="10" height="15" rx="1" fill="#FF9500" opacity="0.18"/>
+              <polygon points="25,39 25,44 30,41" fill="#FF9500" opacity="0.8"/>
+              <!-- arms -->
+              <rect x="14" y="28" width="8" height="3" rx="1" fill="#444" transform="rotate(20 14 28)"/>
+              <rect x="32" y="28" width="8" height="3" rx="1" fill="#444" transform="rotate(-20 40 28)"/>
+              <!-- scissors / clip icon top right -->
+              <text x="38" y="18" font-size="12" fill="#FF9500" opacity="0.7">✂</text>
+            </svg>
+          </div>
+          <div class="flow-num" style="background:#FF9500;color:#000;">3</div>
+          <div class="flow-label">Watch &amp; Clip</div>
+          <div class="flow-desc">Watch the stream, find the moment, clip it to X or YouTube.</div>
         </div>
-        <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:18px;">
-          <div style="width:34px;height:34px;border-radius:50%;background:var(--red);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:1rem;flex-shrink:0;">4</div>
-          <div><div style="font-weight:700;margin-bottom:3px;">Submit Clip Link</div><div style="color:var(--muted);font-size:0.84rem;line-height:1.65;">Submit your X or YouTube link. Your registered handle should appear in the link URL for validation. Set your handles in Profile settings.</div></div>
+
+        <div class="flow-connector"><svg width="32" height="16" viewBox="0 0 32 16"><path d="M0 8 Q8 2 16 8 Q24 14 32 8" stroke="#FF9500" stroke-width="2" fill="none" stroke-dasharray="4 3"/><polygon points="28,5 32,8 28,11" fill="#FF9500"/></svg></div>
+
+        <!-- STEP 4 -->
+        <div class="flow-step">
+          <div class="flow-icon-wrap" style="border-color:#E8350A;">
+            <!-- Link chain to wallet SVG -->
+            <svg width="54" height="54" viewBox="0 0 54 54" fill="none">
+              <!-- link icon -->
+              <rect x="8" y="18" width="16" height="9" rx="4.5" fill="none" stroke="#E8350A" stroke-width="2.5"/>
+              <rect x="30" y="18" width="16" height="9" rx="4.5" fill="none" stroke="#E8350A" stroke-width="2.5"/>
+              <rect x="20" y="20" width="14" height="5" fill="#E8350A" opacity="0.3"/>
+              <rect x="22" y="21.5" width="10" height="2" rx="1" fill="#E8350A"/>
+              <!-- chain links -->
+              <line x1="27" y1="28" x2="27" y2="36" stroke="#555" stroke-width="1.5" stroke-dasharray="2 2"/>
+              <!-- wallet -->
+              <rect x="14" y="36" width="26" height="14" rx="3" fill="#1a1a1a" stroke="#E8350A" stroke-width="1.5"/>
+              <rect x="14" y="39" width="26" height="8" rx="0" fill="none"/>
+              <circle cx="35" cy="43" r="3" fill="#E8350A" opacity="0.8"/>
+              <rect x="16" y="41" width="12" height="2" rx="1" fill="#333"/>
+              <!-- flap -->
+              <rect x="14" y="36" width="26" height="5" rx="3" fill="#222" stroke="#E8350A" stroke-width="1"/>
+            </svg>
+          </div>
+          <div class="flow-num" style="background:#E8350A;">4</div>
+          <div class="flow-label">Submit Link</div>
+          <div class="flow-desc">Paste your X or YouTube link. Handle validated on-chain.</div>
         </div>
-        <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:18px;">
-          <div style="width:34px;height:34px;border-radius:50%;background:var(--orange);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:1rem;flex-shrink:0;">5</div>
-          <div><div style="font-weight:700;margin-bottom:3px;">Winner Selected</div><div style="color:var(--muted);font-size:0.84rem;line-height:1.65;">Streamer picks — or community votes. Multi-winner splits: 60/40 or 60/30/10. Winners are confirmed on-chain.</div></div>
+
+        <div class="flow-connector"><svg width="32" height="16" viewBox="0 0 32 16"><path d="M0 8 Q8 2 16 8 Q24 14 32 8" stroke="#E8350A" stroke-width="2" fill="none" stroke-dasharray="4 3"/><polygon points="28,5 32,8 28,11" fill="#E8350A"/></svg></div>
+
+        <!-- STEP 5 -->
+        <div class="flow-step">
+          <div class="flow-icon-wrap" style="border-color:#FF6B1A;">
+            <!-- Gavel / Checkmark SVG -->
+            <svg width="54" height="54" viewBox="0 0 54 54" fill="none">
+              <!-- gavel head -->
+              <rect x="12" y="18" width="22" height="10" rx="3" fill="#333" stroke="#FF6B1A" stroke-width="1.5" transform="rotate(-40 12 18)"/>
+              <!-- gavel handle -->
+              <rect x="28" y="26" width="4" height="20" rx="2" fill="#555" transform="rotate(-40 28 26)"/>
+              <!-- sound waves -->
+              <path d="M35 15 Q40 20 35 25" stroke="#FF6B1A" stroke-width="1.5" fill="none" opacity="0.5"/>
+              <path d="M38 12 Q45 20 38 28" stroke="#FF6B1A" stroke-width="1.5" fill="none" opacity="0.3"/>
+              <!-- big checkmark -->
+              <circle cx="35" cy="38" r="11" fill="#22C55E" opacity="0.15"/>
+              <circle cx="35" cy="38" r="9" fill="none" stroke="#22C55E" stroke-width="1.5"/>
+              <path d="M29 38 L33 42 L41 33" stroke="#22C55E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div class="flow-num" style="background:#FF6B1A;">5</div>
+          <div class="flow-label">Winner Picked</div>
+          <div class="flow-desc">Streamer selects or community votes. 60/40 or 60/30/10 splits.</div>
         </div>
-        <div style="display:flex;gap:14px;align-items:flex-start;">
-          <div style="width:34px;height:34px;border-radius:50%;background:var(--success);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:1rem;flex-shrink:0;color:#000;">6</div>
-          <div><div style="font-weight:700;margin-bottom:3px;">Automatic Payout</div><div style="color:var(--muted);font-size:0.84rem;line-height:1.65;">Smart contract sends AVAX directly to winner wallet(s). 96% to clipper, 4% platform fee. No waiting, no middlemen.</div></div>
+
+        <div class="flow-connector"><svg width="32" height="16" viewBox="0 0 32 16"><path d="M0 8 Q8 2 16 8 Q24 14 32 8" stroke="#22C55E" stroke-width="2" fill="none" stroke-dasharray="4 3"/><polygon points="28,5 32,8 28,11" fill="#22C55E"/></svg></div>
+
+        <!-- STEP 6 -->
+        <div class="flow-step">
+          <div class="flow-icon-wrap" style="border-color:#22C55E;">
+            <!-- Coins raining into wallet SVG -->
+            <svg width="54" height="54" viewBox="0 0 54 54" fill="none">
+              <!-- wallet base -->
+              <rect x="12" y="32" width="30" height="18" rx="3" fill="#0d1a0d" stroke="#22C55E" stroke-width="1.5"/>
+              <rect x="12" y="35" width="30" height="12" rx="0" fill="none"/>
+              <rect x="12" y="32" width="30" height="6" rx="3" fill="#122212" stroke="#22C55E" stroke-width="1"/>
+              <circle cx="36" cy="41" r="3" fill="#22C55E" opacity="0.9"/>
+              <!-- coin 1 falling -->
+              <ellipse cx="20" cy="16" rx="5" ry="3" fill="#FF9500"/>
+              <ellipse cx="20" cy="15" rx="5" ry="3" fill="#FFB732"/>
+              <text x="17.5" y="17" font-size="4" fill="#a06000" font-weight="bold">A</text>
+              <!-- coin 2 falling -->
+              <ellipse cx="31" cy="22" rx="4.5" ry="2.5" fill="#FF9500"/>
+              <ellipse cx="31" cy="21" rx="4.5" ry="2.5" fill="#FFB732"/>
+              <text x="29" y="23" font-size="4" fill="#a06000" font-weight="bold">A</text>
+              <!-- coin 3 -->
+              <ellipse cx="24" cy="28" rx="4" ry="2.5" fill="#FF9500"/>
+              <ellipse cx="24" cy="27" rx="4" ry="2.5" fill="#FFB732"/>
+              <!-- motion lines -->
+              <line x1="20" y1="19" x2="20" y2="26" stroke="#FF9500" stroke-width="1" stroke-dasharray="2 2" opacity="0.5"/>
+              <line x1="31" y1="24" x2="31" y2="30" stroke="#FF9500" stroke-width="1" stroke-dasharray="2 2" opacity="0.5"/>
+              <!-- 96% label -->
+              <rect x="14" y="38" width="18" height="7" rx="2" fill="#22C55E" opacity="0.15"/>
+              <text x="16" y="44" font-size="5" fill="#22C55E" font-weight="bold">96% YOURS</text>
+            </svg>
+          </div>
+          <div class="flow-num" style="background:#22C55E;color:#000;">6</div>
+          <div class="flow-label">Auto Payout</div>
+          <div class="flow-desc">Smart contract sends 96% AVAX to winner instantly. 0 middlemen.</div>
         </div>
-      </div>
+
+      </div><!-- end flow-outer -->
     </div>
+
+    <style>
+    .flow-outer {
+      display: flex;
+      flex-direction: row;
+      align-items: flex-start;
+      gap: 0;
+      overflow-x: auto;
+      padding-bottom: 8px;
+    }
+    .flow-step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      min-width: 110px;
+      max-width: 130px;
+      flex-shrink: 0;
+    }
+    .flow-icon-wrap {
+      width: 70px;
+      height: 70px;
+      border-radius: 50%;
+      border: 2px solid;
+      background: #0d0d0d;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 10px;
+      position: relative;
+      box-shadow: 0 0 18px rgba(232,53,10,0.12);
+    }
+    .flow-num {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-display);
+      font-size: 0.75rem;
+      margin-bottom: 6px;
+      margin-top: -4px;
+    }
+    .flow-label {
+      font-weight: 700;
+      font-size: 0.8rem;
+      margin-bottom: 4px;
+      color: var(--text);
+    }
+    .flow-desc {
+      font-size: 0.7rem;
+      color: var(--muted);
+      line-height: 1.5;
+      padding: 0 4px;
+    }
+    .flow-connector {
+      display: flex;
+      align-items: center;
+      padding-top: 26px;
+      flex-shrink: 0;
+    }
+    @media (max-width: 700px) {
+      .flow-outer {
+        flex-direction: column;
+        align-items: center;
+        overflow-x: visible;
+        gap: 0;
+      }
+      .flow-connector {
+        padding-top: 0;
+        transform: rotate(90deg);
+        margin: 4px 0;
+      }
+      .flow-step { max-width: 280px; width: 100%; }
+      .flow-icon-wrap { width: 60px; height: 60px; }
+    }
+    </style>
 
     <!-- NFT TIERS -->
     <div class="card" style="margin-bottom:16px;border-left:3px solid var(--amber);">
