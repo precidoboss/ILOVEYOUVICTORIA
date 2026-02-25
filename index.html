@@ -283,8 +283,9 @@ async function mintGenesis() {
     await loadMintStats();
     setTimeout(() => { showPage('dashboard'); loadDashboard(); }, 1500);
   } catch(e) {
-    setTxStatus('tx-genesis', '❌ ' + (e.reason||e.message||'Error'), 'error');
-    toast('Mint failed: ' + (e.reason||e.message), 'error');
+    const msg = friendlyError(e);
+    setTxStatus('tx-genesis', msg, 'error');
+    toast(msg, 'error');
   }
 }
 
@@ -308,8 +309,9 @@ async function mintEarlyAccess() {
     await creditReferral();
     setTimeout(() => { showPage('dashboard'); loadDashboard(); }, 1500);
   } catch(e) {
-    setTxStatus('tx-early', '❌ ' + (e.reason||e.message||'Error'), 'error');
-    toast('Mint failed: ' + (e.reason||e.message), 'error');
+    const msg = friendlyError(e);
+    setTxStatus('tx-early', msg, 'error');
+    toast(msg, 'error');
   }
 }
 
@@ -400,7 +402,11 @@ function updateProfileUI() {
 // DASHBOARD
 async function loadDashboard() {
   updateProfileUI();
+  // Set sidebar username
+  const su = document.getElementById('sidebar-username');
+  if (su && userProfile) su.textContent = userProfile.username || account?.slice(0,10)+'…' || '—';
   await Promise.all([loadReputation(), loadNFTStats(), loadBounties(), loadRecentActivity()]);
+  await setNFTProfilePicture();
   // Show admin tab if admin
   if (account && account.toLowerCase() === ADMIN_WALLET) {
     document.getElementById('nav-admin-link').style.display = 'flex';
@@ -515,11 +521,14 @@ function renderBounties() {
 function parseBountyMeta(desc) {
   const platform         = (desc.match(/\[PLATFORM:([^\]]+)\]/) || [])[1] || '';
   const streamLink       = (desc.match(/\[STREAM:([^\]]+)\]/) || [])[1] || '';
+  const streamLink2      = (desc.match(/\[STREAM2:([^\]]+)\]/) || [])[1] || '';
   const note             = (desc.match(/\[NOTE:([^\]]+)\]/) || [])[1] || '';
   const streamTime       = (desc.match(/\[TIME:([^\]]+)\]/) || [])[1] || '';
   const allowedPlatforms = (desc.match(/\[ALLOWED:([^\]]+)\]/) || [])[1] || 'both';
-  const cleanDesc        = desc.replace(/\[PLATFORM:[^\]]*\]|\[STREAM:[^\]]*\]|\[NOTE:[^\]]*\]|\[TIME:[^\]]*\]|\[ALLOWED:[^\]]*\]/g,'').trim();
-  return { platform, streamLink, note, streamTime, allowedPlatforms, cleanDesc };
+  const streamerX        = (desc.match(/\[SX:([^\]]+)\]/) || [])[1] || '';
+  const streamerYT       = (desc.match(/\[SYT:([^\]]+)\]/) || [])[1] || '';
+  const cleanDesc        = desc.replace(/\[PLATFORM:[^\]]*\]|\[STREAM2:[^\]]*\]|\[STREAM:[^\]]*\]|\[NOTE:[^\]]*\]|\[TIME:[^\]]*\]|\[ALLOWED:[^\]]*\]|\[SX:[^\]]*\]|\[SYT:[^\]]*\]/g,'').trim();
+  return { platform, streamLink, streamLink2, note, streamTime, allowedPlatforms, streamerX, streamerYT, cleanDesc };
 }
 
 function getPlatformLogo(link) {
@@ -661,7 +670,7 @@ async function openBountyDetail(bountyId) {
     const isOpen = b.status===0 && b.deadline>now;
     const isStreamer = account && b.streamer.toLowerCase()===account.toLowerCase();
     const modeName = b.mode===0?'Streamer Picks':'Community Vote';
-    const { platform, streamLink, note, streamTime, allowedPlatforms, cleanDesc } = parseBountyMeta(b.description);
+    const { platform, streamLink, streamLink2, note, streamTime, allowedPlatforms, streamerX, streamerYT, cleanDesc } = parseBountyMeta(b.description);
     const editDeadline = b.createdAt + 3600;
     const canEdit = isStreamer && now < editDeadline;
     const shareUrl = window.location.origin + window.location.pathname + '#bounty-' + bountyId;
@@ -784,13 +793,27 @@ async function openBountyDetail(bountyId) {
         ${streamTime?`<span>🕐 ${escHtml(streamTime)} UTC</span>`:''}
       </div>
       <p style="color:var(--muted);font-size:0.88rem;line-height:1.7;margin-bottom:10px;">${escHtml(cleanDesc)}</p>
-      ${streamLink?`<div style="background:rgba(255,107,26,0.06);border:1px solid rgba(255,107,26,0.2);border-radius:6px;padding:10px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-        <div style="min-width:0;flex:1;"><div style="font-size:0.7rem;color:var(--orange);text-transform:uppercase;margin-bottom:2px;">Stream Source</div>
-        <div style="font-family:var(--font-mono);font-size:0.75rem;word-break:break-all;color:var(--text);">${escHtml(streamLink)}</div></div>
-        <div style="display:flex;gap:5px;flex-wrap:wrap;">
-          <button class="btn btn-ghost btn-sm" onclick="openStreamViewer('${escHtml(streamLink)}','${escHtml(hostName)}')">📺 View</button>
-          <a href="${escHtml(streamLink)}" target="_blank" class="btn btn-ghost btn-sm">↗</a>
+      ${streamLink?`<div style="background:rgba(255,107,26,0.06);border:1px solid rgba(255,107,26,0.2);border-radius:6px;padding:10px;margin-bottom:8px;">
+        <div style="font-size:0.7rem;color:var(--orange);text-transform:uppercase;margin-bottom:6px;">Stream Source</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:${streamLink2?'8px':'0'};">
+          <div style="font-family:var(--font-mono);font-size:0.75rem;word-break:break-all;color:var(--text);flex:1;">${escHtml(streamLink)}</div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;">
+            <button class="btn btn-ghost btn-sm" onclick="openStreamViewer('${escHtml(streamLink)}','${escHtml(hostName)}')">📺 View</button>
+            <a href="${escHtml(streamLink)}" target="_blank" class="btn btn-ghost btn-sm">↗</a>
+          </div>
         </div>
+        ${streamLink2?`<div style="border-top:1px solid rgba(255,107,26,0.15);padding-top:8px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+          <div style="font-family:var(--font-mono);font-size:0.75rem;word-break:break-all;color:var(--text);flex:1;">${escHtml(streamLink2)}</div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;">
+            <button class="btn btn-ghost btn-sm" onclick="openStreamViewer('${escHtml(streamLink2)}','${escHtml(hostName)}')">📺 View</button>
+            <a href="${escHtml(streamLink2)}" target="_blank" class="btn btn-ghost btn-sm">↗</a>
+          </div>
+        </div>`:''}
+      </div>`:''}
+      ${(streamerX||streamerYT)?`<div style="background:rgba(255,107,26,0.05);border:1px solid rgba(255,107,26,0.15);border-radius:6px;padding:8px 10px;margin-bottom:8px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+        <div style="font-size:0.7rem;color:var(--orange);text-transform:uppercase;white-space:nowrap;">Tag Streamer:</div>
+        ${streamerX?`<span style="font-family:var(--font-mono);font-size:0.78rem;background:rgba(29,161,242,0.1);border:1px solid rgba(29,161,242,0.3);border-radius:4px;padding:2px 8px;color:#1da1f2;cursor:pointer;" onclick="navigator.clipboard.writeText('@${escHtml(streamerX)}').then(()=>toast('Copied @${escHtml(streamerX)}','success'))">𝕏 @${escHtml(streamerX)} 📋</span>`:''}
+        ${streamerYT?`<span style="font-family:var(--font-mono);font-size:0.78rem;background:rgba(255,0,0,0.1);border:1px solid rgba(255,0,0,0.25);border-radius:4px;padding:2px 8px;color:#ff4444;cursor:pointer;" onclick="navigator.clipboard.writeText('@${escHtml(streamerYT)}').then(()=>toast('Copied @${escHtml(streamerYT)}','success'))">▶ @${escHtml(streamerYT)} 📋</span>`:''}
       </div>`:''}
       <div id="stream-viewer-container"></div>
       ${note?`<div style="background:rgba(255,107,26,0.08);border:1px solid rgba(255,107,26,0.25);border-radius:6px;padding:10px;margin-bottom:10px;">
@@ -1060,7 +1083,10 @@ async function postBounty() {
   } catch(e) {}
   const streamTime       = document.getElementById('post-stream-time').value.trim();
   const allowedPlatforms = document.getElementById('post-allowed-platforms').value;
-  const fullDesc = `${desc}\n\n[PLATFORM:${platform}][STREAM:${streamLink}][NOTE:${note}][TIME:${streamTime}][ALLOWED:${allowedPlatforms}]`;
+  const streamLink2      = document.getElementById('post-stream-link2')?.value.trim() || '';
+  const streamerX        = document.getElementById('post-streamer-x')?.value.trim() || '';
+  const streamerYT       = document.getElementById('post-streamer-yt')?.value.trim() || '';
+  const fullDesc = `${desc}\n\n[PLATFORM:${platform}][STREAM:${streamLink}][STREAM2:${streamLink2}][NOTE:${note}][TIME:${streamTime}][ALLOWED:${allowedPlatforms}][SX:${streamerX}][SYT:${streamerYT}]`;
   try {
     setTxStatus('tx-post', '⏳ Posting bounty...', 'pending');
     const value = ethers.parseEther(reward.toString());
@@ -1074,8 +1100,9 @@ async function postBounty() {
     await loadBounties();
     switchTab('tab-bounties-dash');
   } catch(e) {
-    setTxStatus('tx-post', '❌ ' + (e.reason||e.message||'Error'), 'error');
-    toast('Post failed: ' + (e.reason||e.message), 'error');
+    const msg = friendlyError(e);
+    setTxStatus('tx-post', msg, 'error');
+    toast(msg, 'error');
   }
 }
 
@@ -1127,8 +1154,9 @@ async function submitClip(bountyId) {
     await logActivity('submit_clip', { bountyId, link, platform: platSel });
     openBountyDetail(bountyId);
   } catch(e) {
-    setTxStatus('tx-submit', '❌ ' + (e.reason||e.message||'Error'), 'error');
-    toast('Submit failed: ' + (e.reason||e.message), 'error');
+    const msg = friendlyError(e);
+    setTxStatus('tx-submit', msg, 'error');
+    toast(msg, 'error');
   }
 }
 
@@ -1230,6 +1258,31 @@ function closeModal(id) { document.getElementById(id)?.classList.remove('active'
 document.addEventListener('click', e => {
   if (e.target.classList.contains('modal-overlay')) e.target.classList.remove('active');
 });
+
+// FRIENDLY ERROR MESSAGES
+function friendlyError(e) {
+  const raw = (e.reason || e.message || '').toLowerCase();
+  if (raw.includes('insufficient funds') || raw.includes('have 0 want') || raw.includes('insufficient balance')) {
+    const match = raw.match(/want\s+([\d]+)/);
+    if (match) {
+      const avaxNeeded = (parseInt(match[1]) / 1e18).toFixed(3);
+      return `❌ Not enough AVAX. You need ${avaxNeeded} AVAX. Get free test AVAX at faucet.avax.network`;
+    }
+    return '❌ Not enough AVAX in your wallet. Get free test AVAX at faucet.avax.network';
+  }
+  if (raw.includes('user rejected') || raw.includes('user denied')) return '❌ Transaction cancelled.';
+  if (raw.includes('nonce')) return '❌ Transaction error. Please refresh and try again.';
+  if (raw.includes('already has nft') || raw.includes('already minted')) return '❌ This wallet already has a ClipDAO NFT.';
+  if (raw.includes('genesis sold out') || raw.includes('max supply')) return '❌ Genesis NFTs are sold out!';
+  if (raw.includes('bounty not open') || raw.includes('not active')) return '❌ This bounty is no longer open.';
+  if (raw.includes('already voted')) return '❌ You already voted on this bounty.';
+  if (raw.includes('own bounty') || raw.includes('streamer cannot')) return '❌ You cannot submit to your own bounty.';
+  if (raw.includes('gas')) return '❌ Gas estimation failed. Check your AVAX balance at faucet.avax.network';
+  if (raw.includes('missing or invalid parameters')) return '❌ Transaction failed. You may not have enough AVAX. Get test AVAX at faucet.avax.network';
+  // Truncate long raw errors
+  const short = (e.reason || e.message || 'Unknown error').slice(0, 120);
+  return '❌ ' + short;
+}
 
 // UTILS
 function escHtml(str) {
@@ -1345,32 +1398,57 @@ async function loadReferrals() {
   updateReferralUI();
   if (!db) return;
   const params = new URLSearchParams(window.location.search);
-  const refBy  = params.get('ref');
+  const refBy  = params.get('ref') || localStorage.getItem('clipdao_ref');
   if (refBy && refBy !== account?.toLowerCase()) {
     const refByEl = document.getElementById('ref-by');
     if (refByEl) refByEl.textContent = 'Referred by: ' + refBy.slice(0,14)+'…';
   }
-  // Load my referral count from Supabase directly
+  // Load my referral count
   if (account && db) {
     try {
-      const { data: myRef } = await db.from('referrals').select('*').eq('referrer', account.toLowerCase()).single();
+      // First check referrals table
+      const { data: myRef } = await db.from('referrals').select('*').eq('referrer', account.toLowerCase()).maybeSingle();
       const countEl = document.getElementById('ref-count');
-      if (countEl && myRef) countEl.textContent = myRef.count || 0;
+      if (countEl) countEl.textContent = myRef?.count || 0;
     } catch(e) {}
   }
+  // Load leaderboard — try referrals table first, fallback to referral_clicks
   try {
-    const { data } = await db.from('referrals').select('referrer,count').order('count',{ascending:false}).limit(10);
+    const { data, error } = await db.from('referrals').select('referrer,count').order('count',{ascending:false}).limit(10);
     const el = document.getElementById('ref-leaderboard');
     if (!el) return;
-    if (!data||data.length===0) { el.innerHTML='<div class="empty-state" style="padding:20px;"><p>No referrals yet — be the first!</p></div>'; return; }
+    if (error || !data || data.length===0) {
+      // Fallback: count from referral_clicks where minted=true
+      try {
+        const { data: clicks } = await db.from('referral_clicks').select('referred_by').eq('minted', true);
+        if (!clicks || clicks.length === 0) { el.innerHTML='<div class="empty-state" style="padding:20px;"><p>No referrals yet — be the first!</p></div>'; return; }
+        const counts = {};
+        clicks.forEach(c => { counts[c.referred_by] = (counts[c.referred_by]||0)+1; });
+        const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,10);
+        el.innerHTML = sorted.map(([w,c],i)=>`
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
+            <div style="font-family:var(--font-display);font-size:1.2rem;color:${i===0?'var(--amber)':i===1?'#C0C0C0':i===2?'#cd7f32':'var(--border)'};width:24px;text-align:center;">${i+1}</div>
+            <div style="flex:1;font-family:var(--font-mono);font-size:0.8rem;">${w.slice(0,16)}…</div>
+            <div style="font-family:var(--font-display);color:var(--orange);">${c} ref${c!==1?'s':''}</div>
+            ${account&&w===account.toLowerCase()?'<span class="badge badge-green">YOU</span>':''}
+          </div>`).join('');
+        // Update my count
+        if (account) {
+          const myCount = counts[account.toLowerCase()]||0;
+          const countEl = document.getElementById('ref-count');
+          if (countEl) countEl.textContent = myCount;
+        }
+      } catch(e2) { el.innerHTML='<div class="empty-state" style="padding:20px;"><p>No referrals yet — be the first!</p></div>'; }
+      return;
+    }
     el.innerHTML = data.map((r,i)=>`
       <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
         <div style="font-family:var(--font-display);font-size:1.2rem;color:${i===0?'var(--amber)':i===1?'#C0C0C0':i===2?'#cd7f32':'var(--border)'};width:24px;text-align:center;">${i+1}</div>
         <div style="flex:1;font-family:var(--font-mono);font-size:0.8rem;">${r.referrer?.slice(0,16)}…</div>
         <div style="font-family:var(--font-display);color:var(--orange);">${r.count} ref${r.count!==1?'s':''}</div>
-        ${account && r.referrer===account.toLowerCase() ? '<span class="badge badge-green">YOU</span>':''}
+        ${account&&r.referrer===account.toLowerCase()?'<span class="badge badge-green">YOU</span>':''}
       </div>`).join('');
-  } catch(e) {}
+  } catch(e) { console.warn('referral leaderboard failed', e); }
 }
 
 async function storeReferral() {
@@ -1384,6 +1462,12 @@ async function storeReferral() {
   } catch(e) {}
 }
 
+function toggleStreamLink2() {
+  const platform = document.getElementById('post-platform')?.value;
+  const group = document.getElementById('stream-link2-group');
+  if (group) group.style.display = platform === 'both' ? 'block' : 'none';
+}
+
 // ADMIN PAGE
 async function loadAdminPage() {
   if (!account || account.toLowerCase() !== ADMIN_WALLET) { toast('Admin only', 'error'); return; }
@@ -1392,7 +1476,7 @@ async function loadAdminPage() {
   el.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
   let flags=[], profiles=[], activity=[];
   if (db) {
-    try { const r = await db.from('flags').select('*').order('created_at',{ascending:false}).limit(50); flags = r.data||[]; } catch(e) {}
+    try { const r = await db.from('flags').select('*').order('created_at',{ascending:false}).limit(50); flags = r.data||[]; if(r.error) console.warn('flags error:',r.error); } catch(e) { console.warn('flags fetch failed',e); }
     try { const r = await db.from('profiles').select('*').order('updated_at',{ascending:false}).limit(30); profiles = r.data||[]; } catch(e) {}
     try { const r = await db.from('activity').select('*').order('created_at',{ascending:false}).limit(30); activity = r.data||[]; } catch(e) {}
   }
@@ -1482,8 +1566,43 @@ function adminExportData() {
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'clipdao-export.json'; a.click();
 }
 
+function toggleMobileDrawer() {
+  const drawer = document.getElementById('mobile-drawer');
+  const overlay = document.getElementById('mobile-drawer-overlay');
+  const isOpen = drawer.style.display === 'block';
+  drawer.style.display = isOpen ? 'none' : 'block';
+  overlay.style.display = isOpen ? 'none' : 'block';
+  // Show admin button in drawer if admin
+  if (account && account.toLowerCase() === ADMIN_WALLET) {
+    document.getElementById('mob-admin-btn').style.display = 'flex';
+  }
+}
+function closeMobileDrawer() {
+  document.getElementById('mobile-drawer').style.display = 'none';
+  document.getElementById('mobile-drawer-overlay').style.display = 'none';
+}
+
+// NFT PROFILE PICTURE — set everywhere
+async function setNFTProfilePicture() {
+  if (!account || !nftContract) return;
+  try {
+    const hasNft = await nftContract.hasNFT(account);
+    if (!hasNft) return;
+    const imgUrl = 'https://ipfs.io/ipfs/bafkreifw3rrlcu3u33rz7qbnvouwkknvxpcs4pff3ro4knkjum4suz57ky';
+    document.querySelectorAll('.profile-avatar').forEach(av => {
+      av.style.backgroundImage = `url(${imgUrl})`;
+      av.style.backgroundSize = 'cover';
+      av.style.backgroundPosition = 'center';
+      av.textContent = '';
+    });
+    // Also set nav avatar if present
+    const navAvatar = document.getElementById('nav-avatar');
+    if (navAvatar) { navAvatar.style.backgroundImage = `url(${imgUrl})`; navAvatar.style.backgroundSize = 'cover'; navAvatar.style.backgroundPosition = 'center'; navAvatar.textContent = ''; }
+  } catch(e) {}
+}
+
 // EXPOSE TO WINDOW
-const exposed = { connectWallet,disconnectWallet,showPage,switchTab,openModal,closeModal,selectRole,onboardNext,finishOnboarding,mintGenesis,mintEarlyAccess,saveProfile,postBounty,submitClip,voteOnClip,pickWinner,resolveVote,filterBounties,openBountyDetail,setMobileActive,loadInventory,openSubDetail,openHostProfile,openClipperProfile,openStreamViewer,addPendingWinner,removePendingWinner,confirmMultiWinners,confirmSingleWinner,postComment,openEditBounty,copyReferralLink,shareReferralLink,loadReferrals,flagContent,adminDismissFlag,adminActionFlag,adminBanUser,adminForcePause,adminExportData,loadAdminPage };
+const exposed = { connectWallet,disconnectWallet,showPage,switchTab,openModal,closeModal,selectRole,onboardNext,finishOnboarding,mintGenesis,mintEarlyAccess,saveProfile,postBounty,submitClip,voteOnClip,pickWinner,resolveVote,filterBounties,openBountyDetail,setMobileActive,loadInventory,openSubDetail,openHostProfile,openClipperProfile,openStreamViewer,addPendingWinner,removePendingWinner,confirmMultiWinners,confirmSingleWinner,postComment,openEditBounty,copyReferralLink,shareReferralLink,loadReferrals,flagContent,adminDismissFlag,adminActionFlag,adminBanUser,adminForcePause,adminExportData,loadAdminPage,toggleMobileDrawer,closeMobileDrawer,loadClipFeed,loadStreamerDashboard };
 Object.assign(window, exposed);
 
 // INIT
@@ -1796,6 +1915,37 @@ textarea { resize: vertical; min-height: 76px; }
 .coming-soon-overlay { position: relative; }
 .coming-soon-overlay::after { content: 'COMING SOON'; position: absolute; inset: 0; background: rgba(10,10,10,0.85); display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 2rem; color: var(--orange); letter-spacing: 3px; border-radius: 8px; }
 
+@keyframes heroBounce {
+  0%, 100% { transform: translateY(0px) rotate(-1deg); }
+  50% { transform: translateY(-18px) rotate(1deg); }
+}
+@media (max-width: 768px) {
+  .hero-mascot-wrap { width: 100%; order: -1; }
+  .hero-mascot { width: clamp(140px, 55vw, 220px) !important; margin: 0 auto; display: block; }
+  .hero-inner { flex-direction: column !important; padding: 28px 0 80px !important; }
+}
+/* Mobile drawer btn */
+.mobile-drawer-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 12px 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+  -webkit-tap-highlight-color: transparent;
+}
+.mobile-drawer-btn:active { background: rgba(255,107,26,0.1); border-color: var(--orange); }
+
 /* Scrollable section on mobile */
 .scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 </style>
@@ -1837,80 +1987,45 @@ textarea { resize: vertical; min-height: 76px; }
 <div id="page-home" class="page active">
   <div class="container">
     <div class="hero">
-      <div class="hero-inner">
-        <div class="hero-eyebrow">Built on Avalanche Fuji Testnet</div>
-        <h1>Clip.<br>Submit.<br><em>Get Paid.</em></h1>
-        <p>The first decentralized marketplace connecting streamers and clippers through trustless smart contracts. No middlemen. Automatic payouts. On-chain reputation.</p>
+      <div class="hero-inner" style="display:flex;align-items:center;gap:40px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:280px;">
+          <div class="hero-eyebrow">Built on Avalanche Fuji Testnet</div>
+          <h1>Clip.<br>Submit.<br><em>Get Paid.</em></h1>
+          <p>The first decentralized marketplace connecting streamers and clippers through trustless smart contracts. No middlemen. Automatic payouts. On-chain reputation.</p>
 
-        <!-- Platform badges -->
-        <div class="platform-badges">
-          <a href="https://blaze.stream/" target="_blank" class="platform-badge-link pb-blaze">
-            <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_1_2026-02-24_07-10-44-removebg-preview.png" style="width:16px;height:16px;object-fit:contain;" onerror="this.style.display='none'"/> Blaze
-          </a>
-          <a href="https://arena.social/live" target="_blank" class="platform-badge-link pb-arena">
-            <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_2_2026-02-24_07-10-44-removebg-preview.png" style="width:16px;height:16px;object-fit:contain;" onerror="this.style.display='none'"/> Arena
-          </a>
-          <span class="platform-badge-link pb-avax" style="cursor:default;">
-            <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_3_2026-02-24_07-10-44-removebg-preview.png" style="width:16px;height:16px;object-fit:contain;" onerror="this.style.display='none'"/> Avalanche
-          </span>
-        </div>
+          <!-- Platform badges -->
+          <div class="platform-badges">
+            <a href="https://blaze.stream/" target="_blank" class="platform-badge-link pb-blaze">
+              <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_1_2026-02-24_07-10-44-removebg-preview.png" style="width:16px;height:16px;object-fit:contain;" onerror="this.style.display='none'"/> Blaze
+            </a>
+            <a href="https://arena.social/live" target="_blank" class="platform-badge-link pb-arena">
+              <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_2_2026-02-24_07-10-44-removebg-preview.png" style="width:16px;height:16px;object-fit:contain;" onerror="this.style.display='none'"/> Arena
+            </a>
+            <span class="platform-badge-link pb-avax" style="cursor:default;">
+              <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_3_2026-02-24_07-10-44-removebg-preview.png" style="width:16px;height:16px;object-fit:contain;" onerror="this.style.display='none'"/> Avalanche
+            </span>
+          </div>
 
-        <div class="hero-cta-row" style="display:flex;gap:10px;flex-wrap:wrap;" id="hero-cta">
-          <button class="btn btn-primary" id="hero-connect-btn" onclick="connectWallet()">🔥 Connect & Start</button>
-          <button class="btn btn-ghost" id="hero-dashboard-btn" style="display:none" onclick="showPage('dashboard')">⚡ Dashboard</button>
-          <button class="btn btn-ghost" onclick="showPage('mint')">Mint NFT</button>
-          <button class="btn btn-ghost" onclick="showPage('bounties')">Browse Bounties</button>
+          <div class="hero-cta-row" style="display:flex;gap:10px;flex-wrap:wrap;" id="hero-cta">
+            <button class="btn btn-primary" id="hero-connect-btn" onclick="connectWallet()">🔥 Connect & Start</button>
+            <button class="btn btn-ghost" id="hero-dashboard-btn" style="display:none" onclick="showPage('dashboard')">⚡ Dashboard</button>
+            <button class="btn btn-ghost" onclick="showPage('mint')">Mint NFT</button>
+            <button class="btn btn-ghost" onclick="showPage('bounties')">Browse Bounties</button>
+          </div>
+          <div class="hero-stats">
+            <div><div class="stat-num" id="stat-bounties">0</div><div class="stat-label">Open Bounties</div></div>
+            <div><div class="stat-num" id="stat-genesis">500</div><div class="stat-label">Genesis Supply</div></div>
+            <div><div class="stat-num" id="stat-paid">0</div><div class="stat-label">AVAX Paid Out</div></div>
+          </div>
         </div>
-        <div class="hero-stats">
-          <div><div class="stat-num" id="stat-bounties">0</div><div class="stat-label">Open Bounties</div></div>
-          <div><div class="stat-num" id="stat-genesis">500</div><div class="stat-label">Genesis Supply</div></div>
-          <div><div class="stat-num" id="stat-paid">0</div><div class="stat-label">AVAX Paid Out</div></div>
+        <!-- Mascot image -->
+        <div style="flex-shrink:0;display:flex;align-items:center;justify-content:center;" class="hero-mascot-wrap">
+          <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/24333f4f-66da-4d04-a37e-e03d4c992228-removebg-preview.png"
+            alt="ClipDAO Mascot"
+            class="hero-mascot"
+            onerror="this.style.display='none'"
+            style="width:clamp(180px,28vw,340px);height:auto;object-fit:contain;filter:drop-shadow(0 0 32px rgba(232,53,10,0.35));animation:heroBounce 2.2s ease-in-out infinite;"/>
         </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- HOW IT WORKS STRIP -->
-  <div style="background:var(--dark);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:40px 16px;">
-    <div style="max-width:860px;margin:0 auto;">
-      <div style="text-align:center;margin-bottom:28px;">
-        <div style="font-family:var(--font-mono);font-size:0.7rem;color:var(--orange);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;">Simple Process</div>
-        <h3>How It Works</h3>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;">
-        <div style="text-align:center;padding:16px;">
-          <div style="font-size:2rem;margin-bottom:8px;">🔑</div>
-          <div style="font-weight:700;margin-bottom:4px;">1. Mint NFT</div>
-          <div style="font-size:0.8rem;color:var(--muted);">Genesis or Early Access. Your on-chain identity.</div>
-        </div>
-        <div style="text-align:center;padding:16px;">
-          <div style="font-size:2rem;margin-bottom:8px;">📡</div>
-          <div style="font-weight:700;margin-bottom:4px;">2. Post Bounty</div>
-          <div style="font-size:0.8rem;color:var(--muted);">Streamers lock AVAX. Clippers compete.</div>
-        </div>
-        <div style="text-align:center;padding:16px;">
-          <div style="font-size:2rem;margin-bottom:8px;">✂️</div>
-          <div style="font-weight:700;margin-bottom:4px;">3. Submit Clips</div>
-          <div style="font-size:0.8rem;color:var(--muted);">Post on X or YouTube. Submit the link here.</div>
-        </div>
-        <div style="text-align:center;padding:16px;">
-          <div style="display:flex;align-items:center;justify-content:center;gap:4px;font-size:2rem;margin-bottom:8px;"><img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_3_2026-02-24_07-10-44-removebg-preview.png" style="width:28px;height:28px;object-fit:contain;" onerror="this.outerHTML='<span>💰</span>'"/></div>
-          <div style="font-weight:700;margin-bottom:4px;">4. Get Paid</div>
-          <div style="font-size:0.8rem;color:var(--muted);">Smart contract pays instantly. 96% to winner.</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- FEATURED BOUNTIES STRIP (auto-loaded) -->
-  <div style="padding:48px 16px;">
-    <div style="max-width:1000px;margin:0 auto;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:8px;">
-        <h3 style="color:var(--orange);">🔥 Open Bounties</h3>
-        <button class="btn btn-ghost btn-sm" onclick="showPage('bounties')">View All →</button>
-      </div>
-      <div id="bounty-list-public" class="bounty-grid">
-        <div class="empty-state"><div class="spinner"></div><p>Loading bounties...</p></div>
       </div>
     </div>
   </div>
@@ -1985,13 +2100,18 @@ textarea { resize: vertical; min-height: 76px; }
           <div class="form-group"><label>Bounty Title</label><input type="text" id="post-title" placeholder="e.g. Best hype clip from tonight's stream"/></div>
           <div class="form-group"><label>Description — What clips do you want?</label><textarea id="post-desc" placeholder="Describe the stream, the moments you want clipped, the vibe..."></textarea></div>
           <div class="form-group"><label>Clip Source Platform</label>
-            <select id="post-platform">
+            <select id="post-platform" onchange="toggleStreamLink2()">
               <option value="blaze">🔥 Blaze (blaze.stream)</option>
               <option value="arena">🏟️ Arena (arena.social/live)</option>
               <option value="both">Both Blaze & Arena</option>
             </select>
           </div>
-          <div class="form-group"><label>Your Stream / Channel Link</label><input type="url" id="post-stream-link" placeholder="https://blaze.stream/yourchannel"/></div>
+          <div class="form-group"><label>Your Stream / Channel Link (Blaze or primary)</label><input type="url" id="post-stream-link" placeholder="https://blaze.stream/yourchannel"/></div>
+          <div class="form-group" id="stream-link2-group" style="display:none;"><label>Second Stream Link (Arena or secondary)</label><input type="url" id="post-stream-link2" placeholder="https://arena.social/live/..."/></div>
+          <div class="post-bounty-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+            <div class="form-group"><label>Your X (Twitter) Username <span style="color:var(--muted);font-weight:400;text-transform:none;">(for clippers to tag)</span></label><input type="text" id="post-streamer-x" placeholder="@yourhandle"/></div>
+            <div class="form-group"><label>Your YouTube Username <span style="color:var(--muted);font-weight:400;text-transform:none;">(optional)</span></label><input type="text" id="post-streamer-yt" placeholder="@yourchannel"/></div>
+          </div>
           <div class="post-bounty-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
             <div class="form-group"><label>Reward (AVAX) — min 0.1</label><input type="number" id="post-reward" placeholder="0.5" min="0.1" step="0.01"/></div>
             <div class="form-group"><label>Duration</label>
@@ -2087,9 +2207,26 @@ textarea { resize: vertical; min-height: 76px; }
   <button class="mobile-nav-btn" id="mob-feed" onclick="switchTab('tab-feed');loadClipFeed();setMobileActive('mob-feed')">
     <span class="micon">🎬</span>Feed
   </button>
-  <button class="mobile-nav-btn" id="mob-profile" onclick="switchTab('tab-profile');setMobileActive('mob-profile')">
-    <span class="micon">👤</span>Profile
+  <button class="mobile-nav-btn" id="mob-more" onclick="toggleMobileDrawer()">
+    <span class="micon">☰</span>More
   </button>
+</div>
+
+<!-- MOBILE DRAWER — all extra menu items -->
+<div id="mobile-drawer-overlay" onclick="closeMobileDrawer()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:140;"></div>
+<div id="mobile-drawer" style="display:none;position:fixed;bottom:62px;left:0;right:0;background:#0f0f0f;border-top:1px solid #2a2a2a;border-radius:14px 14px 0 0;z-index:145;padding:16px 12px 8px;box-shadow:0 -8px 32px rgba(0,0,0,0.7);">
+  <div style="width:40px;height:4px;background:#333;border-radius:2px;margin:0 auto 16px;"></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+    <button class="mobile-drawer-btn" onclick="switchTab('tab-profile');setMobileActive('mob-profile');closeMobileDrawer()"><span style="font-size:1.3rem;">👤</span><span>Profile</span></button>
+    <button class="mobile-drawer-btn" onclick="switchTab('tab-inventory');closeMobileDrawer()"><span style="font-size:1.3rem;">🖼️</span><span>My NFT</span></button>
+    <button class="mobile-drawer-btn" onclick="switchTab('tab-submissions');closeMobileDrawer()"><span style="font-size:1.3rem;">📎</span><span>Submissions</span></button>
+    <button class="mobile-drawer-btn" onclick="switchTab('tab-streamer');loadStreamerDashboard();closeMobileDrawer()"><span style="font-size:1.3rem;">📡</span><span>Streamer</span></button>
+    <button class="mobile-drawer-btn" onclick="showPage('mint');closeMobileDrawer()"><span style="font-size:1.3rem;">🔑</span><span>Mint NFT</span></button>
+    <button class="mobile-drawer-btn" onclick="showPage('referrals');closeMobileDrawer()"><span style="font-size:1.3rem;">💸</span><span>Referrals</span></button>
+    <button class="mobile-drawer-btn" onclick="showPage('docs');closeMobileDrawer()"><span style="font-size:1.3rem;">📖</span><span>Docs</span></button>
+    <button id="mob-admin-btn" class="mobile-drawer-btn" style="display:none;" onclick="showPage('admin');closeMobileDrawer()"><span style="font-size:1.3rem;">⚙️</span><span>Admin</span></button>
+    <button class="mobile-drawer-btn" style="color:var(--red);" onclick="disconnectWallet();closeMobileDrawer()"><span style="font-size:1.3rem;">🚪</span><span>Disconnect</span></button>
+  </div>
 </div>
 
 <!-- ==================== PAGE: MINT ==================== -->
@@ -2167,8 +2304,7 @@ textarea { resize: vertical; min-height: 76px; }
   </div>
 </div>
 
-<!-- ==================== PAGE: BOUNTIES (PUBLIC) ==================== -->
-<div id="page-bounties" class="page">
+  <div id="page-bounties" class="page">
   <div class="container" style="padding-top:36px;padding-bottom:60px;">
     <div class="page-header" style="margin-bottom:24px;">
       <h2>Bounty Board</h2>
@@ -2369,14 +2505,30 @@ textarea { resize: vertical; min-height: 76px; }
     <div class="card" style="margin-bottom:16px;border-left:3px solid var(--orange);">
       <h3 style="color:var(--orange);margin-bottom:18px;">The Full Flow</h3>
       <div style="display:flex;flex-direction:column;gap:0;">
-        ${[
-          ['1','var(--red)','Mint Your NFT','Genesis (500 max, 0.5 AVAX) or Early Access (0.1 AVAX). Your identity, voting power, and reputation in one token. New users get 1 free trial bounty/submission before needing an NFT.'],
-          ['2','var(--orange)','Streamer Posts a Bounty','A streamer goes live on Blaze or Arena, then posts a bounty. AVAX is locked in escrow instantly. Min reward: 0.1 AVAX.'],
-          ['3','var(--amber)','Clippers Watch & Clip','Watch the Blaze/Arena stream, find the best moments, create the clip, post it to X or YouTube.'],
-          ['4','var(--red)','Submit Clip Link','Submit your X or YouTube link. Your handle in the URL must match your registered handle for validation.'],
-          ['5','var(--orange)','Winner Selected','Streamer picks — or community votes. Multi-winner splits: 60/40 or 60/30/10.'],
-          ['6','var(--success)','Automatic Payout','Smart contract sends AVAX directly to winner wallet(s). 96% to clipper, 4% platform fee.']
-        ].map(([n,c,t,d]) => `<div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:18px;"><div style="width:34px;height:34px;border-radius:50%;background:${c};display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:1rem;flex-shrink:0;${c==='var(--amber)'||c==='var(--success)'?'color:black;':''}">${n}</div><div><div style="font-weight:700;margin-bottom:3px;">${t}</div><div style="color:var(--muted);font-size:0.84rem;line-height:1.65;">${d}</div></div></div>`).join('')}
+        <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:18px;">
+          <div style="width:34px;height:34px;border-radius:50%;background:var(--red);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:1rem;flex-shrink:0;">1</div>
+          <div><div style="font-weight:700;margin-bottom:3px;">Mint Your NFT</div><div style="color:var(--muted);font-size:0.84rem;line-height:1.65;">Genesis (500 max, 0.5 AVAX) or Early Access (0.1 AVAX). Your identity, voting power, and reputation in one token. New users get 1 free trial bounty/submission before needing an NFT.</div></div>
+        </div>
+        <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:18px;">
+          <div style="width:34px;height:34px;border-radius:50%;background:var(--orange);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:1rem;flex-shrink:0;">2</div>
+          <div><div style="font-weight:700;margin-bottom:3px;">Streamer Posts a Bounty</div><div style="color:var(--muted);font-size:0.84rem;line-height:1.65;">A streamer goes live on Blaze or Arena, then posts a bounty on ClipDAO. AVAX is locked in escrow instantly. Minimum reward: 0.1 AVAX. Streamers can provide two stream links (e.g. one Blaze, one Arena) and their X/YouTube handles for clippers to tag them.</div></div>
+        </div>
+        <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:18px;">
+          <div style="width:34px;height:34px;border-radius:50%;background:var(--amber);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:1rem;flex-shrink:0;color:#000;">3</div>
+          <div><div style="font-weight:700;margin-bottom:3px;">Clippers Watch &amp; Clip</div><div style="color:var(--muted);font-size:0.84rem;line-height:1.65;">Watch the Blaze/Arena stream, find the best moments, create the clip, tag the streamer, and post it to X or YouTube.</div></div>
+        </div>
+        <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:18px;">
+          <div style="width:34px;height:34px;border-radius:50%;background:var(--red);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:1rem;flex-shrink:0;">4</div>
+          <div><div style="font-weight:700;margin-bottom:3px;">Submit Clip Link</div><div style="color:var(--muted);font-size:0.84rem;line-height:1.65;">Submit your X or YouTube link. Your registered handle should appear in the link URL for validation. Set your handles in Profile settings.</div></div>
+        </div>
+        <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:18px;">
+          <div style="width:34px;height:34px;border-radius:50%;background:var(--orange);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:1rem;flex-shrink:0;">5</div>
+          <div><div style="font-weight:700;margin-bottom:3px;">Winner Selected</div><div style="color:var(--muted);font-size:0.84rem;line-height:1.65;">Streamer picks — or community votes. Multi-winner splits: 60/40 or 60/30/10. Winners are confirmed on-chain.</div></div>
+        </div>
+        <div style="display:flex;gap:14px;align-items:flex-start;">
+          <div style="width:34px;height:34px;border-radius:50%;background:var(--success);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:1rem;flex-shrink:0;color:#000;">6</div>
+          <div><div style="font-weight:700;margin-bottom:3px;">Automatic Payout</div><div style="color:var(--muted);font-size:0.84rem;line-height:1.65;">Smart contract sends AVAX directly to winner wallet(s). 96% to clipper, 4% platform fee. No waiting, no middlemen.</div></div>
+        </div>
       </div>
     </div>
 
