@@ -1506,62 +1506,192 @@ async function loadInventory() {
   if (!el || !account) return;
   el.innerHTML = '<div class="empty-state"><div class="spinner"></div><p>Loading NFT...</p></div>';
   try {
-    const hasNft = await nftContract.hasNFT(account);
-    if (!hasNft) {
-      el.innerHTML = `<div class="empty-state" style="padding:60px 20px;"><div style="font-size:4rem;margin-bottom:16px;">🔑</div><h3 style="margin-bottom:8px;color:var(--orange);">No NFT Found</h3><p style="margin-bottom:20px;">Mint a ClipDAO NFT to unlock the full platform.</p><button class="btn btn-primary" onclick="showPage('mint')">Mint Now</button></div>`;
+    // Step 1: Find active (equipped) token — marketplace is source of truth
+    let activeTokenId = 0;
+    let allOwned = [];
+
+    // Scan transfer events for all owned tokens
+    try { allOwned = await mktGetOwnedTokenIds(account); } catch(e) {}
+
+    // Get equipped token from marketplace
+    if (marketplaceContract) {
+      try {
+        const eq = await marketplaceContract.getActiveToken(account);
+        activeTokenId = Number(eq);
+      } catch(e) {}
+    }
+
+    // If no equipped token set, fall back to first owned token
+    if (!activeTokenId && allOwned.length > 0) activeTokenId = allOwned[0];
+
+    // Verify active token is actually owned (not sold)
+    if (activeTokenId) {
+      try {
+        const owner = await nftContract.ownerOf(activeTokenId);
+        if (owner.toLowerCase() !== account.toLowerCase()) activeTokenId = 0;
+      } catch(e) { activeTokenId = 0; }
+    }
+
+    // If nothing owned at all
+    if (!activeTokenId && allOwned.length === 0) {
+      el.innerHTML = `<div class="empty-state" style="padding:60px 20px;">
+        <div style="font-size:4rem;margin-bottom:16px;">🔑</div>
+        <h3 style="margin-bottom:8px;color:var(--orange);">No NFT Found</h3>
+        <p style="margin-bottom:20px;">Mint a ClipDAO NFT to unlock the full platform.</p>
+        <button class="btn btn-primary" onclick="showPage('mint')">Mint Now</button>
+      </div>`;
       return;
     }
-    const tokenId    = await nftContract.walletToToken(account);
-    const d          = await nftContract.getTokenData(tokenId);
-    const tokenIdNum = Number(tokenId);
+
+    // Step 2: Load data for active token
+    const d          = await nftContract.getTokenData(activeTokenId);
     const tier       = Number(d.tier);
     const role       = Number(d.role);
     const level      = Number(d.level);
     const won        = Number(d.bountiesWon);
     const posted     = Number(d.bountiesPosted);
     const votes      = Number(d.votesReceived);
-    const tierName   = tier===1?'Genesis':'Early Access';
     const roleName   = role===1?'Clipper':'Streamer';
-    const imgUrl     = 'https://ipfs.io/ipfs/bafkreifw3rrlcu3u33rz7qbnvouwkknvxpcs4pff3ro4knkjum4suz57ky';
-    const levelPct   = (level/10)*100;
-    const votePwr    = tier===1?'3x':tier===2?'1.5x':'1x';
-    const feePct     = tier===1?'1%':tier===2?'2.5%':'5%';
-    const tierColor  = tier===1?'rgba(255,149,0,0.5)':'rgba(232,53,10,0.5)';
-    document.querySelectorAll('.profile-avatar').forEach(av => { av.style.backgroundImage=`url(${imgUrl})`; av.style.backgroundSize='cover'; av.style.backgroundPosition='center'; av.textContent=''; });
+    const levelPct   = Math.min(100,(level/10)*100);
+    const votePwr    = tier===0?'3x':tier===1?'1.5x':'1x';
+    const feePct     = tier===0?'1%':tier===1?'2.5%':'5%';
+    const tierColor  = tier===0?'rgba(255,149,0,0.5)':'rgba(232,53,10,0.5)';
+    const tierLabel  = tier===0?'⭐ Genesis':'🔥 Early Access';
+    const tierBadge  = tier===0?'badge-amber':'badge-red';
+
+    // Fetch real NFT image from tokenURI
+    let imgUrl = 'https://ipfs.io/ipfs/bafkreifw3rrlcu3u33rz7qbnvouwkknvxpcs4pff3ro4knkjum4suz57ky';
+    try {
+      const fetched = await mktGetNFTImage(activeTokenId);
+      if (fetched) imgUrl = fetched;
+    } catch(e) {}
+
+    document.querySelectorAll('.profile-avatar').forEach(av => {
+      av.style.backgroundImage = `url(${imgUrl})`;
+      av.style.backgroundSize  = 'cover';
+      av.style.backgroundPosition = 'center';
+      av.textContent = '';
+    });
+
+    // Other owned tokens (not the active one)
+    const otherOwned = allOwned.filter(id => id !== activeTokenId);
+
+    // Build other tokens mini-cards
+    let otherHTML = '';
+    if (otherOwned.length > 0) {
+      const otherCards = await Promise.all(otherOwned.map(async (tid) => {
+        let od = null;
+        try { od = await nftContract.getTokenData(tid); } catch(e) {}
+        const otier = od ? Number(od.tier) : 0;
+        const oname = od ? (od.username || 'Unnamed') : 'Unnamed';
+        const owins = od ? Number(od.bountiesWon) : 0;
+        return `<div style="display:flex;align-items:center;gap:12px;background:var(--dark);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:8px;">
+          <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,${otier===0?'#FF9500':'#E8350A'},#0d0d0d);display:flex;align-items:center;justify-content:center;font-size:0.8rem;flex-shrink:0;">${otier===0?'⭐':'🔥'}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:700;font-size:0.88rem;">#${tid} — ${escHtml(oname)}</div>
+            <div style="font-size:0.72rem;color:var(--muted);">${otier===0?'Genesis':'Early Access'} · ${owins} wins</div>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="mktEquipFromInventory(${tid})" style="flex-shrink:0;white-space:nowrap;">⚡ Equip</button>
+          <a href="https://testnet.snowtrace.io/token/${NFT_ADDRESS}?a=${tid}" target="_blank" class="btn btn-ghost btn-sm" style="flex-shrink:0;">↗</a>
+        </div>`;
+      }));
+      otherHTML = `
+        <div class="card" style="margin-bottom:14px;">
+          <div style="font-weight:700;margin-bottom:10px;color:var(--orange);display:flex;align-items:center;justify-content:space-between;">
+            <span>🎒 Also In Your Wallet (${otherOwned.length})</span>
+            <button class="btn btn-ghost btn-sm" onclick="showPage('marketplace');mktSwitchTab('my-nfts')" style="font-size:0.7rem;">Manage All →</button>
+          </div>
+          ${otherCards.join('')}
+        </div>`;
+    }
+
     el.innerHTML = `
       <div style="max-width:500px;">
-        <div style="border-radius:16px;overflow:hidden;border:1px solid ${tierColor};margin-bottom:20px;">
+        <!-- Active NFT banner -->
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+          <div style="width:8px;height:8px;border-radius:50%;background:var(--success);animation:mktPulse 2s ease-in-out infinite;"></div>
+          <span style="font-size:0.72rem;color:var(--success);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:1px;">Currently Active NFT</span>
+          ${allOwned.length > 1 ? `<span style="margin-left:auto;font-size:0.7rem;color:var(--muted);">${allOwned.length} total owned</span>` : ''}
+        </div>
+
+        <div style="border-radius:16px;overflow:hidden;border:1px solid ${tierColor};margin-bottom:14px;">
           <div style="position:relative;background:#111;">
-            <img src="${imgUrl}" alt="ClipDAO NFT #${tokenIdNum}" style="width:100%;display:block;object-fit:cover;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/>
-            <div style="display:none;align-items:center;justify-content:center;min-height:260px;background:linear-gradient(135deg,#1a0a00,#0a0a1a);"><div style="text-align:center;"><div style="font-size:5rem;">🎬</div><div style="font-family:var(--font-display);font-size:2rem;color:var(--orange);">CLIP DAO</div></div></div>
-            <div style="position:absolute;top:12px;left:12px;display:flex;gap:6px;flex-wrap:wrap;"><span class="badge ${tier===1?'badge-amber':'badge-red'}">${tier===1?'⭐ Genesis':'🔥 Early Access'}</span><span class="badge badge-orange">${roleName}</span></div>
-            <div style="position:absolute;top:12px;right:12px;"><span style="background:rgba(0,0,0,0.75);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:4px 10px;font-family:var(--font-mono);font-size:0.72rem;color:white;">LVL ${level}</span></div>
+            <img src="${imgUrl}" alt="ClipDAO NFT #${activeTokenId}" style="width:100%;display:block;object-fit:cover;max-height:320px;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/>
+            <div style="display:none;align-items:center;justify-content:center;min-height:220px;background:linear-gradient(135deg,#1a0a00,#0a0a1a);">
+              <div style="text-align:center;"><div style="font-size:5rem;">🎬</div><div style="font-family:var(--font-display);font-size:2rem;color:var(--orange);">CLIP DAO</div></div>
+            </div>
+            <div style="position:absolute;top:12px;left:12px;display:flex;gap:6px;flex-wrap:wrap;">
+              <span class="badge ${tierBadge}">${tierLabel}</span>
+              <span class="badge badge-orange">${roleName}</span>
+            </div>
+            <div style="position:absolute;top:12px;right:12px;">
+              <span style="background:rgba(0,0,0,0.75);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:4px 10px;font-family:var(--font-mono);font-size:0.72rem;color:white;">LVL ${level}</span>
+            </div>
           </div>
-          <div style="background:var(--card);padding:16px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-            <div><div style="font-family:var(--font-display);font-size:1.1rem;">ClipDAO #${tokenIdNum}</div><div style="font-size:0.8rem;color:var(--muted);">${d.username||'Anonymous'} · @${d.xHandle||'—'}</div></div>
-            <a href="https://testnet.snowtrace.io/token/${NFT_ADDRESS}?a=${tokenIdNum}" target="_blank" class="btn btn-ghost btn-sm">View ↗</a>
+          <div style="background:var(--card);padding:14px 18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <div>
+              <div style="font-family:var(--font-display);font-size:1.1rem;">ClipDAO #${activeTokenId}</div>
+              <div style="font-size:0.8rem;color:var(--muted);">${d.username||'Anonymous'} · @${d.xHandle||'—'}</div>
+            </div>
+            <a href="https://testnet.snowtrace.io/token/${NFT_ADDRESS}?a=${activeTokenId}" target="_blank" class="btn btn-ghost btn-sm">View ↗</a>
           </div>
         </div>
+
+        <!-- Level bar -->
         <div class="card" style="margin-bottom:14px;">
-          <div style="display:flex;justify-content:space-between;margin-bottom:8px;"><span style="font-weight:700;">Level ${level} / 10</span><span style="font-size:0.8rem;color:var(--muted);">${Math.round(levelPct)}%</span></div>
-          <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden;"><div style="height:100%;width:${levelPct}%;background:linear-gradient(90deg,var(--red),var(--orange));border-radius:4px;"></div></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+            <span style="font-weight:700;">Level ${level} / 10</span>
+            <span style="font-size:0.8rem;color:var(--muted);">${Math.round(levelPct)}%</span>
+          </div>
+          <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden;">
+            <div style="height:100%;width:${levelPct}%;background:linear-gradient(90deg,var(--red),var(--orange));border-radius:4px;transition:width 1s ease;"></div>
+          </div>
           <div style="font-size:0.75rem;color:var(--muted);margin-top:6px;">${5-(won%5)} more wins or ${20-(votes%20)} more votes to next level</div>
         </div>
+
+        <!-- Stats -->
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px;">
           <div class="card" style="text-align:center;padding:12px;"><div style="font-family:var(--font-display);font-size:1.6rem;color:var(--orange);">${won}</div><div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;">Wins</div></div>
           <div class="card" style="text-align:center;padding:12px;"><div style="font-family:var(--font-display);font-size:1.6rem;color:var(--amber);">${votes}</div><div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;">Votes</div></div>
           <div class="card" style="text-align:center;padding:12px;"><div style="font-family:var(--font-display);font-size:1.6rem;color:var(--red);">${posted}</div><div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;">Posted</div></div>
         </div>
+
+        <!-- Other owned NFTs -->
+        ${otherHTML}
+
+        <!-- Tier Perks -->
         <div class="card">
           <div style="font-weight:700;margin-bottom:10px;color:var(--orange);">Tier Perks</div>
           <div style="display:flex;flex-direction:column;gap:6px;">
             <div style="display:flex;justify-content:space-between;padding:8px;background:var(--dark);border-radius:5px;font-size:0.85rem;"><span style="color:var(--muted);">Platform Fee</span><strong style="color:var(--success);">${feePct}</strong></div>
             <div style="display:flex;justify-content:space-between;padding:8px;background:var(--dark);border-radius:5px;font-size:0.85rem;"><span style="color:var(--muted);">Voting Power</span><strong style="color:var(--orange);">${votePwr}</strong></div>
-            ${tier===1?`<div style="display:flex;justify-content:space-between;padding:8px;background:var(--dark);border-radius:5px;font-size:0.85rem;"><span style="color:var(--muted);">Revenue Share</span><strong style="color:var(--amber);">30% monthly</strong></div>`:''}
+            ${tier===0?`<div style="display:flex;justify-content:space-between;padding:8px;background:var(--dark);border-radius:5px;font-size:0.85rem;"><span style="color:var(--muted);">Revenue Share</span><strong style="color:var(--amber);">30% monthly</strong></div>`:''}
           </div>
         </div>
       </div>`;
-  } catch(e) { el.innerHTML = `<div class="empty-state"><p>Error loading NFT. Check console.</p></div>`; console.error(e); }
+
+  } catch(e) {
+    el.innerHTML = `<div class="empty-state"><p>Error loading NFT. Check console.</p></div>`;
+    console.error(e);
+  }
+}
+
+// Quick equip from inventory tab — then reload inventory
+async function mktEquipFromInventory(tokenId) {
+  if (!marketplaceContract) { toast('Connect wallet','error'); return; }
+  try {
+    showTxClapper('Equipping NFT #' + tokenId + '…');
+    const tx = await marketplaceContract.equipToken(tokenId);
+    await tx.wait();
+    hideTxClapper();
+    mktEquippedId = tokenId;
+    toast('⚡ NFT #' + tokenId + ' is now your active identity!', 'success');
+    await loadInventory();
+    await mktLoadEquipped();
+  } catch(e) {
+    hideTxClapper();
+    toast(friendlyError(e), 'error');
+  }
 }
 
 // REFERRALS
@@ -2409,7 +2539,7 @@ function mktFilterCards(query) {
 }
 
 
-const exposed = { connectWallet,disconnectWallet,showPage,switchTab,openModal,closeModal,selectRole,onboardNext,finishOnboarding,mintGenesis,mintEarlyAccess,saveProfile,postBounty,submitClip,voteOnClip,pickWinner,resolveVote,filterBounties,openBountyDetail,setMobileActive,loadInventory,openSubDetail,openHostProfile,openClipperProfile,openStreamViewer,addPendingWinner,removePendingWinner,confirmMultiWinners,confirmSingleWinner,postComment,openEditBounty,copyReferralLink,shareReferralLink,loadReferrals,flagContent,adminDismissFlag,adminActionFlag,adminBanUser,adminForcePause,adminExportData,loadAdminPage,toggleMobileDrawer,closeMobileDrawer,loadClipFeed,loadStreamerDashboard,loadMarketplace,mktListNFT,mktDelistNFT,mktBuyNFT,mktUpdatePrice,mktEquipToken,mktUnequipToken,mktShowListModal,mktShowUpdateModal,mktSwitchTab };
+const exposed = { connectWallet,disconnectWallet,showPage,switchTab,openModal,closeModal,selectRole,onboardNext,finishOnboarding,mintGenesis,mintEarlyAccess,saveProfile,postBounty,submitClip,voteOnClip,pickWinner,resolveVote,filterBounties,openBountyDetail,setMobileActive,loadInventory,openSubDetail,openHostProfile,openClipperProfile,openStreamViewer,addPendingWinner,removePendingWinner,confirmMultiWinners,confirmSingleWinner,postComment,openEditBounty,copyReferralLink,shareReferralLink,loadReferrals,flagContent,adminDismissFlag,adminActionFlag,adminBanUser,adminForcePause,adminExportData,loadAdminPage,toggleMobileDrawer,closeMobileDrawer,loadClipFeed,loadStreamerDashboard,loadMarketplace,mktListNFT,mktDelistNFT,mktBuyNFT,mktUpdatePrice,mktEquipToken,mktUnequipToken,mktShowListModal,mktShowUpdateModal,mktSwitchTab,mktEquipFromInventory };
 Object.assign(window, exposed);
 
 // INIT
