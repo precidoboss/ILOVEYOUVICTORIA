@@ -682,7 +682,7 @@ async function openBountyDetail(bountyId) {
   const b = allBounties.find(x => x.id === bountyId);
   if (!b) return;
   history.replaceState(null,'',window.location.pathname + '#bounty-' + bountyId);
-  openModal('modal-bounty');
+  showPage('bounty-detail');
   const mc = document.getElementById('modal-bounty-content');
   mc.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
   try {
@@ -2464,9 +2464,10 @@ function hideTxClapper() {
 </div>
 
 <!-- ==================== MODAL: BOUNTY DETAIL ==================== -->
-<div class="modal-overlay" id="modal-bounty">
-  <div class="modal" style="max-width:640px;">
-    <button class="modal-close" onclick="closeModal('modal-bounty')">✕</button>
+<!-- ==================== PAGE: BOUNTY DETAIL ==================== -->
+<div id="page-bounty-detail" class="page">
+  <div class="container" style="max-width:700px;padding-top:24px;padding-bottom:80px;">
+    <button class="btn btn-ghost btn-sm" onclick="history.back?history.back():showPage('bounties')" style="margin-bottom:18px;">← Back to Bounties</button>
     <div id="modal-bounty-content"></div>
   </div>
 </div>
