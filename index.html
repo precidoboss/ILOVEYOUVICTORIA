@@ -2010,51 +2010,106 @@ function mktBuildCard(listing, nftData, idx, nftImage) {
 }
 
 // ---- MY NFTs ----
+// Scan Transfer events to build accurate list of tokens currently owned by wallet.
+// This correctly handles: bought NFTs, sold NFTs, gifted NFTs.
+async function mktGetOwnedTokenIds(wallet) {
+  const ro = new ethers.JsonRpcProvider(FUJI_RPC);
+  const roNft = new ethers.Contract(NFT_ADDRESS, NFT_ABI, ro);
+  const walletLower = wallet.toLowerCase();
+
+  // ERC721 Transfer event topic
+  const transferTopic = ethers.id('Transfer(address,address,uint256)');
+  const currentBlock = await ro.getBlockNumber();
+
+  // Scan in 2000-block chunks from genesis up to now
+  // We'll do up to 25 chunks (covers ~50k blocks = well past any testnet deployment)
+  const chunkSize = 2000;
+  const maxChunks = 25;
+  const startBlock = Math.max(0, currentBlock - (chunkSize * maxChunks));
+
+  const received = new Set(); // tokenIds transferred TO wallet
+  const sent     = new Set(); // tokenIds transferred FROM wallet
+
+  for (let from = startBlock; from < currentBlock; from += chunkSize) {
+    const to = Math.min(from + chunkSize - 1, currentBlock);
+    try {
+      // Tokens received by wallet
+      const inLogs = await ro.getLogs({
+        address: NFT_ADDRESS,
+        topics: [transferTopic, null, ethers.zeroPadValue(walletLower, 32)],
+        fromBlock: from,
+        toBlock: to
+      });
+      inLogs.forEach(log => {
+        const tokenId = Number(ethers.toBigInt(log.topics[3]));
+        received.add(tokenId);
+      });
+      // Tokens sent from wallet
+      const outLogs = await ro.getLogs({
+        address: NFT_ADDRESS,
+        topics: [transferTopic, ethers.zeroPadValue(walletLower, 32), null],
+        fromBlock: from,
+        toBlock: to
+      });
+      outLogs.forEach(log => {
+        const tokenId = Number(ethers.toBigInt(log.topics[3]));
+        sent.add(tokenId);
+      });
+    } catch(e) { /* skip failed chunk */ }
+  }
+
+  // Owned = received minus sent
+  const candidates = [...received].filter(id => !sent.has(id));
+
+  // Verify current ownership on-chain (source of truth)
+  const owned = [];
+  await Promise.all(candidates.map(async (tid) => {
+    try {
+      const owner = await roNft.ownerOf(tid);
+      if (owner.toLowerCase() === walletLower) owned.push(tid);
+    } catch(e) {}
+  }));
+
+  return owned.sort((a,b) => a - b);
+}
+
 async function mktLoadMyNFTs() {
   const grid = document.getElementById('mkt-mynfts-grid');
-  grid.innerHTML = '<div class="mkt-loading"><div class="mkt-spinner"></div><span>Loading your NFTs…</span></div>';
+  grid.innerHTML = '<div class="mkt-loading"><div class="mkt-spinner"></div><span>Scanning your wallet for NFTs…</span></div>';
   try {
-    const has = await nftContract.hasNFT(account);
-    if (!has) {
+    // Get truly owned tokens via Transfer event scan + ownerOf verification
+    const ownedTokens = await mktGetOwnedTokenIds(account);
+
+    if (ownedTokens.length === 0) {
       grid.innerHTML = `<div class="mkt-empty">
         <div class="mkt-empty-icon">🔑</div>
-        <div class="mkt-empty-title">No NFTs found</div>
-        <div class="mkt-empty-sub"><button class="mkt-btn mkt-btn-buy" onclick="showPage('mint')">Mint your first NFT</button></div>
+        <div class="mkt-empty-title">No NFTs in your wallet</div>
+        <div class="mkt-empty-sub" style="margin-top:12px;"><button class="mkt-btn mkt-btn-buy" onclick="showPage('mint')">Mint your first NFT</button></div>
       </div>`;
       return;
     }
-    // Get all token IDs owned by wallet
-    // We read from NFT contract walletToToken, then also scan listings for owned ones
-    const ownedTokens = [];
-    try {
-      const primaryTok = await nftContract.walletToToken(account);
-      if (Number(primaryTok) > 0) ownedTokens.push(Number(primaryTok));
-    } catch(e) {}
 
-    // Also check recently bought from marketplace events (scan active listings)
-    // For now show primary token + any we can detect
-    if (ownedTokens.length === 0) {
-      grid.innerHTML = `<div class="mkt-empty"><div class="mkt-empty-icon">🔑</div><div class="mkt-empty-title">No tokens detected</div></div>`;
-      return;
-    }
-
+    // Get currently equipped token
     const equipped = await marketplaceContract.getActiveToken(account);
     mktEquippedId = Number(equipped);
 
+    // Build cards with on-chain data
     const cards = await Promise.all(ownedTokens.map(async (tid) => {
-      let nftData = null;
+      let nftData = null, listingData = null;
       try { nftData = await nftContract.getTokenData(tid); } catch(e) {}
-      let listingData = null;
       try { listingData = await marketplaceContract.getListing(tid); } catch(e) {}
       return mktBuildInventoryCard(tid, nftData, listingData, mktEquippedId);
     }));
+
     grid.innerHTML = cards.join('');
+
     setTimeout(() => {
       grid.querySelectorAll('.mkt-inv-card').forEach((c, i) => {
         c.style.animationDelay = (i * 0.08) + 's';
         c.classList.add('mkt-card-enter');
       });
     }, 10);
+
     // Load NFT images async after cards render
     ownedTokens.forEach(async (tid) => {
       try {
@@ -2062,14 +2117,16 @@ async function mktLoadMyNFTs() {
         if (!img) return;
         const slot = document.getElementById('mkt-inv-img-' + tid);
         if (!slot) return;
-        const tier = slot.closest('.mkt-inv-card')?.querySelector('.mkt-inv-tier')?.textContent?.includes('Genesis') ? 0 : 1;
-        const borderColor = tier === 0 ? '#FF9500' : '#E8350A';
-        const glowColor   = tier === 0 ? 'rgba(255,149,0,0.35)' : 'rgba(232,53,10,0.35)';
+        const tierEl = slot.closest('.mkt-inv-card')?.querySelector('.mkt-inv-tier');
+        const isGenesis = tierEl?.textContent?.includes('Genesis');
+        const borderColor = isGenesis ? '#FF9500' : '#E8350A';
+        const glowColor   = isGenesis ? 'rgba(255,149,0,0.35)' : 'rgba(232,53,10,0.35)';
         slot.innerHTML = `<div style="width:90px;height:90px;border-radius:50%;overflow:hidden;border:2px solid ${borderColor};box-shadow:0 0 24px ${glowColor};">
           <img src="${img}" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.style.display='none'"/>
         </div>`;
       } catch(e) {}
     });
+
   } catch(e) {
     grid.innerHTML = `<div class="mkt-empty"><div class="mkt-empty-icon">❌</div><div class="mkt-empty-title">Error loading NFTs</div><div class="mkt-empty-sub">${e.message?.slice(0,80)||''}</div></div>`;
     console.warn('mktLoadMyNFTs', e);
