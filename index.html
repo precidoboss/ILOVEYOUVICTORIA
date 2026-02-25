@@ -19,6 +19,7 @@ const TREASURY_ADDRESS = '0xcA6c8F853E0E3D05FC63B49A80C4C19c193abF45';
 const FUJI_CHAIN_ID    = 43113;
 const FUJI_RPC         = 'https://api.avax-test.network/ext/bc/C/rpc';
 const ADMIN_WALLET     = '0x46914d5dc59598801e435af2a08928da87c60df0';
+const MARKETPLACE_ADDRESS = '0x401d723259b73c203c90dA306bdb16C2093c9d3C';
 const BLAZE_LOGO = 'https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_1_2026-02-24_07-10-44-removebg-preview.png';
 const ARENA_LOGO = 'https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_2_2026-02-24_07-10-44-removebg-preview.png';
 const AVAX_LOGO  = 'https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_3_2026-02-24_07-10-44-removebg-preview.png';
@@ -65,9 +66,29 @@ const TREASURY_ABI = [
   "function treasuryBalance() view returns (uint256)"
 ];
 
+const MARKETPLACE_ABI = [
+  "function listNFT(uint256 tokenId, uint256 price) nonpayable",
+  "function delistNFT(uint256 tokenId) nonpayable",
+  "function updatePrice(uint256 tokenId, uint256 newPrice) nonpayable",
+  "function buyNFT(uint256 tokenId) payable",
+  "function equipToken(uint256 tokenId) nonpayable",
+  "function unequipToken() nonpayable",
+  "function getActiveToken(address wallet) view returns (uint256)",
+  "function getActiveListings(uint256 offset, uint256 limit) view returns (tuple(address seller, uint256 tokenId, uint256 price, bool active, uint256 listedAt)[] result, uint256 total)",
+  "function activeListingsCount() view returns (uint256)",
+  "function getListing(uint256 tokenId) view returns (tuple(address seller, uint256 tokenId, uint256 price, bool active, uint256 listedAt))",
+  "function getStats() view returns (uint256 _volume, uint256 _sales, uint256 _fees, uint256 _active)",
+  "function equippedToken(address) view returns (uint256)",
+  "function hasEquipped(address) view returns (bool)",
+  "event Listed(uint256 indexed tokenId, address indexed seller, uint256 price)",
+  "event Sold(uint256 indexed tokenId, address indexed seller, address indexed buyer, uint256 price, uint256 fee)",
+  "event Equipped(address indexed wallet, uint256 indexed tokenId)",
+  "event Delisted(uint256 indexed tokenId, address indexed seller)"
+];
+
 // STATE
 let provider, signer, account;
-let nftContract, escrowContract, treasuryContract;
+let nftContract, escrowContract, treasuryContract, marketplaceContract;
 let db;
 let userProfile   = null;
 let selectedRole  = null;
@@ -158,9 +179,10 @@ function disconnectWallet() {
 }
 
 function initContracts() {
-  nftContract      = new ethers.Contract(NFT_ADDRESS, NFT_ABI, signer);
-  escrowContract   = new ethers.Contract(ESCROW_ADDRESS, ESCROW_ABI, signer);
-  treasuryContract = new ethers.Contract(TREASURY_ADDRESS, TREASURY_ABI, signer);
+  nftContract       = new ethers.Contract(NFT_ADDRESS, NFT_ABI, signer);
+  escrowContract    = new ethers.Contract(ESCROW_ADDRESS, ESCROW_ABI, signer);
+  treasuryContract  = new ethers.Contract(TREASURY_ADDRESS, TREASURY_ABI, signer);
+  marketplaceContract = new ethers.Contract(MARKETPLACE_ADDRESS, MARKETPLACE_ABI, signer);
 }
 
 function updateNavWallet() {
@@ -1391,6 +1413,7 @@ function showPage(page) {
   if (page==='mint')       loadMintStats();
   if (page==='bounties')   loadBounties();
   if (page==='referrals')  loadReferrals();
+  if (page==='marketplace') loadMarketplace();
   if (page==='admin' && account?.toLowerCase()===ADMIN_WALLET) loadAdminPage();
   else if (page==='admin') { toast('Admin access only', 'error'); showPage('home'); }
 }
@@ -1766,7 +1789,528 @@ async function setNFTProfilePicture() {
 }
 
 // EXPOSE TO WINDOW
-const exposed = { connectWallet,disconnectWallet,showPage,switchTab,openModal,closeModal,selectRole,onboardNext,finishOnboarding,mintGenesis,mintEarlyAccess,saveProfile,postBounty,submitClip,voteOnClip,pickWinner,resolveVote,filterBounties,openBountyDetail,setMobileActive,loadInventory,openSubDetail,openHostProfile,openClipperProfile,openStreamViewer,addPendingWinner,removePendingWinner,confirmMultiWinners,confirmSingleWinner,postComment,openEditBounty,copyReferralLink,shareReferralLink,loadReferrals,flagContent,adminDismissFlag,adminActionFlag,adminBanUser,adminForcePause,adminExportData,loadAdminPage,toggleMobileDrawer,closeMobileDrawer,loadClipFeed,loadStreamerDashboard };
+
+// ================================================================
+//  MARKETPLACE — Full Logic
+// ================================================================
+let mktListings       = [];
+let mktMyTokens       = [];
+let mktActiveTab      = 'browse';
+let mktEquippedId     = 0;
+let mktTotalListings  = 0;
+let mktPage           = 0;
+const MKT_PAGE_SIZE   = 12;
+
+async function loadMarketplace() {
+  if (!account || !marketplaceContract) {
+    document.getElementById('mkt-require-wallet').style.display = 'flex';
+    document.getElementById('mkt-main').style.display = 'none';
+    return;
+  }
+  document.getElementById('mkt-require-wallet').style.display = 'none';
+  document.getElementById('mkt-main').style.display = 'block';
+  mktSwitchTab(mktActiveTab);
+  await Promise.all([mktLoadStats(), mktLoadEquipped()]);
+}
+
+async function mktLoadStats() {
+  try {
+    const s = await marketplaceContract.getStats();
+    const vol  = parseFloat(ethers.formatEther(s._volume)).toFixed(3);
+    const fees = parseFloat(ethers.formatEther(s._fees)).toFixed(4);
+    document.getElementById('mkt-stat-volume').textContent  = vol + ' AVAX';
+    document.getElementById('mkt-stat-sales').textContent   = s._sales.toString();
+    document.getElementById('mkt-stat-active').textContent  = s._active.toString();
+    document.getElementById('mkt-stat-fees').textContent    = fees + ' AVAX';
+  } catch(e) { console.warn('mktLoadStats', e); }
+}
+
+async function mktLoadEquipped() {
+  try {
+    const tok = await marketplaceContract.getActiveToken(account);
+    mktEquippedId = Number(tok);
+    const el = document.getElementById('mkt-equipped-badge');
+    if (el) el.textContent = mktEquippedId ? '#' + mktEquippedId : 'None';
+  } catch(e) {}
+}
+
+function mktSwitchTab(tab) {
+  mktActiveTab = tab;
+  ['browse','my-nfts','activity'].forEach(t => {
+    const btn = document.getElementById('mkt-tab-' + t);
+    const pane = document.getElementById('mkt-pane-' + t);
+    if (btn)  btn.classList.toggle('mkt-tab-active', t === tab);
+    if (pane) pane.style.display = t === tab ? 'block' : 'none';
+  });
+  if (tab === 'browse')   mktLoadBrowse();
+  if (tab === 'my-nfts')  mktLoadMyNFTs();
+  if (tab === 'activity') mktLoadActivity();
+}
+
+// ---- BROWSE LISTINGS ----
+async function mktLoadBrowse(page = 0) {
+  mktPage = page;
+  const grid = document.getElementById('mkt-browse-grid');
+  grid.innerHTML = '<div class="mkt-loading"><div class="mkt-spinner"></div><span>Loading listings…</span></div>';
+  try {
+    const offset = page * MKT_PAGE_SIZE;
+    const [result, total] = await marketplaceContract.getActiveListings(offset, MKT_PAGE_SIZE);
+    mktTotalListings = Number(total);
+    mktListings = result;
+
+    if (result.length === 0) {
+      grid.innerHTML = `<div class="mkt-empty">
+        <div class="mkt-empty-icon">🏪</div>
+        <div class="mkt-empty-title">No listings yet</div>
+        <div class="mkt-empty-sub">Be the first to list your NFT!</div>
+      </div>`;
+      document.getElementById('mkt-pagination').innerHTML = '';
+      return;
+    }
+
+    // Enrich with NFT data
+    const cards = await Promise.all(result.map(async (l, i) => {
+      let nftData = null;
+      try { nftData = await nftContract.getTokenData(l.tokenId); } catch(e) {}
+      return mktBuildCard(l, nftData, i);
+    }));
+
+    grid.innerHTML = cards.join('');
+
+    // Animate cards in
+    setTimeout(() => {
+      grid.querySelectorAll('.mkt-card').forEach((c, i) => {
+        c.style.animationDelay = (i * 0.06) + 's';
+        c.classList.add('mkt-card-enter');
+      });
+    }, 10);
+
+    // Pagination
+    const totalPages = Math.ceil(mktTotalListings / MKT_PAGE_SIZE);
+    const pag = document.getElementById('mkt-pagination');
+    if (totalPages <= 1) { pag.innerHTML = ''; return; }
+    let pagHTML = '';
+    for (let p = 0; p < totalPages; p++) {
+      pagHTML += `<button class="mkt-page-btn ${p===page?'active':''}" onclick="mktLoadBrowse(${p})">${p+1}</button>`;
+    }
+    pag.innerHTML = pagHTML;
+
+  } catch(e) {
+    grid.innerHTML = `<div class="mkt-empty"><div class="mkt-empty-icon">❌</div><div class="mkt-empty-title">Failed to load</div><div class="mkt-empty-sub">${e.message?.slice(0,80)||'Check your connection'}</div></div>`;
+    console.warn('mktLoadBrowse', e);
+  }
+}
+
+function mktBuildCard(listing, nftData, idx) {
+  const tokenId  = Number(listing.tokenId);
+  const price    = parseFloat(ethers.formatEther(listing.price)).toFixed(3);
+  const seller   = listing.seller.slice(0,6) + '…' + listing.seller.slice(-4);
+  const isMine   = account && listing.seller.toLowerCase() === account.toLowerCase();
+  const isEquipped = tokenId === mktEquippedId;
+  const tier     = nftData ? Number(nftData.tier) : 0;
+  const level    = nftData ? Number(nftData.level) : 0;
+  const wins     = nftData ? Number(nftData.bountiesWon) : 0;
+  const votes    = nftData ? Number(nftData.votesReceived) : 0;
+  const username = nftData ? (nftData.username || 'Unnamed') : 'Unnamed';
+  const platform = nftData ? (nftData.platform || '') : '';
+  const xHandle  = nftData ? (nftData.xHandle  || '') : '';
+  const tierName = tier === 0 ? '⭐ Genesis' : '🔥 Early Access';
+  const tierClass= tier === 0 ? 'mkt-tier-genesis' : 'mkt-tier-early';
+  const daysAgo  = Math.floor((Date.now()/1000 - Number(listing.listedAt)) / 86400);
+  const listedStr = daysAgo === 0 ? 'Today' : daysAgo === 1 ? '1d ago' : daysAgo + 'd ago';
+
+  // Rarity score visual
+  const score = wins * 3 + votes + level * 2;
+  const rarityW = Math.min(100, score);
+  const rarityColor = score > 50 ? '#FF9500' : score > 20 ? '#FF6B1A' : '#E8350A';
+
+  return `<div class="mkt-card" data-token="${tokenId}">
+    ${isEquipped ? '<div class="mkt-equipped-ribbon">EQUIPPED</div>' : ''}
+    <div class="mkt-card-header ${tierClass}">
+      <div class="mkt-card-nft-id">#${tokenId}</div>
+      <div class="mkt-card-tier">${tierName}</div>
+      <div class="mkt-card-avatar">
+        <svg width="60" height="60" viewBox="0 0 60 60" fill="none">
+          <circle cx="30" cy="30" r="29" fill="#0d0d0d" stroke="${tier===0?'#FF9500':'#E8350A'}" stroke-width="1.5"/>
+          <circle cx="30" cy="24" r="10" fill="#333"/>
+          <path d="M14 48 Q30 40 46 48" fill="#333"/>
+          ${tier===0?'<circle cx="30" cy="24" r="5" fill="#FF9500" opacity="0.5"/>':''}
+          <text x="50%" y="58" dominant-baseline="middle" text-anchor="middle" font-size="9" fill="${tier===0?'#FF9500':'#E8350A'}" font-family="monospace" font-weight="bold">${tier===0?'GEN':'EA'}</text>
+        </svg>
+      </div>
+    </div>
+    <div class="mkt-card-body">
+      <div class="mkt-card-username">${escHtml(username)}</div>
+      <div class="mkt-card-meta">
+        ${platform?`<span class="mkt-pill">${escHtml(platform)}</span>`:''}
+        ${xHandle?`<span class="mkt-pill mkt-pill-x">@${escHtml(xHandle)}</span>`:''}
+      </div>
+      <div class="mkt-card-stats">
+        <div class="mkt-stat-item"><span class="mkt-stat-val">${wins}</span><span class="mkt-stat-lbl">Wins</span></div>
+        <div class="mkt-stat-item"><span class="mkt-stat-val">${votes}</span><span class="mkt-stat-lbl">Votes</span></div>
+        <div class="mkt-stat-item"><span class="mkt-stat-val">${level}</span><span class="mkt-stat-lbl">Level</span></div>
+      </div>
+      <div class="mkt-rarity-bar">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:0.65rem;color:var(--muted);">
+          <span>Rarity Score</span><span style="color:${rarityColor};">${score} pts</span>
+        </div>
+        <div class="mkt-rarity-track"><div class="mkt-rarity-fill" style="width:${rarityW}%;background:${rarityColor};"></div></div>
+      </div>
+      <div class="mkt-card-footer">
+        <div class="mkt-price-wrap">
+          <img src="${AVAX_LOGO}" style="width:14px;height:14px;object-fit:contain;" onerror="this.style.display='none'"/>
+          <span class="mkt-price">${price}</span>
+          <span class="mkt-price-label">AVAX</span>
+        </div>
+        <div class="mkt-listed-time">${listedStr}</div>
+      </div>
+      <div class="mkt-card-actions">
+        ${isMine
+          ? `<button class="mkt-btn mkt-btn-ghost" onclick="mktShowUpdateModal(${tokenId},'${price}')">✏️ Update</button>
+             <button class="mkt-btn mkt-btn-danger" onclick="mktDelistNFT(${tokenId})">✕ Delist</button>`
+          : `<button class="mkt-btn mkt-btn-buy" onclick="mktBuyNFT(${tokenId},'${price}')">Buy Now</button>`
+        }
+      </div>
+    </div>
+    <div class="mkt-card-seller">Seller: ${isMine?'<span style="color:var(--orange);">You</span>':escHtml(seller)}</div>
+  </div>`;
+}
+
+// ---- MY NFTs ----
+async function mktLoadMyNFTs() {
+  const grid = document.getElementById('mkt-mynfts-grid');
+  grid.innerHTML = '<div class="mkt-loading"><div class="mkt-spinner"></div><span>Loading your NFTs…</span></div>';
+  try {
+    const has = await nftContract.hasNFT(account);
+    if (!has) {
+      grid.innerHTML = `<div class="mkt-empty">
+        <div class="mkt-empty-icon">🔑</div>
+        <div class="mkt-empty-title">No NFTs found</div>
+        <div class="mkt-empty-sub"><button class="mkt-btn mkt-btn-buy" onclick="showPage('mint')">Mint your first NFT</button></div>
+      </div>`;
+      return;
+    }
+    // Get all token IDs owned by wallet
+    // We read from NFT contract walletToToken, then also scan listings for owned ones
+    const ownedTokens = [];
+    try {
+      const primaryTok = await nftContract.walletToToken(account);
+      if (Number(primaryTok) > 0) ownedTokens.push(Number(primaryTok));
+    } catch(e) {}
+
+    // Also check recently bought from marketplace events (scan active listings)
+    // For now show primary token + any we can detect
+    if (ownedTokens.length === 0) {
+      grid.innerHTML = `<div class="mkt-empty"><div class="mkt-empty-icon">🔑</div><div class="mkt-empty-title">No tokens detected</div></div>`;
+      return;
+    }
+
+    const equipped = await marketplaceContract.getActiveToken(account);
+    mktEquippedId = Number(equipped);
+
+    const cards = await Promise.all(ownedTokens.map(async (tid) => {
+      let nftData = null;
+      try { nftData = await nftContract.getTokenData(tid); } catch(e) {}
+      let listingData = null;
+      try { listingData = await marketplaceContract.getListing(tid); } catch(e) {}
+      return mktBuildInventoryCard(tid, nftData, listingData, mktEquippedId);
+    }));
+    grid.innerHTML = cards.join('');
+    setTimeout(() => {
+      grid.querySelectorAll('.mkt-inv-card').forEach((c, i) => {
+        c.style.animationDelay = (i * 0.08) + 's';
+        c.classList.add('mkt-card-enter');
+      });
+    }, 10);
+  } catch(e) {
+    grid.innerHTML = `<div class="mkt-empty"><div class="mkt-empty-icon">❌</div><div class="mkt-empty-title">Error loading NFTs</div><div class="mkt-empty-sub">${e.message?.slice(0,80)||''}</div></div>`;
+    console.warn('mktLoadMyNFTs', e);
+  }
+}
+
+function mktBuildInventoryCard(tokenId, nftData, listingData, equippedId) {
+  const tier     = nftData ? Number(nftData.tier) : 0;
+  const level    = nftData ? Number(nftData.level) : 0;
+  const wins     = nftData ? Number(nftData.bountiesWon) : 0;
+  const votes    = nftData ? Number(nftData.votesReceived) : 0;
+  const username = nftData ? (nftData.username || 'Unnamed') : 'Unnamed';
+  const platform = nftData ? (nftData.platform || '') : '';
+  const xHandle  = nftData ? (nftData.xHandle  || '') : '';
+  const tierName = tier === 0 ? '⭐ Genesis' : '🔥 Early Access';
+  const tierClass= tier === 0 ? 'mkt-tier-genesis' : 'mkt-tier-early';
+  const isEquipped = tokenId === equippedId;
+  const isListed  = listingData && listingData.active;
+  const listPrice = isListed ? parseFloat(ethers.formatEther(listingData.price)).toFixed(3) : null;
+
+  return `<div class="mkt-inv-card ${isEquipped?'mkt-inv-equipped':''}">
+    <div class="mkt-inv-header ${tierClass}">
+      <div class="mkt-inv-nft-id">#${tokenId}</div>
+      ${isEquipped?'<div class="mkt-inv-equip-tag">✓ EQUIPPED</div>':''}
+      <div class="mkt-inv-avatar">
+        <svg width="80" height="80" viewBox="0 0 80 80" fill="none">
+          <circle cx="40" cy="40" r="38" fill="#0d0d0d" stroke="${tier===0?'#FF9500':'#E8350A'}" stroke-width="2"/>
+          <circle cx="40" cy="32" r="13" fill="#333"/>
+          <path d="M18 65 Q40 54 62 65" fill="#333"/>
+          ${tier===0?'<circle cx="40" cy="32" r="7" fill="#FF9500" opacity="0.4"/><circle cx="40" cy="32" r="3" fill="#FF9500" opacity="0.8"/>':''}
+          ${tier===0?'<path d="M28 20 L32 26 L40 22 L48 26 L52 20" stroke="#FF9500" stroke-width="1.5" fill="none" opacity="0.6"/>':''}
+          <text x="50%" y="76" dominant-baseline="middle" text-anchor="middle" font-size="10" fill="${tier===0?'#FF9500':'#E8350A'}" font-family="monospace" font-weight="bold">${tier===0?'GENESIS':'EARLY'}</text>
+        </svg>
+      </div>
+    </div>
+    <div class="mkt-inv-body">
+      <div class="mkt-inv-username">${escHtml(username)}</div>
+      <div class="mkt-inv-tier">${tierName}</div>
+      ${platform||xHandle?`<div class="mkt-card-meta" style="margin:6px 0;">${platform?`<span class="mkt-pill">${escHtml(platform)}</span>`:''}${xHandle?`<span class="mkt-pill mkt-pill-x">@${escHtml(xHandle)}</span>`:''}</div>`:''}
+      <div class="mkt-inv-stats">
+        <div class="mkt-inv-stat"><div class="mkt-inv-stat-val">${wins}</div><div class="mkt-inv-stat-lbl">Wins</div></div>
+        <div class="mkt-inv-stat"><div class="mkt-inv-stat-val">${votes}</div><div class="mkt-inv-stat-lbl">Votes</div></div>
+        <div class="mkt-inv-stat"><div class="mkt-inv-stat-val">${level}</div><div class="mkt-inv-stat-lbl">Level</div></div>
+      </div>
+      ${isListed?`<div class="mkt-listed-tag">Listed for ${listPrice} AVAX</div>`:''}
+      <div class="mkt-inv-actions">
+        ${isEquipped
+          ? `<button class="mkt-btn mkt-btn-ghost" onclick="mktUnequipToken()" style="width:100%;">Unequip</button>`
+          : `<button class="mkt-btn mkt-btn-equip" onclick="mktEquipToken(${tokenId})" style="width:100%;">⚡ Equip</button>`
+        }
+        ${isListed
+          ? `<div style="display:flex;gap:6px;margin-top:6px;"><button class="mkt-btn mkt-btn-ghost" style="flex:1;" onclick="mktShowUpdateModal(${tokenId},'${listPrice}')">✏️ Price</button><button class="mkt-btn mkt-btn-danger" style="flex:1;" onclick="mktDelistNFT(${tokenId})">Delist</button></div>`
+          : `<button class="mkt-btn mkt-btn-list" onclick="mktShowListModal(${tokenId})" style="width:100%;margin-top:6px;">🏷️ List for Sale</button>`
+        }
+      </div>
+    </div>
+  </div>`;
+}
+
+// ---- ACTIVITY ----
+async function mktLoadActivity() {
+  const el = document.getElementById('mkt-activity-list');
+  el.innerHTML = '<div class="mkt-loading"><div class="mkt-spinner"></div><span>Loading activity…</span></div>';
+  try {
+    const roProvider = new ethers.JsonRpcProvider(FUJI_RPC);
+    const roMarket = new ethers.Contract(MARKETPLACE_ADDRESS, MARKETPLACE_ABI, roProvider);
+    const currentBlock = await roProvider.getBlockNumber();
+    const fromBlock = Math.max(0, currentBlock - 50000);
+
+    const [soldFilter, listedFilter] = [
+      roMarket.filters.Sold(),
+      roMarket.filters.Listed()
+    ];
+    const [soldEvents, listedEvents] = await Promise.all([
+      roMarket.queryFilter(soldFilter, fromBlock),
+      roMarket.queryFilter(listedFilter, fromBlock)
+    ]);
+
+    const all = [
+      ...soldEvents.map(e  => ({ type:'sold',   tokenId:Number(e.args.tokenId), buyer:e.args.buyer, seller:e.args.seller, price:e.args.price, block:e.blockNumber })),
+      ...listedEvents.map(e => ({ type:'listed', tokenId:Number(e.args.tokenId), seller:e.args.seller, price:e.args.price,  block:e.blockNumber }))
+    ].sort((a,b) => b.block - a.block).slice(0, 30);
+
+    if (all.length === 0) {
+      el.innerHTML = '<div class="mkt-empty"><div class="mkt-empty-icon">📋</div><div class="mkt-empty-title">No activity yet</div><div class="mkt-empty-sub">Be the first to trade!</div></div>';
+      return;
+    }
+
+    el.innerHTML = all.map(ev => {
+      const price = parseFloat(ethers.formatEther(ev.price)).toFixed(3);
+      if (ev.type === 'sold') {
+        const buyer  = ev.buyer.slice(0,6)+'…'+ev.buyer.slice(-4);
+        const seller = ev.seller.slice(0,6)+'…'+ev.seller.slice(-4);
+        return `<div class="mkt-activity-row">
+          <div class="mkt-act-icon mkt-act-sold">💰</div>
+          <div class="mkt-act-info">
+            <div class="mkt-act-title">NFT #${ev.tokenId} sold for <strong>${price} AVAX</strong></div>
+            <div class="mkt-act-sub">${seller} → ${buyer}</div>
+          </div>
+          <div class="mkt-act-block">#${ev.block}</div>
+        </div>`;
+      } else {
+        const seller = ev.seller.slice(0,6)+'…'+ev.seller.slice(-4);
+        return `<div class="mkt-activity-row">
+          <div class="mkt-act-icon mkt-act-listed">🏷️</div>
+          <div class="mkt-act-info">
+            <div class="mkt-act-title">NFT #${ev.tokenId} listed for <strong>${price} AVAX</strong></div>
+            <div class="mkt-act-sub">by ${seller}</div>
+          </div>
+          <div class="mkt-act-block">#${ev.block}</div>
+        </div>`;
+      }
+    }).join('');
+  } catch(e) {
+    el.innerHTML = `<div class="mkt-empty"><div class="mkt-empty-icon">❌</div><div class="mkt-empty-title">Could not load activity</div></div>`;
+    console.warn('mktLoadActivity', e);
+  }
+}
+
+// ---- ACTIONS ----
+async function mktBuyNFT(tokenId, priceStr) {
+  if (!account) { toast('Connect wallet first', 'error'); return; }
+  if (!confirm(`Buy NFT #${tokenId} for ${priceStr} AVAX?`)) return;
+  try {
+    const price = ethers.parseEther(priceStr);
+    showTxClapper('Buying NFT #' + tokenId + '…');
+    const tx = await marketplaceContract.buyNFT(tokenId, { value: price });
+    toast('⏳ Buying NFT #' + tokenId + '…', 'info');
+    await tx.wait();
+    hideTxClapper();
+    toast('🎉 You now own NFT #' + tokenId + '!', 'success');
+    await mktLoadBrowse(mktPage);
+    await mktLoadStats();
+    await mktLoadEquipped();
+  } catch(e) {
+    hideTxClapper();
+    toast(friendlyError(e), 'error');
+  }
+}
+
+async function mktListNFT(tokenId, priceAVAX) {
+  if (!account) return;
+  try {
+    // Check approval first
+    const approved = await nftContract.isApprovedForAll(account, MARKETPLACE_ADDRESS);
+    if (!approved) {
+      const approveTx = await nftContract.setApprovalForAll(MARKETPLACE_ADDRESS, true);
+      showTxClapper('Approving marketplace…');
+      toast('⏳ Approving marketplace to transfer your NFT…', 'info');
+      await approveTx.wait();
+    }
+    const priceWei = ethers.parseEther(priceAVAX.toString());
+    showTxClapper('Listing NFT #' + tokenId + '…');
+    const tx = await marketplaceContract.listNFT(tokenId, priceWei);
+    toast('⏳ Listing NFT #' + tokenId + '…', 'info');
+    await tx.wait();
+    hideTxClapper();
+    toast('✅ NFT #' + tokenId + ' listed for ' + priceAVAX + ' AVAX!', 'success');
+    closeModal('modal-mkt-list');
+    closeModal('modal-mkt-update');
+    mktSwitchTab('my-nfts');
+    await mktLoadStats();
+  } catch(e) {
+    hideTxClapper();
+    toast(friendlyError(e), 'error');
+  }
+}
+
+async function mktDelistNFT(tokenId) {
+  if (!confirm('Remove NFT #' + tokenId + ' from sale?')) return;
+  try {
+    showTxClapper('Delisting NFT #' + tokenId + '…');
+    const tx = await marketplaceContract.delistNFT(tokenId);
+    await tx.wait();
+    hideTxClapper();
+    toast('NFT #' + tokenId + ' delisted.', 'success');
+    mktSwitchTab(mktActiveTab);
+    await mktLoadStats();
+  } catch(e) {
+    hideTxClapper();
+    toast(friendlyError(e), 'error');
+  }
+}
+
+async function mktUpdatePrice(tokenId, newPrice) {
+  try {
+    showTxClapper('Updating price…');
+    const tx = await marketplaceContract.updatePrice(tokenId, ethers.parseEther(newPrice.toString()));
+    await tx.wait();
+    hideTxClapper();
+    toast('Price updated to ' + newPrice + ' AVAX!', 'success');
+    closeModal('modal-mkt-update');
+    mktSwitchTab(mktActiveTab);
+    await mktLoadStats();
+  } catch(e) {
+    hideTxClapper();
+    toast(friendlyError(e), 'error');
+  }
+}
+
+async function mktEquipToken(tokenId) {
+  try {
+    showTxClapper('Equipping NFT #' + tokenId + '…');
+    const tx = await marketplaceContract.equipToken(tokenId);
+    await tx.wait();
+    hideTxClapper();
+    mktEquippedId = tokenId;
+    toast('⚡ NFT #' + tokenId + ' equipped as your active identity!', 'success');
+    await mktLoadEquipped();
+    mktSwitchTab('my-nfts');
+    // Update profile picture everywhere
+    await setNFTProfilePicture();
+  } catch(e) {
+    hideTxClapper();
+    toast(friendlyError(e), 'error');
+  }
+}
+
+async function mktUnequipToken() {
+  try {
+    showTxClapper('Unequipping…');
+    const tx = await marketplaceContract.unequipToken();
+    await tx.wait();
+    hideTxClapper();
+    mktEquippedId = 0;
+    toast('NFT unequipped.', 'success');
+    await mktLoadEquipped();
+    mktSwitchTab('my-nfts');
+  } catch(e) {
+    hideTxClapper();
+    toast(friendlyError(e), 'error');
+  }
+}
+
+// ---- MODALS ----
+function mktShowListModal(tokenId) {
+  const mc = document.getElementById('mkt-list-modal-body');
+  mc.innerHTML = `
+    <div style="text-align:center;margin-bottom:16px;">
+      <div style="font-family:var(--font-display);font-size:2rem;color:var(--orange);">NFT #${tokenId}</div>
+      <div style="font-size:0.8rem;color:var(--muted);">Set your listing price</div>
+    </div>
+    <div class="form-group">
+      <label>Price (AVAX) <span style="color:var(--muted);font-weight:400;">min 0.001</span></label>
+      <input type="number" id="mkt-list-price" step="0.001" min="0.001" placeholder="e.g. 0.5" style="font-size:1.1rem;font-family:var(--font-display);color:var(--orange);"/>
+    </div>
+    <div style="background:rgba(255,107,26,0.06);border:1px solid rgba(255,107,26,0.2);border-radius:6px;padding:10px;font-size:0.78rem;color:var(--muted);margin-bottom:14px;">
+      <div style="color:var(--text);font-weight:600;margin-bottom:4px;">📋 Listing breakdown</div>
+      You receive: <strong id="mkt-seller-cut" style="color:var(--success);">—</strong><br/>
+      Marketplace fee (1%): <strong id="mkt-fee-cut" style="color:var(--orange);">—</strong>
+    </div>
+    <div id="mkt-list-tx" class="tx-status"></div>
+    <button class="btn btn-primary" style="width:100%;" onclick="mktListNFT(${tokenId}, parseFloat(document.getElementById('mkt-list-price').value)||0)">🏷️ List for Sale</button>`;
+  // Live fee preview
+  document.getElementById('mkt-list-price').addEventListener('input', function() {
+    const v = parseFloat(this.value)||0;
+    document.getElementById('mkt-seller-cut').textContent = v > 0 ? (v * 0.99).toFixed(4) + ' AVAX' : '—';
+    document.getElementById('mkt-fee-cut').textContent    = v > 0 ? (v * 0.01).toFixed(5) + ' AVAX' : '—';
+  });
+  openModal('modal-mkt-list');
+}
+
+function mktShowUpdateModal(tokenId, currentPrice) {
+  const mc = document.getElementById('mkt-update-modal-body');
+  mc.innerHTML = `
+    <div style="text-align:center;margin-bottom:16px;">
+      <div style="font-family:var(--font-display);font-size:2rem;color:var(--orange);">NFT #${tokenId}</div>
+      <div style="font-size:0.8rem;color:var(--muted);">Current price: ${currentPrice} AVAX</div>
+    </div>
+    <div class="form-group">
+      <label>New Price (AVAX)</label>
+      <input type="number" id="mkt-update-price" step="0.001" min="0.001" value="${currentPrice}" style="font-size:1.1rem;font-family:var(--font-display);color:var(--orange);"/>
+    </div>
+    <button class="btn btn-primary" style="width:100%;margin-bottom:8px;" onclick="mktUpdatePrice(${tokenId}, parseFloat(document.getElementById('mkt-update-price').value)||0)">✅ Update Price</button>
+    <button class="btn btn-ghost btn-danger" style="width:100%;" onclick="mktDelistNFT(${tokenId});closeModal('modal-mkt-update')">✕ Delist NFT</button>`;
+  openModal('modal-mkt-update');
+}
+
+// ---- SEARCH / FILTER ----
+function mktFilterCards(query) {
+  const q = query.toLowerCase();
+  document.querySelectorAll('.mkt-card').forEach(card => {
+    const text = card.textContent.toLowerCase();
+    card.style.display = text.includes(q) ? '' : 'none';
+  });
+}
+
+
+const exposed = { connectWallet,disconnectWallet,showPage,switchTab,openModal,closeModal,selectRole,onboardNext,finishOnboarding,mintGenesis,mintEarlyAccess,saveProfile,postBounty,submitClip,voteOnClip,pickWinner,resolveVote,filterBounties,openBountyDetail,setMobileActive,loadInventory,openSubDetail,openHostProfile,openClipperProfile,openStreamViewer,addPendingWinner,removePendingWinner,confirmMultiWinners,confirmSingleWinner,postComment,openEditBounty,copyReferralLink,shareReferralLink,loadReferrals,flagContent,adminDismissFlag,adminActionFlag,adminBanUser,adminForcePause,adminExportData,loadAdminPage,toggleMobileDrawer,closeMobileDrawer,loadClipFeed,loadStreamerDashboard,loadMarketplace,mktListNFT,mktDelistNFT,mktBuyNFT,mktUpdatePrice,mktEquipToken,mktUnequipToken,mktShowListModal,mktShowUpdateModal,mktSwitchTab };
 Object.assign(window, exposed);
 
 // INIT
@@ -2309,6 +2853,7 @@ function hideTxClapper() {
         <div class="nav-item" onclick="switchTab('tab-inventory')" id="nav-inventory"><span class="icon">🖼️</span> My NFT</div>
         <div class="nav-item" onclick="showPage('mint')"><span class="icon">🔑</span> NFT Mint</div>
         <div class="nav-item" onclick="showPage('referrals')"><span class="icon">💸</span> Referrals</div>
+        <div class="nav-item" onclick="showPage('marketplace')"><span class="icon">🛒</span> NFT Market</div>
         <div class="nav-item" onclick="showPage('docs')"><span class="icon">📖</span> How It Works</div>
         <div class="nav-item" id="nav-admin-link" style="display:none;color:var(--red);" onclick="showPage('admin')"><span class="icon">⚙️</span> Admin</div>
         <div class="nav-item" style="color:var(--muted);" onclick="disconnectWallet()"><span class="icon">🚪</span> Disconnect</div>
@@ -2479,6 +3024,7 @@ function hideTxClapper() {
     <button class="mobile-drawer-btn" onclick="switchTab('tab-streamer');loadStreamerDashboard();closeMobileDrawer()"><span style="font-size:1.3rem;">📡</span><span>Streamer</span></button>
     <button class="mobile-drawer-btn" onclick="showPage('mint');closeMobileDrawer()"><span style="font-size:1.3rem;">🔑</span><span>Mint NFT</span></button>
     <button class="mobile-drawer-btn" onclick="showPage('referrals');closeMobileDrawer()"><span style="font-size:1.3rem;">💸</span><span>Referrals</span></button>
+    <button class="mobile-drawer-btn" onclick="showPage('marketplace');closeMobileDrawer()"><span style="font-size:1.3rem;">🛒</span><span>Market</span></button>
     <button class="mobile-drawer-btn" onclick="showPage('docs');closeMobileDrawer()"><span style="font-size:1.3rem;">📖</span><span>Docs</span></button>
     <button id="mob-admin-btn" class="mobile-drawer-btn" style="display:none;" onclick="showPage('admin');closeMobileDrawer()"><span style="font-size:1.3rem;">⚙️</span><span>Admin</span></button>
     <button class="mobile-drawer-btn" style="color:var(--red);" onclick="disconnectWallet();closeMobileDrawer()"><span style="font-size:1.3rem;">🚪</span><span>Disconnect</span></button>
@@ -3206,6 +3752,671 @@ function hideTxClapper() {
       <button class="btn btn-primary" onclick="connectWallet()">🔥 Connect & Start</button>
       <button class="btn btn-ghost" style="margin-left:10px;" onclick="showPage('mint')">Mint NFT</button>
     </div>
+  </div>
+</div>
+
+
+<!-- ==================== PAGE: MARKETPLACE ==================== -->
+<div id="page-marketplace" class="page">
+
+<style>
+/* =============================================
+   MARKETPLACE — FULL DESIGN SYSTEM
+   Dark trading floor aesthetic. Neon accents.
+   Feels like a premium NFT exchange.
+============================================= */
+
+#page-marketplace {
+  min-height: 100vh;
+  background: #080808;
+}
+
+/* Header banner */
+.mkt-banner {
+  background: linear-gradient(135deg, #0d0000 0%, #0a0a00 40%, #000d0a 100%);
+  border-bottom: 1px solid #1a1a1a;
+  padding: 36px 20px 28px;
+  position: relative;
+  overflow: hidden;
+}
+.mkt-banner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 20% 50%, rgba(232,53,10,0.08) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 30%, rgba(255,149,0,0.06) 0%, transparent 50%);
+  pointer-events: none;
+}
+.mkt-banner-grid {
+  max-width: 1100px;
+  margin: 0 auto;
+  position: relative;
+  z-index: 1;
+}
+.mkt-banner-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: clamp(2.2rem, 6vw, 4rem);
+  line-height: 1;
+  margin-bottom: 8px;
+  background: linear-gradient(90deg, #E8350A 0%, #FF9500 50%, #E8350A 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: mktTitleShimmer 4s linear infinite;
+}
+@keyframes mktTitleShimmer { to { background-position: 200% center; } }
+
+.mkt-banner-sub {
+  font-size: 0.88rem;
+  color: #666;
+  margin-bottom: 24px;
+  font-family: 'DM Mono', monospace;
+  letter-spacing: 0.5px;
+}
+
+/* Stats bar */
+.mkt-stats-bar {
+  display: flex;
+  gap: 0;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid #1a1a1a;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.mkt-stats-item {
+  flex: 1;
+  text-align: center;
+  padding: 12px 8px;
+  border-right: 1px solid #1a1a1a;
+  position: relative;
+}
+.mkt-stats-item:last-child { border-right: none; }
+.mkt-stats-item::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 50%; right: 50%;
+  height: 2px;
+  background: var(--orange);
+  transition: left 0.3s, right 0.3s;
+  border-radius: 2px;
+}
+.mkt-stats-item:hover::after { left: 0; right: 0; }
+.mkt-stat-number {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.4rem;
+  color: var(--orange);
+  line-height: 1;
+}
+.mkt-stat-name {
+  font-size: 0.62rem;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-top: 2px;
+}
+
+/* Equipped badge in header */
+.mkt-equipped-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(34,197,94,0.08);
+  border: 1px solid rgba(34,197,94,0.25);
+  border-radius: 20px;
+  padding: 5px 12px;
+  font-size: 0.76rem;
+  color: var(--success);
+  font-family: 'DM Mono', monospace;
+  margin-top: 12px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+.mkt-equipped-indicator:hover { border-color: var(--success); }
+.mkt-equipped-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+  animation: mktPulse 2s ease-in-out infinite;
+}
+@keyframes mktPulse {
+  0%,100% { opacity:1; transform:scale(1); }
+  50% { opacity:0.5; transform:scale(1.4); }
+}
+
+/* Tabs */
+.mkt-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid #1a1a1a;
+  background: #0a0a0a;
+  padding: 0 20px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+.mkt-tab-btn {
+  padding: 14px 24px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #555;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.mkt-tab-btn:hover { color: #aaa; }
+.mkt-tab-active {
+  color: var(--orange) !important;
+  border-bottom-color: var(--orange) !important;
+}
+
+/* Content area */
+.mkt-content {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px 20px 100px;
+}
+
+/* Search bar */
+.mkt-search-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.mkt-search-input {
+  flex: 1;
+  min-width: 200px;
+  background: #0f0f0f;
+  border: 1px solid #222;
+  border-radius: 8px;
+  padding: 10px 16px;
+  color: white;
+  font-size: 0.88rem;
+  font-family: 'Barlow', sans-serif;
+  transition: border-color 0.15s;
+}
+.mkt-search-input:focus { outline: none; border-color: var(--orange); }
+.mkt-search-input::placeholder { color: #444; }
+
+/* Cards grid */
+.mkt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+@media(max-width:600px) { .mkt-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; } }
+@media(max-width:380px) { .mkt-grid { grid-template-columns: 1fr; } }
+
+/* Browse Card */
+.mkt-card {
+  background: #0e0e0e;
+  border: 1px solid #1e1e1e;
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  opacity: 0;
+}
+.mkt-card-enter {
+  animation: mktCardIn 0.5s ease forwards;
+}
+@keyframes mktCardIn {
+  from { opacity:0; transform:translateY(20px) scale(0.96); }
+  to   { opacity:1; transform:translateY(0) scale(1); }
+}
+.mkt-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(255,107,26,0.5);
+  box-shadow: 0 12px 40px rgba(232,53,10,0.12);
+}
+.mkt-card-header {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+.mkt-tier-genesis { background: linear-gradient(160deg, #0d0800, #1a0d00); }
+.mkt-tier-early   { background: linear-gradient(160deg, #0d0000, #150600); }
+.mkt-card-nft-id {
+  position: absolute;
+  top: 8px; left: 10px;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.65rem;
+  color: #555;
+}
+.mkt-card-tier {
+  position: absolute;
+  top: 8px; right: 8px;
+  font-size: 0.6rem;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  padding: 2px 7px;
+  color: #aaa;
+}
+.mkt-card-avatar { margin-top: 4px; }
+.mkt-equipped-ribbon {
+  position: absolute;
+  top: 10px; left: -22px;
+  background: var(--success);
+  color: black;
+  font-size: 0.55rem;
+  font-weight: 900;
+  letter-spacing: 1px;
+  padding: 3px 28px;
+  transform: rotate(-45deg);
+  z-index: 2;
+}
+.mkt-card-body { padding: 12px 14px 8px; }
+.mkt-card-username {
+  font-weight: 700;
+  font-size: 0.92rem;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mkt-card-meta {
+  display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 10px;
+}
+.mkt-pill {
+  font-size: 0.6rem;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  padding: 2px 7px;
+  color: #888;
+  font-family: 'DM Mono', monospace;
+}
+.mkt-pill-x { color: #1da1f2; border-color: rgba(29,161,242,0.2); background: rgba(29,161,242,0.05); }
+.mkt-card-stats {
+  display: grid;
+  grid-template-columns: repeat(3,1fr);
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.mkt-stat-item { text-align: center; }
+.mkt-stat-val {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.15rem;
+  color: var(--text);
+  line-height: 1;
+}
+.mkt-stat-lbl {
+  font-size: 0.58rem;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.mkt-rarity-bar { margin-bottom: 10px; }
+.mkt-rarity-track {
+  height: 3px;
+  background: #1a1a1a;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.mkt-rarity-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.8s ease;
+}
+.mkt-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.mkt-price-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.mkt-price {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.4rem;
+  color: var(--orange);
+  line-height: 1;
+}
+.mkt-price-label {
+  font-size: 0.65rem;
+  color: #555;
+  align-self: flex-end;
+  margin-bottom: 2px;
+}
+.mkt-listed-time { font-size: 0.62rem; color: #444; font-family: 'DM Mono', monospace; }
+.mkt-card-actions { display: flex; gap: 6px; }
+.mkt-card-seller {
+  padding: 6px 14px 10px;
+  font-size: 0.62rem;
+  color: #444;
+  font-family: 'DM Mono', monospace;
+  border-top: 1px solid #141414;
+}
+
+/* Buttons */
+.mkt-btn {
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  font-family: 'Barlow', sans-serif;
+  transition: all 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  letter-spacing: 0.3px;
+}
+.mkt-btn-buy {
+  background: linear-gradient(135deg, var(--red), var(--orange));
+  color: white;
+  flex: 1;
+  box-shadow: 0 4px 14px rgba(232,53,10,0.25);
+}
+.mkt-btn-buy:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(232,53,10,0.35); }
+.mkt-btn-buy:active { transform: translateY(0); }
+.mkt-btn-equip {
+  background: rgba(34,197,94,0.12);
+  border: 1px solid rgba(34,197,94,0.35);
+  color: var(--success);
+}
+.mkt-btn-equip:hover { background: rgba(34,197,94,0.2); }
+.mkt-btn-list {
+  background: rgba(255,107,26,0.1);
+  border: 1px solid rgba(255,107,26,0.3);
+  color: var(--orange);
+}
+.mkt-btn-list:hover { background: rgba(255,107,26,0.18); }
+.mkt-btn-ghost {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid #222;
+  color: #aaa;
+}
+.mkt-btn-ghost:hover { border-color: #444; color: white; }
+.mkt-btn-danger {
+  background: rgba(232,53,10,0.08);
+  border: 1px solid rgba(232,53,10,0.25);
+  color: var(--red);
+}
+.mkt-btn-danger:hover { background: rgba(232,53,10,0.15); }
+
+/* Inventory cards */
+.mkt-inv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+@media(max-width:600px) { .mkt-inv-grid { grid-template-columns: 1fr; } }
+
+.mkt-inv-card {
+  background: #0e0e0e;
+  border: 1px solid #1e1e1e;
+  border-radius: 14px;
+  overflow: hidden;
+  opacity: 0;
+  transition: border-color 0.2s;
+}
+.mkt-inv-card:hover { border-color: #333; }
+.mkt-inv-equipped {
+  border-color: rgba(34,197,94,0.45) !important;
+  box-shadow: 0 0 24px rgba(34,197,94,0.08);
+}
+.mkt-inv-header {
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+.mkt-inv-nft-id {
+  position: absolute; top: 10px; left: 12px;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.7rem; color: #555;
+}
+.mkt-inv-equip-tag {
+  position: absolute; top: 10px; right: 10px;
+  background: var(--success); color: black;
+  font-size: 0.6rem; font-weight: 900;
+  letter-spacing: 1px; padding: 3px 8px;
+  border-radius: 10px;
+}
+.mkt-inv-avatar { position: relative; }
+.mkt-inv-avatar::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  background: linear-gradient(135deg, var(--red), var(--amber)) border-box;
+  -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: destination-out;
+  mask-composite: exclude;
+  opacity: 0.3;
+}
+.mkt-inv-equipped .mkt-inv-avatar::after { opacity: 0.8; }
+.mkt-inv-body { padding: 14px 18px 18px; }
+.mkt-inv-username {
+  font-weight: 700; font-size: 1.05rem;
+  margin-bottom: 2px; text-align: center;
+}
+.mkt-inv-tier {
+  text-align: center; font-size: 0.74rem;
+  color: #666; margin-bottom: 10px;
+}
+.mkt-inv-stats {
+  display: grid; grid-template-columns: repeat(3,1fr);
+  gap: 0;
+  border: 1px solid #1a1a1a;
+  border-radius: 8px; overflow: hidden;
+  margin-bottom: 14px;
+}
+.mkt-inv-stat {
+  text-align: center; padding: 10px 6px;
+  border-right: 1px solid #1a1a1a;
+}
+.mkt-inv-stat:last-child { border-right: none; }
+.mkt-inv-stat-val {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.5rem; color: var(--orange); line-height: 1;
+}
+.mkt-inv-stat-lbl { font-size: 0.6rem; color: #555; text-transform: uppercase; letter-spacing: 0.5px; }
+.mkt-listed-tag {
+  text-align: center;
+  background: rgba(255,107,26,0.08);
+  border: 1px solid rgba(255,107,26,0.2);
+  border-radius: 6px; padding: 5px 10px;
+  font-size: 0.74rem; color: var(--orange);
+  font-family: 'DM Mono', monospace;
+  margin-bottom: 10px;
+}
+.mkt-inv-actions { display: flex; flex-direction: column; gap: 0; }
+
+/* Activity feed */
+.mkt-activity-list { display: flex; flex-direction: column; gap: 8px; }
+.mkt-activity-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #0e0e0e;
+  border: 1px solid #1a1a1a;
+  border-radius: 8px;
+  padding: 12px 14px;
+  transition: border-color 0.15s;
+  animation: mktCardIn 0.4s ease forwards;
+}
+.mkt-activity-row:hover { border-color: #333; }
+.mkt-act-icon {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.1rem; flex-shrink: 0;
+}
+.mkt-act-sold   { background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.2); }
+.mkt-act-listed { background: rgba(255,107,26,0.1); border: 1px solid rgba(255,107,26,0.2); }
+.mkt-act-info { flex: 1; min-width: 0; }
+.mkt-act-title { font-size: 0.84rem; line-height: 1.4; }
+.mkt-act-sub { font-size: 0.7rem; color: #555; font-family: 'DM Mono', monospace; margin-top: 2px; }
+.mkt-act-block { font-size: 0.62rem; color: #333; font-family: 'DM Mono', monospace; flex-shrink: 0; }
+
+/* Loading / Empty states */
+.mkt-loading {
+  display: flex; align-items: center; justify-content: center;
+  gap: 12px; padding: 60px 0;
+  color: #555; font-family: 'DM Mono', monospace; font-size: 0.8rem;
+  grid-column: 1/-1;
+}
+.mkt-spinner {
+  width: 20px; height: 20px;
+  border: 2px solid #222;
+  border-top-color: var(--orange);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+.mkt-empty {
+  text-align: center; padding: 60px 20px;
+  grid-column: 1/-1;
+}
+.mkt-empty-icon { font-size: 2.5rem; margin-bottom: 12px; }
+.mkt-empty-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 6px; }
+.mkt-empty-sub { font-size: 0.84rem; color: #555; }
+
+/* Pagination */
+.mkt-pagination {
+  display: flex; gap: 6px; justify-content: center;
+  margin-top: 24px; flex-wrap: wrap;
+}
+.mkt-page-btn {
+  width: 34px; height: 34px;
+  border-radius: 6px;
+  background: #0e0e0e;
+  border: 1px solid #222;
+  color: #777;
+  font-size: 0.8rem;
+  font-family: 'DM Mono', monospace;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.mkt-page-btn.active {
+  background: var(--orange);
+  border-color: var(--orange);
+  color: black;
+}
+.mkt-page-btn:hover:not(.active) { border-color: #444; color: white; }
+
+/* Require wallet */
+.mkt-require-wallet {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; min-height: 60vh; gap: 16px;
+  text-align: center; padding: 40px 20px;
+}
+</style>
+
+<!-- Require wallet gate -->
+<div id="mkt-require-wallet" class="mkt-require-wallet" style="display:none;">
+  <div style="font-size:3rem;">🛒</div>
+  <h2 style="font-family:'Bebas Neue',sans-serif;font-size:2rem;margin:0;">NFT Marketplace</h2>
+  <p style="color:#555;max-width:320px;">Connect your wallet to browse listings, list your NFT, and equip any token you own.</p>
+  <button class="btn btn-primary" onclick="connectWallet()">🔥 Connect Wallet</button>
+</div>
+
+<!-- Main marketplace -->
+<div id="mkt-main" style="display:none;">
+
+  <!-- Banner -->
+  <div class="mkt-banner">
+    <div class="mkt-banner-grid">
+      <div class="mkt-banner-title">NFT Marketplace</div>
+      <div class="mkt-banner-sub">Buy · Sell · Equip · Trade ClipDAO identities on Avalanche</div>
+      <div class="mkt-stats-bar">
+        <div class="mkt-stats-item">
+          <div class="mkt-stat-number" id="mkt-stat-volume">—</div>
+          <div class="mkt-stat-name">Total Volume</div>
+        </div>
+        <div class="mkt-stats-item">
+          <div class="mkt-stat-number" id="mkt-stat-sales">—</div>
+          <div class="mkt-stat-name">Sales</div>
+        </div>
+        <div class="mkt-stats-item">
+          <div class="mkt-stat-number" id="mkt-stat-active">—</div>
+          <div class="mkt-stat-name">Listed</div>
+        </div>
+        <div class="mkt-stats-item">
+          <div class="mkt-stat-number" id="mkt-stat-fees">—</div>
+          <div class="mkt-stat-name">Fees Collected</div>
+        </div>
+      </div>
+      <div class="mkt-equipped-indicator" onclick="mktSwitchTab('my-nfts')">
+        <div class="mkt-equipped-dot"></div>
+        Active NFT: <strong id="mkt-equipped-badge">—</strong>
+        <span style="color:#444;margin-left:4px;">→ Manage</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="mkt-tabs">
+    <button class="mkt-tab-btn mkt-tab-active" id="mkt-tab-browse" onclick="mktSwitchTab('browse')">🏪 Browse</button>
+    <button class="mkt-tab-btn" id="mkt-tab-my-nfts" onclick="mktSwitchTab('my-nfts')">🎒 My NFTs</button>
+    <button class="mkt-tab-btn" id="mkt-tab-activity" onclick="mktSwitchTab('activity')">📊 Activity</button>
+  </div>
+
+  <!-- Tab: Browse -->
+  <div id="mkt-pane-browse" class="mkt-content">
+    <div class="mkt-search-row">
+      <input class="mkt-search-input" type="text" placeholder="Search by username, platform, handle…" oninput="mktFilterCards(this.value)"/>
+      <button class="mkt-btn mkt-btn-ghost" onclick="mktLoadBrowse(0)" style="padding:10px 16px;white-space:nowrap;">🔄 Refresh</button>
+    </div>
+    <div id="mkt-browse-grid" class="mkt-grid">
+      <div class="mkt-loading"><div class="mkt-spinner"></div><span>Loading listings…</span></div>
+    </div>
+    <div id="mkt-pagination" class="mkt-pagination"></div>
+  </div>
+
+  <!-- Tab: My NFTs -->
+  <div id="mkt-pane-my-nfts" class="mkt-content" style="display:none;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px;">
+      <div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:1.5rem;margin-bottom:2px;">Your Collection</div>
+        <div style="font-size:0.78rem;color:#555;font-family:'DM Mono',monospace;">Equip any NFT you own to use it as your active identity across ClipDAO</div>
+      </div>
+      <button class="mkt-btn mkt-btn-list" onclick="showPage('mint')" style="padding:10px 18px;">+ Mint New NFT</button>
+    </div>
+    <div id="mkt-mynfts-grid" class="mkt-inv-grid">
+      <div class="mkt-loading"><div class="mkt-spinner"></div><span>Loading…</span></div>
+    </div>
+  </div>
+
+  <!-- Tab: Activity -->
+  <div id="mkt-pane-activity" class="mkt-content" style="display:none;">
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:1.5rem;margin-bottom:16px;">Recent Activity</div>
+    <div id="mkt-activity-list" class="mkt-activity-list">
+      <div class="mkt-loading"><div class="mkt-spinner"></div><span>Loading…</span></div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<!-- ===== MODAL: LIST NFT ===== -->
+<div class="modal-overlay" id="modal-mkt-list">
+  <div class="modal" style="max-width:400px;">
+    <button class="modal-close" onclick="closeModal('modal-mkt-list')">✕</button>
+    <h2 style="font-family:'Bebas Neue',sans-serif;font-size:1.8rem;color:var(--orange);margin-bottom:4px;">List NFT</h2>
+    <div id="mkt-list-modal-body"></div>
+  </div>
+</div>
+
+<!-- ===== MODAL: UPDATE PRICE ===== -->
+<div class="modal-overlay" id="modal-mkt-update">
+  <div class="modal" style="max-width:400px;">
+    <button class="modal-close" onclick="closeModal('modal-mkt-update')">✕</button>
+    <h2 style="font-family:'Bebas Neue',sans-serif;font-size:1.8rem;color:var(--orange);margin-bottom:4px;">Update Listing</h2>
+    <div id="mkt-update-modal-body"></div>
   </div>
 </div>
 
