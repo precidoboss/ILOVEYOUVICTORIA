@@ -376,9 +376,13 @@ if (nftContract && account) {
         document.getElementById('ob-no-nft').style.display  = 'block';
       });
     } else {
-      document.getElementById('ob-has-nft').style.display = 'none';
-      document.getElementById('ob-no-nft').style.display  = 'block';
+        document.getElementById('ob-has-nft').style.display = 'none';
+        document.getElementById('ob-no-nft').style.display  = 'block';
     }
+  }
+}
+
+async function finishOnboarding() {
 
 async function finishOnboarding() {
   closeModal('modal-onboard');
