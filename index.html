@@ -13,13 +13,13 @@
 <script>
 const SUPABASE_URL = 'https://cfndhpcumlxgdhfxaxkz.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNmbmRocGN1bWx4Z2RoZnhheGt6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4NzI0NDEsImV4cCI6MjA4NzQ0ODQ0MX0.kQaFiJh6HCj39lMoiZgy4y5HO26YqbZm1DnXIOiJAGk';
-const NFT_ADDRESS      = '0xa1bc0bfEdF7Ec1411C8769840EB80af1bcBa02e3';
-const ESCROW_ADDRESS   = '0xD68Fb3D68278c7792f17fd72a29775d2Fb28040c';
-const TREASURY_ADDRESS = '0xcA6c8F853E0E3D05FC63B49A80C4C19c193abF45';
+const NFT_ADDRESS      = '0x5424306e8Ac64B11E8bf1fA834D4e298FB2889d3';
+const ESCROW_ADDRESS   = '0x6938022B15Dd63A92eBCf6a5CC4449baB9584670';
+const TREASURY_ADDRESS = '0xB7f1391eC7500076378666fEd574aD0884892776';
 const FUJI_CHAIN_ID    = 43113;
 const FUJI_RPC         = 'https://api.avax-test.network/ext/bc/C/rpc';
 const ADMIN_WALLET     = '0x46914d5dc59598801e435af2a08928da87c60df0';
-const MARKETPLACE_ADDRESS = '0x401d723259b73c203c90dA306bdb16C2093c9d3C';
+const MARKETPLACE_ADDRESS = '0xb3b2fA9aA6B915909FC95EF8E1A19e7065ab5A0E';
 const BLAZE_LOGO = 'https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_1_2026-02-24_07-10-44-removebg-preview.png';
 const ARENA_LOGO = 'https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_2_2026-02-24_07-10-44-removebg-preview.png';
 const AVAX_LOGO  = 'https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_3_2026-02-24_07-10-44-removebg-preview.png';
@@ -45,7 +45,25 @@ const NFT_ABI = [
   "function getApproved(uint256 tokenId) view returns (address)",
   "function tokenURI(uint256 tokenId) view returns (string)",
   "function ownerOf(uint256 tokenId) view returns (address)",
-  "event Minted(address indexed to, uint256 tokenId, uint8 tier)"
+  "function getOwnedTokens(address wallet) view returns (uint256[])",
+  "function getActiveToken(address wallet) view returns (uint256)",
+  "function isIdentityConfirmed(uint256 tokenId) view returns (bool)",
+  "function isUsernameAvailable(string name) view returns (bool)",
+  "function totalSupply() view returns (uint256)",
+  "function genesisRemaining() view returns (uint256)",
+  "function votingPower(address wallet) view returns (uint256)",
+  "function platformFeeBps(address wallet) view returns (uint256)",
+  "function setReferrer(address referrer)",
+  "function confirmIdentity(uint256 tokenId, tuple(string username,string xHandle,string platform,string channel,string blazeHandle,string arenaHandle,string ytHandle) _id, uint8 _role)",
+  "function updateProfile(tuple(string username,string xHandle,string platform,string channel,string blazeHandle,string arenaHandle,string ytHandle) _id, uint8 _role)",
+  "function equipToken(uint256 tokenId)",
+  "function unequipToken()",
+  "function nftStats(uint256 tokenId) view returns (uint8 tier, uint8 role, uint8 level, uint32 bountiesWon, uint32 bountiesPosted, uint32 votesReceived, uint32 clipsSubmitted, uint16 winStreak, uint16 disputesAgainst, uint64 lastActivityAt, uint64 mintedAt, bool identityConfirmed, address originalMinter)",
+  "function nftIdentity(uint256 tokenId) view returns (string username, string platform, string xHandle, string ytHandle, string blazeHandle, string arenaHandle, string channel)",
+  "event Minted(address indexed to, uint256 indexed tokenId, uint8 tier, address referrer)",
+  "event LevelChanged(uint256 indexed tokenId, uint8 newLevel)",
+  "event IdentitySet(uint256 indexed tokenId, string username, address indexed wallet)",
+  "event ReferralPaid(address indexed referrer, address indexed minter, uint256 amount)"
 ];
 
 const ESCROW_ABI = [
@@ -69,7 +87,22 @@ const ESCROW_ABI = [
 
 const TREASURY_ABI = [
   "function getReputation(address _wallet) view returns (uint256 clipperRep, uint256 streamerRep, uint256 disputes)",
-  "function treasuryBalance() view returns (uint256)"
+  "function treasuryBalance() view returns (uint256)",
+  "function genesisHolderCount() view returns (uint256)",
+  "function nextDistributionIn() view returns (uint256)",
+  "function canDistribute() view returns (bool)",
+  "function lastDistribution() view returns (uint256)",
+  "function distributionInterval() view returns (uint256)",
+  "function GENESIS_SHARE_BPS() view returns (uint256)",
+  "function isGenesisHolder(address) view returns (bool)",
+  "function registerAsGenesisHolder()",
+  "function addGenesisHolder(address wallet)",
+  "function distributeToGenesisHolders()",
+  "function distributeWeighted()",
+  "event Distributed(uint256 totalAmount, uint256 perHolder, uint256 holderCount)",
+  "event DistributedWeighted(uint256 pot, uint256 totalWeight, uint256 count)",
+  "event HolderPaid(address indexed holder, uint256 amount)",
+  "event Received(address indexed from, uint256 amount)"
 ];
 
 const MARKETPLACE_ABI = [
@@ -294,20 +327,45 @@ async function markTrialUsed() {
 // NFT MINT
 async function mintGenesis() {
   if (!signer) { toast('Connect wallet first', 'error'); return; }
-  const username = document.getElementById('gen-username').value.trim();
-  const xhandle  = document.getElementById('gen-xhandle').value.trim();
-  const platform = document.getElementById('gen-platform').value;
-  const role     = document.getElementById('gen-role').value;
+  const username    = document.getElementById('gen-username').value.trim();
+  const xhandle     = document.getElementById('gen-xhandle').value.trim();
+  const platform    = document.getElementById('gen-platform').value;
+  const role        = parseInt(document.getElementById('gen-role').value) || 1;
+  const blazeHandle = document.getElementById('gen-blaze')?.value.trim() || '';
+  const arenaHandle = document.getElementById('gen-arena')?.value.trim() || '';
+  const ytHandle    = document.getElementById('gen-yt')?.value.trim() || '';
+  const channel     = document.getElementById('gen-channel')?.value.trim() || '';
   if (!username || !xhandle) { toast('Fill in username and X handle', 'error'); return; }
   try {
-    setTxStatus('tx-genesis', '⏳ Minting Genesis NFT...', 'pending'); showTxClapper('Minting Genesis NFT…');
+    // Register referrer on-chain first (if any), before minting
+    const refAddr = await getOnChainReferrer();
+    if (refAddr) {
+      try {
+        setTxStatus('tx-genesis', '⏳ Registering referrer on-chain…', 'pending');
+        showTxClapper('Registering referrer…');
+        const refTx = await nftContract.setReferrer(refAddr);
+        await refTx.wait();
+        toast('Referrer registered \u2014 you will earn 5% on their mint!', 'success');
+      } catch(re) {
+        // Already set or same wallet — not fatal, continue
+        console.log('setReferrer skipped:', re.reason || re.message);
+      }
+    }
+
+    setTxStatus('tx-genesis', '⏳ Minting Genesis NFT...', 'pending');
+    showTxClapper('Minting Genesis NFT…');
     const price = await nftContract.GENESIS_PRICE();
-    const tx    = await nftContract.mintGenesis(role, username, xhandle, platform, { value: price });
-    setTxStatus('tx-genesis', '⏳ Transaction pending...', 'pending'); showTxClapper('Confirming on Avalanche…');
+    // V2 contract: mintGenesis(role, IdentityParams tuple)
+    const idParams = [username, xhandle, platform, channel, blazeHandle, arenaHandle, ytHandle];
+    const tx = await nftContract.mintGenesis(role, idParams, { value: price });
+    setTxStatus('tx-genesis', '⏳ Transaction pending...', 'pending');
+    showTxClapper('Confirming on Avalanche…');
     await tx.wait();
     setTxStatus('tx-genesis', '✅ Genesis NFT minted!', 'success');
-    hideTxClapper(); toast('Genesis NFT minted! Welcome to ClipDAO.', 'success');
+    hideTxClapper();
+    toast('Genesis NFT minted! Welcome to ClipDAO. 5% referral auto-sent to referrer.', 'success');
     await logActivity('mint_genesis', { username, xhandle });
+    await creditReferral(); // also update DB for leaderboard
     await loadMintStats();
     setTimeout(() => { showPage('dashboard'); loadDashboard(); }, 1500);
   } catch(e) {
@@ -320,21 +378,42 @@ async function mintGenesis() {
 
 async function mintEarlyAccess() {
   if (!signer) { toast('Connect wallet first', 'error'); return; }
-  const username = document.getElementById('ea-username').value.trim();
-  const xhandle  = document.getElementById('ea-xhandle').value.trim();
-  const platform = document.getElementById('ea-platform').value;
-  const role     = document.getElementById('ea-role').value;
+  const username    = document.getElementById('ea-username').value.trim();
+  const xhandle     = document.getElementById('ea-xhandle').value.trim();
+  const platform    = document.getElementById('ea-platform').value;
+  const role        = parseInt(document.getElementById('ea-role').value) || 1;
+  const blazeHandle = document.getElementById('ea-blaze')?.value.trim() || '';
+  const arenaHandle = document.getElementById('ea-arena')?.value.trim() || '';
+  const ytHandle    = document.getElementById('ea-yt')?.value.trim() || '';
+  const channel     = document.getElementById('ea-channel')?.value.trim() || '';
   if (!username || !xhandle) { toast('Fill in username and X handle', 'error'); return; }
   try {
-    setTxStatus('tx-early', '⏳ Minting Early Access NFT...', 'pending'); showTxClapper('Minting Early Access NFT…');
+    // Register referrer on-chain first
+    const refAddr = await getOnChainReferrer();
+    if (refAddr) {
+      try {
+        setTxStatus('tx-early', '⏳ Registering referrer on-chain…', 'pending');
+        showTxClapper('Registering referrer…');
+        const refTx = await nftContract.setReferrer(refAddr);
+        await refTx.wait();
+      } catch(re) {
+        console.log('setReferrer skipped:', re.reason || re.message);
+      }
+    }
+
+    setTxStatus('tx-early', '⏳ Minting Early Access NFT...', 'pending');
+    showTxClapper('Minting Early Access NFT…');
     const price = await nftContract.EARLY_ACCESS_PRICE();
-    const tx    = await nftContract.mintEarlyAccess(role, username, xhandle, platform, { value: price });
-    setTxStatus('tx-early', '⏳ Transaction pending...', 'pending'); showTxClapper('Confirming on Avalanche…');
+    // V2 contract: mintEarlyAccess(role, IdentityParams tuple)
+    const idParams = [username, xhandle, platform, channel, blazeHandle, arenaHandle, ytHandle];
+    const tx = await nftContract.mintEarlyAccess(role, idParams, { value: price });
+    setTxStatus('tx-early', '⏳ Transaction pending...', 'pending');
+    showTxClapper('Confirming on Avalanche…');
     await tx.wait();
     setTxStatus('tx-early', '✅ Early Access NFT minted!', 'success');
-    hideTxClapper(); toast('Early Access NFT minted! Welcome to ClipDAO.', 'success');
+    hideTxClapper();
+    toast('Early Access NFT minted! Referral 5% auto-paid on-chain.', 'success');
     await logActivity('mint_early', { username, xhandle });
-    // Credit referral if applicable
     await creditReferral();
     setTimeout(() => { showPage('dashboard'); loadDashboard(); }, 1500);
   } catch(e) {
@@ -1419,6 +1498,7 @@ function showPage(page) {
   if (page==='mint')       loadMintStats();
   if (page==='bounties')   loadBounties();
   if (page==='referrals')  loadReferrals();
+  if (page==='rewards')    loadRewardsPage();
   if (page==='marketplace') loadMarketplace();
   if (page==='admin' && account?.toLowerCase()===ADMIN_WALLET) loadAdminPage();
   else if (page==='admin') { toast('Admin access only', 'error'); showPage('home'); }
@@ -1726,14 +1806,61 @@ async function loadReferrals() {
     const refByEl = document.getElementById('ref-by');
     if (refByEl) refByEl.textContent = 'Referred by: ' + refBy.slice(0,14)+'…';
   }
-  // Load my referral count
+
+  // Show on-chain referrer status
+  if (account && nftContract) {
+    try {
+      const onChainRef = await nftContract.referredBy(account);
+      const statusEl = document.getElementById('ref-onchain-status');
+      if (statusEl) {
+        if (onChainRef && onChainRef !== ethers.ZeroAddress) {
+          statusEl.style.display = 'block';
+          statusEl.innerHTML = `✅ On-chain referrer registered: <span style="font-family:var(--font-mono)">${onChainRef.slice(0,20)}…</span> — they'll earn 5% when you mint.`;
+        } else if (refBy) {
+          statusEl.style.display = 'block';
+          statusEl.innerHTML = `⚠️ Referrer from link not yet registered on-chain. It will be registered automatically when you mint.`;
+          statusEl.style.background = 'rgba(255,150,0,0.08)';
+          statusEl.style.borderColor = 'rgba(255,150,0,0.3)';
+        }
+      }
+    } catch(e) {}
+  }
+  // Load my referral count from DB
   if (account && db) {
     try {
-      // First check referrals table
       const { data: myRef } = await db.from('referrals').select('*').eq('referrer', account.toLowerCase()).maybeSingle();
       const countEl = document.getElementById('ref-count');
       if (countEl) countEl.textContent = myRef?.count || 0;
     } catch(e) {}
+  }
+
+  // Scan ReferralPaid events on-chain for real AVAX earned figure
+  if (account) {
+    try {
+      const provider  = new ethers.JsonRpcProvider(FUJI_RPC);
+      const iface     = new ethers.Interface(['event ReferralPaid(address indexed referrer, address indexed minter, uint256 amount)']);
+      const topic     = ethers.id('ReferralPaid(address,address,uint256)');
+      const refTopic  = ethers.zeroPadValue(account.toLowerCase(), 32);
+      const curBlock  = await provider.getBlockNumber();
+      const fromBlock = Math.max(0, curBlock - 100000);
+      let totalEarned = 0n;
+      for (let s = fromBlock; s < curBlock; s += 2000) {
+        const e = Math.min(s + 1999, curBlock);
+        try {
+          const logs = await provider.getLogs({ address: NFT_ADDRESS, topics: [topic, refTopic], fromBlock: s, toBlock: e });
+          for (const log of logs) {
+            try { const p = iface.parseLog(log); if (p) totalEarned += BigInt(p.args[2].toString()); } catch(e2) {}
+          }
+        } catch(e3) {}
+      }
+      const earned = parseFloat(ethers.formatEther(totalEarned));
+      const earnedEl = document.getElementById('ref-earned');
+      if (earnedEl) earnedEl.textContent = earned > 0 ? earned.toFixed(4) + ' AVAX' : '0 AVAX';
+    } catch(e) { console.warn('ReferralPaid scan failed', e); }
+
+    // V2: referrals paid instantly on-chain — no weekly wait
+    const pendingEl = document.getElementById('ref-pending');
+    if (pendingEl) { pendingEl.textContent = 'Instant'; pendingEl.style.fontSize = '1.1rem'; }
   }
   // Load leaderboard — try referrals table first, fallback to referral_clicks
   try {
@@ -1783,6 +1910,357 @@ async function storeReferral() {
   try {
     await db.from('referral_clicks').upsert({ wallet: account.toLowerCase(), referred_by: ref, created_at: new Date().toISOString() }, { onConflict: 'wallet' });
   } catch(e) {}
+}
+
+// Returns a valid referrer address from URL param or localStorage, or null
+async function getOnChainReferrer() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const ref = (params.get('ref') || localStorage.getItem('clipdao_ref') || '').trim().toLowerCase();
+    if (!ref || !ethers.isAddress(ref)) return null;
+    if (account && ref === account.toLowerCase()) return null;
+    // Check if already set on-chain to avoid wasting gas
+    const alreadySet = await nftContract.referredBy(account);
+    if (alreadySet && alreadySet !== ethers.ZeroAddress) {
+      console.log('Referrer already set on-chain:', alreadySet);
+      return null; // already registered, setReferrer would revert
+    }
+    return ethers.getAddress(ref); // checksum address
+  } catch(e) { return null; }
+}
+
+// ── GENESIS REWARDS TRACKER ────────────────────────────────────────────
+async function loadRewardsPage() {
+  const el = document.getElementById('rewards-content');
+  if (!el) return;
+  el.innerHTML = '<div class="empty-state"><div class="spinner"></div><p>Loading rewards data…</p></div>';
+
+  if (!account) {
+    el.innerHTML = '<div class="empty-state"><p>Connect your wallet to view your rewards.</p></div>';
+    return;
+  }
+
+  try {
+    const provider = new ethers.JsonRpcProvider(FUJI_RPC);
+    const treasury = new ethers.Contract(TREASURY_ADDRESS, TREASURY_ABI, provider);
+    const nft      = new ethers.Contract(NFT_ADDRESS, NFT_ABI, provider);
+
+    // Fetch treasury data in parallel
+    const [
+      balance,
+      holderCount,
+      nextIn,
+      lastDist,
+      interval,
+      shareBps,
+      isHolder
+    ] = await Promise.all([
+      treasury.treasuryBalance().catch(()=>0n),
+      treasury.genesisHolderCount().catch(()=>0n),
+      treasury.nextDistributionIn().catch(()=>0n),
+      treasury.lastDistribution().catch(()=>0n),
+      treasury.distributionInterval().catch(()=>BigInt(30*24*3600)),
+      treasury.GENESIS_SHARE_BPS().catch(()=>3000n),
+      treasury.isGenesisHolder(account).catch(()=>false)
+    ]);
+
+    // Get owned tokens to show stats
+    let ownedTokens = [];
+    try { ownedTokens = await nft.getOwnedTokens(account); } catch(e) {}
+
+    // Calculate stats
+    const balNum    = parseFloat(ethers.formatEther(balance));
+    const holderNum = parseInt(holderCount.toString()) || 1;
+    const shareNum  = parseInt(shareBps.toString()) / 10000;
+    const pot       = balNum * shareNum;
+    const perHolder = pot / holderNum;
+
+    // Next distribution countdown
+    const nextSecs = parseInt(nextIn.toString());
+    const nextStr  = nextSecs <= 0
+      ? '<span style="color:var(--success);font-weight:700;font-size:1.1rem;">🟢 Ready Now!</span>'
+      : formatCountdown(nextSecs);
+
+    // Last distribution date
+    const lastDistDate = parseInt(lastDist.toString()) > 0
+      ? new Date(parseInt(lastDist.toString()) * 1000).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'})
+      : 'Never yet';
+
+    // Registration status
+    const registerBtn = !isHolder
+      ? `<div style="background:rgba(255,149,0,0.08);border:1px solid rgba(255,149,0,0.3);border-radius:8px;padding:12px;margin-top:10px;">
+           <div style="font-weight:700;color:var(--amber);margin-bottom:4px;">⚠️ Not yet registered</div>
+           <div style="font-size:0.78rem;color:var(--muted);margin-bottom:8px;">You must register to receive monthly distributions — one-time, free transaction.</div>
+           <button class="btn btn-primary btn-sm" onclick="registerAsGenesisHolder()">Register as Genesis Holder</button>
+         </div>`
+      : `<div style="display:inline-flex;align-items:center;gap:6px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);border-radius:20px;padding:5px 12px;font-size:0.78rem;color:var(--success);margin-top:8px;">
+           <div style="width:7px;height:7px;border-radius:50%;background:var(--success);animation:mktPulse 2s ease-in-out infinite;"></div>
+           Registered — you'll receive the next distribution automatically
+         </div>`;
+
+    // Build token rows with weighted share estimate
+    let tokenRows = '';
+    let totalWeight = 0;
+    const tokenDataList = [];
+    for (const tid of ownedTokens.slice(0, 20)) {
+      try {
+        const stats = await nft.nftStats(Number(tid));
+        const ident = await nft.nftIdentity(Number(tid));
+        const tier  = Number(stats.tier);
+        const level = Number(stats.level);
+        if (tier === 1) totalWeight += level || 1; // Genesis only earn share
+        tokenDataList.push({ tid: Number(tid), tier, level, bountiesWon: Number(stats.bountiesWon), votesReceived: Number(stats.votesReceived), username: ident.username || '—' });
+      } catch(e) {
+        // fallback: try getTokenData
+        try {
+          const d = await nft.getTokenData(Number(tid));
+          const tier  = Number(d.tier);
+          const level = Number(d.level);
+          if (tier === 1) totalWeight += level || 1;
+          tokenDataList.push({ tid: Number(tid), tier, level, bountiesWon: Number(d.bountiesWon), votesReceived: Number(d.votesReceived), username: d.username || '—' });
+        } catch(e2) {}
+      }
+    }
+
+    for (const t of tokenDataList) {
+      const isGenesis = t.tier === 1;
+      const weight    = isGenesis ? (t.level || 1) : 0;
+      const myShare   = isGenesis && totalWeight > 0 ? (pot * weight / totalWeight) : 0;
+      tokenRows += `
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:8px 6px;font-family:var(--font-mono);color:var(--orange);">#${t.tid}</td>
+          <td style="padding:8px 6px;">${isGenesis ? '<span class="badge badge-amber" style="font-size:0.6rem;">⭐ Genesis</span>' : '<span class="badge badge-red" style="font-size:0.6rem;">🔥 Early</span>'}</td>
+          <td style="padding:8px 6px;font-family:var(--font-display);color:var(--amber);">Lv.${t.level}</td>
+          <td style="padding:8px 6px;color:var(--success);">${t.bountiesWon} wins</td>
+          <td style="padding:8px 6px;">${escHtml(t.username)}</td>
+          <td style="padding:8px 6px;font-family:var(--font-display);color:${isGenesis?'var(--success)':'var(--muted)'};">${isGenesis ? myShare.toFixed(5)+' AVAX' : '—'}</td>
+        </tr>`;
+    }
+
+    // Scan HolderPaid + DistributedWeighted events for full payment history
+    let totalReceived  = 0;
+    let paymentHistory = [];
+    let monthlyBreakdown = {}; // month -> amount
+
+    try {
+      const currentBlock = await provider.getBlockNumber();
+      const fromBlock    = Math.max(0, currentBlock - 100000);
+      const iface        = new ethers.Interface(TREASURY_ABI);
+      const paidTopic    = ethers.id('HolderPaid(address,uint256)');
+      const distTopic    = ethers.id('DistributedWeighted(uint256,uint256,uint256)');
+
+      for (let start = fromBlock; start < currentBlock; start += 2000) {
+        const end = Math.min(start + 1999, currentBlock);
+        try {
+          // Logs where this wallet was paid
+          const logs = await provider.getLogs({
+            address: TREASURY_ADDRESS,
+            topics: [paidTopic, ethers.zeroPadValue(account.toLowerCase(), 32)],
+            fromBlock: start,
+            toBlock: end
+          });
+          for (const log of logs) {
+            try {
+              const parsed = iface.parseLog(log);
+              if (parsed) {
+                const amt   = parseFloat(ethers.formatEther(parsed.args[1]));
+                const block = await provider.getBlock(log.blockNumber);
+                const ts    = block ? block.timestamp * 1000 : Date.now();
+                const monthKey = new Date(ts).toLocaleDateString('en-US', {month:'short', year:'numeric'});
+                totalReceived += amt;
+                monthlyBreakdown[monthKey] = (monthlyBreakdown[monthKey] || 0) + amt;
+                paymentHistory.push({
+                  amount: amt,
+                  date: new Date(ts).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
+                  month: monthKey,
+                  tx: log.transactionHash,
+                  block: log.blockNumber
+                });
+              }
+            } catch(pe) {}
+          }
+        } catch(e) {}
+      }
+      paymentHistory.sort((a,b) => b.block - a.block);
+    } catch(e) { console.warn('Event scan failed:', e); }
+
+    // Build monthly chart data — last 6 months
+    const monthLabels = [];
+    const monthAmounts = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const k = d.toLocaleDateString('en-US', {month:'short', year:'numeric'});
+      monthLabels.push(d.toLocaleDateString('en-US', {month:'short'}));
+      monthAmounts.push(monthlyBreakdown[k] || 0);
+    }
+    const maxBar = Math.max(...monthAmounts, 0.001);
+
+    const monthlyChartHTML = `
+      <div style="display:flex;align-items:flex-end;gap:8px;height:80px;margin-top:8px;">
+        ${monthLabels.map((m, i) => {
+          const h = Math.round((monthAmounts[i] / maxBar) * 70);
+          const isEmpty = monthAmounts[i] === 0;
+          return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">
+            <div style="font-family:var(--font-display);font-size:0.62rem;color:${isEmpty?'var(--muted)':'var(--success)'};">${monthAmounts[i] > 0 ? monthAmounts[i].toFixed(4) : ''}</div>
+            <div style="width:100%;height:${Math.max(h,3)}px;background:${isEmpty?'rgba(255,255,255,0.05)':'linear-gradient(180deg,var(--success),rgba(34,197,94,0.3))'};border-radius:3px 3px 0 0;transition:height 0.5s ease;"></div>
+            <div style="font-size:0.6rem;color:var(--muted);">${m}</div>
+          </div>`;
+        }).join('')}
+      </div>`;
+
+    const historyHTML = paymentHistory.length > 0
+      ? paymentHistory.map(p => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:34px;height:34px;border-radius:50%;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.25);display:flex;align-items:center;justify-content:center;font-size:0.9rem;flex-shrink:0;">💰</div>
+              <div>
+                <div style="font-family:var(--font-display);color:var(--success);font-size:1.1rem;">+${p.amount.toFixed(4)} AVAX</div>
+                <div style="font-size:0.72rem;color:var(--muted);">${p.date} &nbsp;·&nbsp; Block #${p.block}</div>
+              </div>
+            </div>
+            <a href="https://testnet.snowtrace.io/tx/${p.tx}" target="_blank" class="btn btn-ghost btn-sm" style="font-size:0.7rem;">View ↗</a>
+          </div>`).join('')
+      : `<div style="text-align:center;padding:24px 0;">
+           <div style="font-size:2rem;margin-bottom:8px;">📭</div>
+           <div style="color:var(--muted);font-size:0.84rem;">No payments found in recent blocks.</div>
+           ${!isHolder ? '<div style="color:var(--amber);font-size:0.78rem;margin-top:6px;">Register as a Genesis holder above to start receiving distributions.</div>' : ''}
+         </div>`;
+
+    el.innerHTML = `
+      <!-- TOP OVERVIEW GRID -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:20px;">
+        <div class="card" style="text-align:center;border-top:3px solid var(--amber);padding:14px;">
+          <div style="font-family:var(--font-display);font-size:1.8rem;color:var(--amber);">${balNum.toFixed(3)}</div>
+          <div style="font-size:0.65rem;color:var(--muted);text-transform:uppercase;margin-top:2px;">Treasury Balance</div>
+          <div style="font-size:0.62rem;color:var(--muted);">AVAX</div>
+        </div>
+        <div class="card" style="text-align:center;border-top:3px solid var(--orange);padding:14px;">
+          <div style="font-family:var(--font-display);font-size:1.8rem;color:var(--orange);">${pot.toFixed(3)}</div>
+          <div style="font-size:0.65rem;color:var(--muted);text-transform:uppercase;margin-top:2px;">Next Pool (30%)</div>
+          <div style="font-size:0.62rem;color:var(--muted);">AVAX</div>
+        </div>
+        <div class="card" style="text-align:center;border-top:3px solid var(--success);padding:14px;">
+          <div style="font-family:var(--font-display);font-size:1.8rem;color:var(--success);">${perHolder.toFixed(4)}</div>
+          <div style="font-size:0.65rem;color:var(--muted);text-transform:uppercase;margin-top:2px;">Est. Your Share</div>
+          <div style="font-size:0.62rem;color:var(--muted);">AVAX / month</div>
+        </div>
+        <div class="card" style="text-align:center;border-top:3px solid var(--red);padding:14px;">
+          <div style="font-family:var(--font-display);font-size:1.8rem;color:var(--red);">${totalReceived.toFixed(4)}</div>
+          <div style="font-size:0.65rem;color:var(--muted);text-transform:uppercase;margin-top:2px;">Total Received</div>
+          <div style="font-size:0.62rem;color:var(--muted);">AVAX all time</div>
+        </div>
+      </div>
+
+      <!-- NEXT DISTRIBUTION COUNTDOWN -->
+      <div class="card" style="margin-bottom:16px;background:linear-gradient(135deg,rgba(255,149,0,0.05),transparent);border-left:3px solid var(--amber);">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
+          <div>
+            <div style="font-size:0.68rem;color:var(--amber);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">📅 Next Distribution</div>
+            <div style="font-size:1rem;margin-bottom:4px;">${nextStr}</div>
+            <div style="font-size:0.72rem;color:var(--muted);">
+              Last payout: <strong style="color:var(--text);">${lastDistDate}</strong> &nbsp;·&nbsp;
+              <strong style="color:var(--text);">${holderNum}</strong> registered holders &nbsp;·&nbsp; Every 30 days
+            </div>
+          </div>
+          <div style="flex-shrink:0;">${registerBtn}</div>
+        </div>
+
+        <!-- Projected payout breakdown -->
+        <div style="margin-top:14px;padding:10px;background:rgba(255,255,255,0.03);border-radius:6px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center;">
+          <div>
+            <div style="font-family:var(--font-display);font-size:1.1rem;color:var(--amber);">${balNum.toFixed(3)}</div>
+            <div style="font-size:0.62rem;color:var(--muted);">Treasury</div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:center;font-size:0.7rem;color:var(--muted);">× 30% ÷ ${holderNum} holders</div>
+          <div>
+            <div style="font-family:var(--font-display);font-size:1.1rem;color:var(--success);">= ${perHolder.toFixed(4)}</div>
+            <div style="font-size:0.62rem;color:var(--muted);">Your est. share</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MONTHLY EARNINGS CHART -->
+      <div class="card" style="margin-bottom:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <div style="font-weight:700;color:var(--orange);">📊 Monthly Earnings</div>
+          <div style="font-size:0.72rem;color:var(--muted);">Last 6 months</div>
+        </div>
+        ${monthlyChartHTML}
+        <div style="font-size:0.68rem;color:var(--muted);margin-top:4px;">
+          Total received: <strong style="color:var(--success);">${totalReceived.toFixed(4)} AVAX</strong>
+          ${Object.keys(monthlyBreakdown).length > 0 ? ' across ' + Object.keys(monthlyBreakdown).length + ' distribution(s)' : ''}
+        </div>
+      </div>
+
+      <!-- MY NFTs TABLE -->
+      ${tokenDataList.length > 0 ? `
+      <div class="card" style="margin-bottom:16px;overflow:hidden;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <div style="font-weight:700;color:var(--orange);">🎫 My NFTs & Projected Shares</div>
+          <div style="font-size:0.68rem;color:var(--muted);">Level × weight = share</div>
+        </div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+            <thead>
+              <tr style="color:var(--muted);font-size:0.65rem;text-transform:uppercase;">
+                <th style="text-align:left;padding:6px 6px 10px;">Token</th>
+                <th style="text-align:left;padding:6px 6px 10px;">Tier</th>
+                <th style="text-align:left;padding:6px 6px 10px;">Level</th>
+                <th style="text-align:left;padding:6px 6px 10px;">Activity</th>
+                <th style="text-align:left;padding:6px 6px 10px;">Username</th>
+                <th style="text-align:left;padding:6px 6px 10px;">Est. Share</th>
+              </tr>
+            </thead>
+            <tbody>${tokenRows}</tbody>
+          </table>
+        </div>
+        <div style="font-size:0.68rem;color:var(--muted);margin-top:10px;padding-top:8px;border-top:1px solid var(--border);">
+          💡 <strong>Weighted by level:</strong> Lv.10 Genesis earns 10× the share of Lv.1. Only Genesis NFTs receive monthly distributions. Early Access holders earn reduced platform fees instead.
+        </div>
+      </div>` : ''}
+
+      <!-- PAYMENT HISTORY -->
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+          <div style="font-weight:700;color:var(--orange);">💰 Payment History</div>
+          <div style="font-size:0.72rem;color:var(--muted);">Verified on-chain</div>
+        </div>
+        ${historyHTML}
+        <div style="font-size:0.65rem;color:var(--muted);margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.05);">Scanning last ~100k blocks. Older payments may not appear here. Check Snowtrace for full history: <a href="https://testnet.snowtrace.io/address/${TREASURY_ADDRESS}#events" target="_blank" style="color:var(--orange);">Treasury Events ↗</a></div>
+      </div>
+    `;
+  } catch(e) {
+    console.error('loadRewardsPage error:', e);
+    el.innerHTML = `<div class="empty-state"><p>Failed to load rewards: ${e.message}</p></div>`;
+  }
+}
+
+function formatCountdown(seconds) {
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const parts = [];
+  if (d > 0) parts.push(d + 'd');
+  if (h > 0) parts.push(h + 'h');
+  if (m > 0) parts.push(m + 'm');
+  return parts.length > 0 ? parts.join(' ') + ' remaining' : 'Less than 1m';
+}
+
+async function registerAsGenesisHolder() {
+  if (!signer) { toast('Connect wallet first', 'error'); return; }
+  try {
+    const treasurySigned = new ethers.Contract(TREASURY_ADDRESS, TREASURY_ABI, signer);
+    const tx = await treasurySigned.registerAsGenesisHolder();
+    showTxClapper('Registering as Genesis holder…');
+    await tx.wait();
+    hideTxClapper();
+    toast('✅ Registered as Genesis holder! You will now receive monthly distributions.', 'success');
+    loadRewardsPage();
+  } catch(e) {
+    hideTxClapper();
+    toast(friendlyError(e), 'error');
+  }
 }
 
 function toggleStreamLink2() {
@@ -2539,7 +3017,7 @@ function mktFilterCards(query) {
 }
 
 
-const exposed = { connectWallet,disconnectWallet,showPage,switchTab,openModal,closeModal,selectRole,onboardNext,finishOnboarding,mintGenesis,mintEarlyAccess,saveProfile,postBounty,submitClip,voteOnClip,pickWinner,resolveVote,filterBounties,openBountyDetail,setMobileActive,loadInventory,openSubDetail,openHostProfile,openClipperProfile,openStreamViewer,addPendingWinner,removePendingWinner,confirmMultiWinners,confirmSingleWinner,postComment,openEditBounty,copyReferralLink,shareReferralLink,loadReferrals,flagContent,adminDismissFlag,adminActionFlag,adminBanUser,adminForcePause,adminExportData,loadAdminPage,toggleMobileDrawer,closeMobileDrawer,loadClipFeed,loadStreamerDashboard,loadMarketplace,mktListNFT,mktDelistNFT,mktBuyNFT,mktUpdatePrice,mktEquipToken,mktUnequipToken,mktShowListModal,mktShowUpdateModal,mktSwitchTab,mktEquipFromInventory };
+const exposed = { connectWallet,disconnectWallet,showPage,switchTab,openModal,closeModal,selectRole,onboardNext,finishOnboarding,mintGenesis,mintEarlyAccess,saveProfile,postBounty,submitClip,voteOnClip,pickWinner,resolveVote,filterBounties,openBountyDetail,setMobileActive,loadInventory,openSubDetail,openHostProfile,openClipperProfile,openStreamViewer,addPendingWinner,removePendingWinner,confirmMultiWinners,confirmSingleWinner,postComment,openEditBounty,copyReferralLink,shareReferralLink,loadReferrals,loadRewardsPage,registerAsGenesisHolder,flagContent,adminDismissFlag,adminActionFlag,adminBanUser,adminForcePause,adminExportData,loadAdminPage,toggleMobileDrawer,closeMobileDrawer,loadClipFeed,loadStreamerDashboard,loadMarketplace,mktListNFT,mktDelistNFT,mktBuyNFT,mktUpdatePrice,mktEquipToken,mktUnequipToken,mktShowListModal,mktShowUpdateModal,mktSwitchTab,mktEquipFromInventory };
 Object.assign(window, exposed);
 
 // INIT
@@ -2586,18 +3064,38 @@ h3 { font-size: 1.3rem; }
 .divider { height: 1px; background: var(--border); margin: 20px 0; }
 
 /* NAV */
-nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba(10,10,10,0.97); border-bottom: 1px solid var(--border); backdrop-filter: blur(16px); padding: 0 20px; height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.nav-logo { font-family: var(--font-display); font-size: 1.7rem; letter-spacing: 3px; cursor: pointer; flex-shrink: 0; }
-.nav-logo span { color: var(--red); }
-.nav-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; min-width: 0; }
+nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba(10,10,10,0.97); border-bottom: 1px solid var(--border); backdrop-filter: blur(16px); padding: 0 20px; height: 54px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.btn-orange { background: linear-gradient(135deg,var(--red),var(--orange)); color: #fff; border: none; font-weight: 700; }
+.btn-orange:hover { opacity: 0.88; }
+.nav-dash-btn { letter-spacing: 0.02em; }
+
+/* ── MOBILE NAV: tight, lightning always shows ── */
+@media (max-width: 640px) {
+  .nav-desktop-only { display: none !important; }
+  nav { padding: 0 10px; gap: 5px; height: 50px; }
+  .nav-addr { display: none !important; }
+  .dash-text { display: none !important; }
+  /* Lightning btn stays inline, small but clear */
+  #btn-dashboard {
+    min-width: 38px !important;
+    padding: 0 9px !important;
+    font-size: 1.05rem !important;
+    height: 34px !important;
+    border-radius: 8px !important;
+  }
+  #btn-connect { padding: 0 12px; height: 34px; font-size: 0.74rem; border-radius: 8px; }
+  .nav-logo svg { height: 24px; width: auto; }
+}
+
+.nav-logo { cursor: pointer; flex-shrink: 0; display: flex; align-items: center; }
+.nav-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; min-width: 0; }
 .nav-addr { font-family: var(--font-mono); font-size: 0.72rem; color: var(--orange); background: rgba(255,107,26,0.1); padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(255,107,26,0.3); white-space: nowrap; }
 
 /* BUTTONS */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 9px 18px; border: none; border-radius: 5px; font-family: var(--font-body); font-weight: 700; font-size: 0.82rem; letter-spacing: 0.4px; cursor: pointer; transition: all 0.15s; text-transform: uppercase; white-space: nowrap; }
 .btn-primary { background: var(--red); color: white; }
 .btn-primary:hover { background: #c42d08; transform: translateY(-1px); }
-.btn-orange { background: var(--orange); color: white; }
-.btn-orange:hover { background: #e05a10; }
+/* btn-orange defined above */
 .btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
 .btn-ghost:hover { border-color: var(--red); color: var(--red); }
 .btn-sm { padding: 5px 12px; font-size: 0.74rem; }
@@ -2645,7 +3143,7 @@ textarea { resize: vertical; min-height: 76px; }
 }
 
 /* PAGES */
-.page { display: none; padding-top: 58px; min-height: 100vh; }
+.page { display: none; padding-top: 54px; min-height: 100vh; }
 .page.active { display: block; }
 
 /* HERO */
@@ -2804,11 +3302,11 @@ textarea { resize: vertical; min-height: 76px; }
 
 /* ─── MOBILE RESPONSIVE ─── */
 @media (max-width: 768px) {
-  nav { padding: 0 12px; height: 54px; gap: 6px; }
-  .nav-logo { font-size: 1.4rem; letter-spacing: 2px; }
+  nav { padding: 0 10px; height: 50px; gap: 5px; }
+  .nav-logo svg { height: 24px; width: auto; }
   .nav-right { gap: 5px; }
   .nav-addr { font-size: 0.64rem; padding: 3px 6px; max-width: 80px; overflow: hidden; text-overflow: ellipsis; }
-  .page { padding-top: 54px; }
+  .page { padding-top: 50px; }
   #mobile-bottom-nav { display: flex; }
   .dashboard-grid { grid-template-columns: 1fr; padding-bottom: 72px; }
   .sidebar { display: none; }
@@ -3002,13 +3500,19 @@ function hideTxClapper() {
     </svg>
   </div>
   <div class="nav-right">
-    <button class="btn btn-ghost btn-sm" onclick="showPage('bounties')" style="font-size:0.7rem;">Bounties</button>
-    <button class="btn btn-ghost btn-sm" onclick="showPage('referrals')" style="font-size:0.7rem;">💸 Refer</button>
-    <button class="btn btn-ghost btn-sm" onclick="showPage('docs')" style="font-size:0.7rem;">Docs</button>
+    <!-- Desktop only links -->
+    <button class="btn btn-ghost btn-sm nav-desktop-only" onclick="showPage('bounties')" style="font-size:0.7rem;">Bounties</button>
+    <button class="btn btn-ghost btn-sm nav-desktop-only" onclick="showPage('rewards')" style="font-size:0.7rem;">💰 Rewards</button>
+    <button class="btn btn-ghost btn-sm nav-desktop-only" onclick="showPage('referrals')" style="font-size:0.7rem;">💸 Refer</button>
+    <button class="btn btn-ghost btn-sm nav-desktop-only" onclick="showPage('docs')" style="font-size:0.7rem;">Docs</button>
+    <!-- Wallet address — hidden on small screens -->
     <span id="nav-addr" class="nav-addr" style="display:none"></span>
+    <!-- Connect button — always visible -->
     <button id="btn-connect" class="btn btn-primary btn-sm" onclick="connectWallet()">Connect</button>
-    <button id="btn-dashboard" class="btn btn-ghost btn-sm" style="display:none" onclick="showPage('dashboard')"><span class="dash-text">Dashboard</span></button>
-    <button id="btn-disconnect" class="btn btn-ghost btn-sm" style="display:none" onclick="disconnectWallet()">⏻</button>
+    <!-- ⚡ Dashboard shortcut — shows after connect, visible on ALL screen sizes -->
+    <button id="btn-dashboard" class="btn btn-orange btn-sm nav-dash-btn" style="display:none" onclick="showPage('dashboard')">⚡ <span class="dash-text">Dashboard</span></button>
+    <!-- Disconnect — desktop only -->
+    <button id="btn-disconnect" class="btn btn-ghost btn-sm nav-desktop-only" style="display:none" onclick="disconnectWallet()">⏻</button>
   </div>
 </nav>
 
@@ -3081,6 +3585,7 @@ function hideTxClapper() {
         <div class="nav-item" onclick="switchTab('tab-profile')" id="nav-profile"><span class="icon">👤</span> Profile</div>
         <div class="nav-item" onclick="switchTab('tab-inventory')" id="nav-inventory"><span class="icon">🖼️</span> My NFT</div>
         <div class="nav-item" onclick="showPage('mint')"><span class="icon">🔑</span> NFT Mint</div>
+        <div class="nav-item" onclick="showPage('rewards')"><span class="icon">💰</span> Rewards</div>
         <div class="nav-item" onclick="showPage('referrals')"><span class="icon">💸</span> Referrals</div>
         <div class="nav-item" onclick="showPage('marketplace')"><span class="icon">🛒</span> NFT Market</div>
         <div class="nav-item" onclick="showPage('docs')"><span class="icon">📖</span> How It Works</div>
@@ -3251,8 +3756,9 @@ function hideTxClapper() {
     <button class="mobile-drawer-btn" onclick="switchTab('tab-inventory');closeMobileDrawer()"><span style="font-size:1.3rem;">🖼️</span><span>My NFT</span></button>
     <button class="mobile-drawer-btn" onclick="switchTab('tab-submissions');closeMobileDrawer()"><span style="font-size:1.3rem;">📎</span><span>Submissions</span></button>
     <button class="mobile-drawer-btn" onclick="switchTab('tab-streamer');loadStreamerDashboard();closeMobileDrawer()"><span style="font-size:1.3rem;">📡</span><span>Streamer</span></button>
+    <button class="mobile-drawer-btn" onclick="showPage('rewards');closeMobileDrawer()" style="border-color:rgba(255,149,0,0.3);"><span style="font-size:1.3rem;">💰</span><span style="color:var(--amber);">Rewards</span></button>
+    <button class="mobile-drawer-btn" onclick="showPage('referrals');closeMobileDrawer()" style="border-color:rgba(255,107,26,0.3);"><span style="font-size:1.3rem;">💸</span><span style="color:var(--orange);">Referrals</span></button>
     <button class="mobile-drawer-btn" onclick="showPage('mint');closeMobileDrawer()"><span style="font-size:1.3rem;">🔑</span><span>Mint NFT</span></button>
-    <button class="mobile-drawer-btn" onclick="showPage('referrals');closeMobileDrawer()"><span style="font-size:1.3rem;">💸</span><span>Referrals</span></button>
     <button class="mobile-drawer-btn" onclick="showPage('marketplace');closeMobileDrawer()"><span style="font-size:1.3rem;">🛒</span><span>Market</span></button>
     <button class="mobile-drawer-btn" onclick="showPage('docs');closeMobileDrawer()"><span style="font-size:1.3rem;">📖</span><span>Docs</span></button>
     <button id="mob-admin-btn" class="mobile-drawer-btn" style="display:none;" onclick="showPage('admin');closeMobileDrawer()"><span style="font-size:1.3rem;">⚙️</span><span>Admin</span></button>
@@ -3568,7 +4074,18 @@ function hideTxClapper() {
         <button class="btn btn-primary btn-sm" onclick="copyReferralLink()">📋 Copy</button>
         <button class="btn btn-ghost btn-sm" onclick="shareReferralLink()">🔗 Share</button>
       </div>
-      <div style="margin-top:10px;font-size:0.76rem;color:var(--muted);">Genesis mint (0.5 AVAX) → you earn 0.025 AVAX &nbsp;|&nbsp; Early Access (0.1 AVAX) → you earn 0.005 AVAX. Paid weekly on Sundays.</div>
+      <div style="margin-top:10px;font-size:0.76rem;color:var(--muted);">
+        <strong style="color:var(--success);">✅ On-chain automatic:</strong> Genesis mint (0.5 AVAX) → you earn <strong>0.025 AVAX</strong> instantly to your wallet &nbsp;|&nbsp; Early Access (0.1 AVAX) → you earn <strong>0.005 AVAX</strong> instantly. No claiming needed — paid directly by the smart contract on every mint.
+      </div>
+      <div style="margin-top:8px;padding:8px 10px;background:rgba(255,107,26,0.05);border:1px solid rgba(255,107,26,0.15);border-radius:6px;font-size:0.74rem;color:var(--muted);">
+        <strong style="color:var(--amber);">How it works:</strong>
+        <div style="margin-top:4px;display:flex;flex-direction:column;gap:3px;">
+          <div>1️⃣ Share your link — anyone who opens it gets your address stored</div>
+          <div>2️⃣ When they connect wallet, your address is registered on-chain (automatically during mint)</div>
+          <div>3️⃣ Smart contract pays 5% of mint price to your wallet instantly — zero delay, zero claiming</div>
+        </div>
+      </div>
+      <div id="ref-onchain-status" style="margin-top:8px;font-size:0.75rem;padding:6px 10px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);border-radius:6px;display:none;"></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px;">
       <div class="card" style="text-align:center;"><div style="font-family:var(--font-display);font-size:1.8rem;color:var(--orange);" id="ref-count">0</div><div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;">Referrals</div></div>
@@ -3579,6 +4096,54 @@ function hideTxClapper() {
     <div class="card">
       <div style="font-weight:700;margin-bottom:12px;color:var(--orange);">🏆 Referral Leaderboard</div>
       <div id="ref-leaderboard"><div class="empty-state" style="padding:20px;"><div class="spinner"></div></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== PAGE: REWARDS ==================== -->
+<div id="page-rewards" class="page">
+  <div class="container" style="padding-top:40px;padding-bottom:80px;max-width:760px;">
+    <div style="margin-bottom:28px;">
+      <div style="font-family:var(--font-mono);font-size:0.7rem;color:var(--amber);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;">💰 Genesis Rewards</div>
+      <h2 style="margin-bottom:6px;">Monthly Revenue Share</h2>
+      <p style="color:var(--muted);font-size:0.88rem;max-width:560px;">30% of all platform fees flow to the Treasury and are distributed monthly to Genesis NFT holders. Higher-level NFTs earn a larger weighted share.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;">
+        <span class="badge badge-amber">🔑 Genesis Only</span>
+        <span class="badge badge-green">⚡ Weighted by Level</span>
+        <span class="badge badge-orange">📅 Monthly</span>
+      </div>
+    </div>
+
+    <!-- HOW IT WORKS EXPLAINER -->
+    <div class="card" style="margin-bottom:16px;border-left:3px solid var(--amber);">
+      <div style="font-weight:700;color:var(--amber);margin-bottom:10px;">How It Works</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;font-size:0.82rem;">
+        <div style="text-align:center;padding:10px;background:rgba(255,165,0,0.06);border-radius:8px;">
+          <div style="font-size:1.4rem;margin-bottom:4px;">📥</div>
+          <div style="font-weight:600;font-size:0.78rem;margin-bottom:2px;">Fees Collected</div>
+          <div style="color:var(--muted);font-size:0.7rem;">4% of every bounty payout flows into the Treasury</div>
+        </div>
+        <div style="text-align:center;padding:10px;background:rgba(255,165,0,0.06);border-radius:8px;">
+          <div style="font-size:1.4rem;margin-bottom:4px;">🏛️</div>
+          <div style="font-weight:600;font-size:0.78rem;margin-bottom:2px;">Treasury Holds</div>
+          <div style="color:var(--muted);font-size:0.7rem;">Funds accumulate on-chain, visible to all</div>
+        </div>
+        <div style="text-align:center;padding:10px;background:rgba(255,165,0,0.06);border-radius:8px;">
+          <div style="font-size:1.4rem;margin-bottom:4px;">📅</div>
+          <div style="font-weight:600;font-size:0.78rem;margin-bottom:2px;">Monthly Split</div>
+          <div style="color:var(--muted);font-size:0.7rem;">30% of balance distributed to registered Genesis holders</div>
+        </div>
+        <div style="text-align:center;padding:10px;background:rgba(255,165,0,0.06);border-radius:8px;">
+          <div style="font-size:1.4rem;margin-bottom:4px;">⚡</div>
+          <div style="font-weight:600;font-size:0.78rem;margin-bottom:2px;">Level Weighted</div>
+          <div style="color:var(--muted);font-size:0.7rem;">Level 10 Genesis gets 10x the share of Level 1</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DYNAMIC CONTENT -->
+    <div id="rewards-content">
+      <div class="empty-state"><div class="spinner"></div><p>Connect wallet to view your rewards…</p></div>
     </div>
   </div>
 </div>
@@ -3948,21 +4513,58 @@ function hideTxClapper() {
       </div>
     </div>
 
-    <!-- CONTRACTS -->
+    <!-- CONTRACTS V2 -->
     <div class="card" style="margin-bottom:16px;border-left:3px solid var(--red);">
-      <h3 style="color:var(--red);margin-bottom:14px;display:flex;align-items:center;gap:8px;"><img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_3_2026-02-24_07-10-44-removebg-preview.png" style="width:18px;height:18px;object-fit:contain;" onerror="this.style.display='none'"/> Smart Contracts — Fuji Testnet</h3>
+      <h3 style="color:var(--red);margin-bottom:6px;display:flex;align-items:center;gap:8px;"><img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_3_2026-02-24_07-10-44-removebg-preview.png" style="width:18px;height:18px;object-fit:contain;" onerror="this.style.display='none'"/> Smart Contracts V2 — Fuji Testnet</h3>
+      <div style="font-size:0.7rem;color:var(--muted);margin-bottom:12px;">All contracts are live and verified. Click any address to inspect on Snowtrace.</div>
       <div style="display:flex;flex-direction:column;gap:7px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:9px;background:var(--dark);border-radius:5px;flex-wrap:wrap;gap:6px;"><span style="font-weight:600;font-size:0.86rem;">ClipDAO NFT</span><a href="https://testnet.snowtrace.io/address/0xa1bc0bfEdF7Ec1411C8769840EB80af1bcBa02e3" target="_blank" style="font-family:var(--font-mono);font-size:0.68rem;color:var(--orange);">0xa1bc0bfE...02e3 ↗</a></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:9px;background:var(--dark);border-radius:5px;flex-wrap:wrap;gap:6px;"><span style="font-weight:600;font-size:0.86rem;">Bounty Escrow</span><a href="https://testnet.snowtrace.io/address/0xD68Fb3D68278c7792f17fd72a29775d2Fb28040c" target="_blank" style="font-family:var(--font-mono);font-size:0.68rem;color:var(--orange);">0xD68Fb3D6...040c ↗</a></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:9px;background:var(--dark);border-radius:5px;flex-wrap:wrap;gap:6px;"><span style="font-weight:600;font-size:0.86rem;">Treasury</span><a href="https://testnet.snowtrace.io/address/0xcA6c8F853E0E3D05FC63B49A80C4C19c193abF45" target="_blank" style="font-family:var(--font-mono);font-size:0.68rem;color:var(--orange);">0xcA6c8F85...bF45 ↗</a></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:9px;background:var(--dark);border-radius:5px;flex-wrap:wrap;gap:6px;">
+          <span style="font-weight:600;font-size:0.86rem;">ClipDAO NFT</span>
+          <a href="https://testnet.snowtrace.io/address/0x5424306e8Ac64B11E8bf1fA834D4e298FB2889d3" target="_blank" style="font-family:var(--font-mono);font-size:0.68rem;color:var(--orange);">0x5424306e...89d3 ↗</a>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:9px;background:var(--dark);border-radius:5px;flex-wrap:wrap;gap:6px;">
+          <span style="font-weight:600;font-size:0.86rem;">Bounty Escrow</span>
+          <a href="https://testnet.snowtrace.io/address/0x6938022B15Dd63A92eBCf6a5CC4449baB9584670" target="_blank" style="font-family:var(--font-mono);font-size:0.68rem;color:var(--orange);">0x6938022B...4670 ↗</a>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:9px;background:var(--dark);border-radius:5px;flex-wrap:wrap;gap:6px;">
+          <span style="font-weight:600;font-size:0.86rem;">Treasury</span>
+          <a href="https://testnet.snowtrace.io/address/0xB7f1391eC7500076378666fEd574aD0884892776" target="_blank" style="font-family:var(--font-mono);font-size:0.68rem;color:var(--orange);">0xB7f1391e...2776 ↗</a>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:9px;background:var(--dark);border-radius:5px;flex-wrap:wrap;gap:6px;">
+          <span style="font-weight:600;font-size:0.86rem;">Marketplace</span>
+          <a href="https://testnet.snowtrace.io/address/0xb3b2fA9aA6B915909FC95EF8E1A19e7065ab5A0E" target="_blank" style="font-family:var(--font-mono);font-size:0.68rem;color:var(--orange);">0xb3b2fA9a...5A0E ↗</a>
+        </div>
       </div>
-      <div style="margin-top:12px;padding:9px;background:rgba(232,53,10,0.06);border-radius:5px;font-size:0.79rem;color:var(--muted);">⚠️ Fuji Testnet. Mainnet launch after full audit. Get test AVAX: <a href="https://faucet.avax.network" target="_blank" style="color:var(--orange);">faucet.avax.network</a></div>
+      <!-- V2 highlights -->
+      <div style="margin-top:14px;padding:10px;background:rgba(255,150,0,0.06);border-radius:6px;">
+        <div style="font-size:0.72rem;font-weight:700;color:var(--amber);margin-bottom:6px;">🆕 V2 — What's New</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:0.71rem;color:var(--muted);">
+          <div>✅ Multi-NFT per wallet</div><div>✅ Referrals auto-paid on-chain</div>
+          <div>✅ Evolving level & stats</div><div>✅ Identity lock on transfer</div>
+          <div>✅ Genesis revenue share</div><div>✅ Level-weighted distribution</div>
+          <div>✅ NFT Marketplace live</div><div>✅ Dynamic fee discounts</div>
+        </div>
+      </div>
+      <div style="margin-top:10px;padding:9px;background:rgba(232,53,10,0.06);border-radius:5px;font-size:0.79rem;color:var(--muted);">⚠️ Fuji Testnet. Mainnet launch after full audit. Get test AVAX: <a href="https://faucet.avax.network" target="_blank" style="color:var(--orange);">faucet.avax.network</a></div>
     </div>
 
-    <!-- FUTURE: NFT MARKETPLACE -->
+    <!-- GENESIS REWARDS CALLOUT -->
+    <div class="card" style="margin-bottom:16px;border-left:3px solid var(--amber);background:linear-gradient(135deg,rgba(255,165,0,0.04),transparent);">
+      <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;">
+        <div style="font-size:2rem;">💰</div>
+        <div style="flex:1;min-width:200px;">
+          <h3 style="color:var(--amber);margin-bottom:4px;font-size:1rem;">Genesis Holder Revenue Share</h3>
+          <p style="color:var(--muted);font-size:0.84rem;line-height:1.6;margin-bottom:10px;">Genesis NFT holders receive 30% of all treasury fees every month, weighted by NFT level. The more active you are, the higher your level, the bigger your share.</p>
+          <button class="btn btn-ghost btn-sm" onclick="showPage('rewards')" style="font-size:0.78rem;">📊 Track My Rewards →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- NFT MARKETPLACE -->
     <div class="card" style="margin-bottom:16px;border-left:3px solid var(--amber);">
-      <h3 style="color:var(--amber);margin-bottom:10px;">🔮 Coming: NFT Marketplace</h3>
-      <p style="color:var(--muted);font-size:0.86rem;line-height:1.7;">On mainnet launch, users will be able to list high-stat NFTs for sale. Buyers can purchase and update only their X username and streaming platform — preserving the on-chain stats, wins, and reputation while letting the new owner use the NFT as their own identity. You can sell your stats, not your identity.</p>
+      <h3 style="color:var(--amber);margin-bottom:10px;">🛒 NFT Marketplace (Live)</h3>
+      <p style="color:var(--muted);font-size:0.86rem;line-height:1.7;">Buy and sell ClipDAO membership NFTs. High-level NFTs carry their stats, wins and reputation to the new owner — making them genuinely more valuable. After purchase, buyers confirm their own identity on-chain (preventing impersonation). Stats are always preserved.</p>
+      <button class="btn btn-ghost btn-sm" onclick="showPage('marketplace')" style="margin-top:8px;font-size:0.78rem;">Browse Marketplace →</button>
     </div>
 
     <!-- FAQ -->
