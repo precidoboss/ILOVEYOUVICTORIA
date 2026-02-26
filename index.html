@@ -367,12 +367,18 @@ function onboardNext(step) {
   });
   if (step === 3) {
     userProfile = { wallet: account.toLowerCase(), username: document.getElementById('ob-username').value, x_handle: document.getElementById('ob-xhandle').value, platform: document.getElementById('ob-platform').value, channel: document.getElementById('ob-channel').value, role_str: selectedRole };
-    nftContract.hasNFT(account).then(has => {
-      document.getElementById('ob-has-nft').style.display = has ? 'block' : 'none';
-      document.getElementById('ob-no-nft').style.display  = has ? 'none' : 'block';
-    });
-  }
-}
+if (nftContract && account) {
+      nftContract.hasNFT(account).then(has => {
+        document.getElementById('ob-has-nft').style.display = has ? 'block' : 'none';
+        document.getElementById('ob-no-nft').style.display  = has ? 'none' : 'block';
+      }).catch(() => {
+        document.getElementById('ob-has-nft').style.display = 'none';
+        document.getElementById('ob-no-nft').style.display  = 'block';
+      });
+    } else {
+      document.getElementById('ob-has-nft').style.display = 'none';
+      document.getElementById('ob-no-nft').style.display  = 'block';
+    }
 
 async function finishOnboarding() {
   closeModal('modal-onboard');
@@ -1890,21 +1896,6 @@ async function loadReferrals() {
   // Show on-chain referrer status
   if (account && nftContract) {
     try {
-      const onChainRef = await nftContract.referredBy(account);
-      const statusEl = document.getElementById('ref-onchain-status');
-      if (statusEl) {
-        if (onChainRef && onChainRef !== ethers.ZeroAddress) {
-          statusEl.style.display = 'block';
-          statusEl.innerHTML = `✅ On-chain referrer registered: <span style="font-family:var(--font-mono)">${onChainRef.slice(0,20)}…</span> — they'll earn 5% when you mint.`;
-        } else if (refBy) {
-          statusEl.style.display = 'block';
-          statusEl.innerHTML = `⚠️ Referrer from link not yet registered on-chain. It will be registered automatically when you mint.`;
-          statusEl.style.background = 'rgba(255,150,0,0.08)';
-          statusEl.style.borderColor = 'rgba(255,150,0,0.3)';
-        }
-      }
-    } catch(e) {}
-  }
   // Load my referral count from DB
   if (account && db) {
     try {
@@ -1999,13 +1990,7 @@ async function getOnChainReferrer() {
     const ref = (params.get('ref') || localStorage.getItem('clipdao_ref') || '').trim().toLowerCase();
     if (!ref || !ethers.isAddress(ref)) return null;
     if (account && ref === account.toLowerCase()) return null;
-    // Check if already set on-chain to avoid wasting gas
-    const alreadySet = await nftContract.referredBy(account);
-    if (alreadySet && alreadySet !== ethers.ZeroAddress) {
-      console.log('Referrer already set on-chain:', alreadySet);
-      return null; // already registered, setReferrer would revert
-    }
-    return ethers.getAddress(ref); // checksum address
+    return ethers.getAddress(ref);
   } catch(e) { return null; }
 }
 
