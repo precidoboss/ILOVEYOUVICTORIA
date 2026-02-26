@@ -26,15 +26,40 @@ const AVAX_LOGO  = 'https://raw.githubusercontent.com/precidoboss/my-game-sprite
 </script>
 
 <script>
+// IdentityParams tuple components — used by mint, confirmIdentity, updateProfile
+const _ID_COMPONENTS = [
+  { name: "username",    type: "string" },
+  { name: "xHandle",    type: "string" },
+  { name: "platform",   type: "string" },
+  { name: "channel",    type: "string" },
+  { name: "blazeHandle",type: "string" },
+  { name: "arenaHandle",type: "string" },
+  { name: "ytHandle",   type: "string" }
+];
+
 const NFT_ABI = [
-  "function mintGenesis(uint8 _role, string _username, string _xHandle, string _platform) payable",
-  "function mintEarlyAccess(uint8 _role, string _username, string _xHandle, string _platform) payable",
+  // mintGenesis — JSON ABI ensures tuple encoding works correctly in ethers v6
+  {
+    name: "mintGenesis", type: "function", stateMutability: "payable",
+    inputs: [
+      { name: "_role", type: "uint8" },
+      { name: "p",     type: "tuple", components: _ID_COMPONENTS }
+    ],
+    outputs: []
+  },
+  // mintEarlyAccess — JSON ABI
+  {
+    name: "mintEarlyAccess", type: "function", stateMutability: "payable",
+    inputs: [
+      { name: "_role", type: "uint8" },
+      { name: "p",     type: "tuple", components: _ID_COMPONENTS }
+    ],
+    outputs: []
+  },
   "function hasNFT(address wallet) view returns (bool)",
   "function getTier(address wallet) view returns (uint8)",
   "function votingPower(address wallet) view returns (uint256)",
   "function walletToToken(address) view returns (uint256)",
-  "function getTokenData(uint256 tokenId) view returns (tuple(uint8 tier, uint8 role, uint256 level, uint256 bountiesWon, uint256 bountiesPosted, uint256 votesReceived, uint256 mintedAt, string username, string platform, string xHandle))",
-  "function updateProfile(string _username, string _xHandle, string _platform)",
   "function genesisMinted() view returns (uint256)",
   "function GENESIS_MAX() view returns (uint256)",
   "function GENESIS_PRICE() view returns (uint256)",
@@ -54,8 +79,25 @@ const NFT_ABI = [
   "function votingPower(address wallet) view returns (uint256)",
   "function platformFeeBps(address wallet) view returns (uint256)",
   "function setReferrer(address referrer)",
-  "function confirmIdentity(uint256 tokenId, tuple(string username,string xHandle,string platform,string channel,string blazeHandle,string arenaHandle,string ytHandle) _id, uint8 _role)",
-  "function updateProfile(tuple(string username,string xHandle,string platform,string channel,string blazeHandle,string arenaHandle,string ytHandle) _id, uint8 _role)",
+  // confirmIdentity — JSON ABI for tuple
+  {
+    name: "confirmIdentity", type: "function", stateMutability: "nonpayable",
+    inputs: [
+      { name: "id",    type: "uint256" },
+      { name: "p",     type: "tuple", components: _ID_COMPONENTS },
+      { name: "_role", type: "uint8" }
+    ],
+    outputs: []
+  },
+  // updateProfile — JSON ABI for tuple
+  {
+    name: "updateProfile", type: "function", stateMutability: "nonpayable",
+    inputs: [
+      { name: "p",     type: "tuple", components: _ID_COMPONENTS },
+      { name: "_role", type: "uint8" }
+    ],
+    outputs: []
+  },
   "function equipToken(uint256 tokenId)",
   "function unequipToken()",
   "function nftStats(uint256 tokenId) view returns (uint8 tier, uint8 role, uint8 level, uint32 bountiesWon, uint32 bountiesPosted, uint32 votesReceived, uint32 clipsSubmitted, uint16 winStreak, uint16 disputesAgainst, uint64 lastActivityAt, uint64 mintedAt, bool identityConfirmed, address originalMinter)",
@@ -243,6 +285,45 @@ function updateNavWallet() {
   }).catch(() => {});
 }
 
+// ─── NFT DATA COMPAT HELPER ─────────────────────────────────────────────────
+// Deployed contract uses nftStats + nftIdentity (split struct pattern).
+// This merges them into a single object matching old getTokenData field names.
+async function nftData(contract, tokenId) {
+  const id = Number(tokenId);
+  const [s, ident] = await Promise.all([
+    contract.nftStats(id),
+    contract.nftIdentity(id)
+  ]);
+  return {
+    tier:           Number(s.tier),
+    role:           Number(s.role),
+    level:          Number(s.level),
+    bountiesWon:    Number(s.bountiesWon),
+    bountiesPosted: Number(s.bountiesPosted),
+    votesReceived:  Number(s.votesReceived),
+    clipsSubmitted: Number(s.clipsSubmitted),
+    winStreak:      Number(s.winStreak),
+    mintedAt:       Number(s.mintedAt),
+    identityConfirmed: s.identityConfirmed,
+    originalMinter: s.originalMinter,
+    username:    ident.username  || '',
+    platform:    ident.platform  || '',
+    xHandle:     ident.xHandle   || '',
+    ytHandle:    ident.ytHandle  || '',
+    blazeHandle: ident.blazeHandle || '',
+    arenaHandle: ident.arenaHandle || '',
+    channel:     ident.channel   || '',
+  };
+}
+
+// Batch-load multiple tokens in parallel — much faster than sequential awaits
+async function nftDataBatch(contract, tokenIds) {
+  return Promise.all(tokenIds.map(id =>
+    nftData(contract, id).then(d => ({ ...d, tid: Number(id) })).catch(() => null)
+  ));
+}
+// ────────────────────────────────────────────────────────────────────────────
+
 async function loadUserData() {
   try {
     if (db) {
@@ -252,7 +333,7 @@ async function loadUserData() {
     const hasNft = await nftContract.hasNFT(account);
     if (hasNft) {
       const tokenId = await nftContract.walletToToken(account);
-      const data    = await nftContract.getTokenData(tokenId);
+      const data    = await nftData(nftContract, tokenId);
       userProfile = { wallet: account.toLowerCase(), username: data.username, x_handle: data.xHandle, platform: data.platform, tier: Number(data.tier), role: Number(data.role) };
       await saveProfileToSupabase();
       updateProfileUI();
@@ -356,7 +437,7 @@ async function mintGenesis() {
     showTxClapper('Minting Genesis NFT…');
     const price = await nftContract.GENESIS_PRICE();
     // V2 contract: mintGenesis(role, IdentityParams tuple)
-    const idParams = [username, xhandle, platform, channel, blazeHandle, arenaHandle, ytHandle];
+    const idParams = { username, xHandle: xhandle, platform, channel, blazeHandle, arenaHandle, ytHandle };
     const tx = await nftContract.mintGenesis(role, idParams, { value: price });
     setTxStatus('tx-genesis', '⏳ Transaction pending...', 'pending');
     showTxClapper('Confirming on Avalanche…');
@@ -405,7 +486,7 @@ async function mintEarlyAccess() {
     showTxClapper('Minting Early Access NFT…');
     const price = await nftContract.EARLY_ACCESS_PRICE();
     // V2 contract: mintEarlyAccess(role, IdentityParams tuple)
-    const idParams = [username, xhandle, platform, channel, blazeHandle, arenaHandle, ytHandle];
+    const idParams = { username, xHandle: xhandle, platform, channel, blazeHandle, arenaHandle, ytHandle };
     const tx = await nftContract.mintEarlyAccess(role, idParams, { value: price });
     setTxStatus('tx-early', '⏳ Transaction pending...', 'pending');
     showTxClapper('Confirming on Avalanche…');
@@ -583,7 +664,7 @@ async function loadNFTStats() {
   try {
     const tokenId = await nftContract.walletToToken(account);
     if (Number(tokenId) === 0) return;
-    const data = await nftContract.getTokenData(tokenId);
+    const data = await nftData(nftContract, tokenId);
     document.getElementById('overview-won').textContent  = Number(data.bountiesWon);
     document.getElementById('overview-role').textContent = Number(data.role)===1?'Clipper':'Streamer';
     userProfile = { ...userProfile, tier: Number(data.tier), role: Number(data.role) };
@@ -1221,7 +1302,7 @@ async function openClipperProfile(wallet) {
     const ro=new ethers.JsonRpcProvider(FUJI_RPC);
     const roNft=new ethers.Contract(NFT_ADDRESS,NFT_ABI,ro);
     const hasNft=await roNft.hasNFT(wallet);
-    if(hasNft){const tid=await roNft.walletToToken(wallet);tokenData=await roNft.getTokenData(tid);}
+    if(hasNft){const tid=await roNft.walletToToken(wallet);tokenData=await nftData(roNft, tid);}
   }catch(e){}
   const name=data?.username||tokenData?.username||wallet.slice(0,10)+'…';
   const xHandle=data?.x_handle||tokenData?.xHandle||'';
@@ -1623,8 +1704,11 @@ async function loadInventory() {
       return;
     }
 
-    // Step 2: Load data for active token
-    const d          = await nftContract.getTokenData(activeTokenId);
+    // Step 2: Load data + image for active token in parallel
+    const [d, fetchedImg] = await Promise.all([
+      nftData(nftContract, activeTokenId),
+      mktGetNFTImage(activeTokenId).catch(() => null)
+    ]);
     const tier       = Number(d.tier);
     const role       = Number(d.role);
     const level      = Number(d.level);
@@ -1639,12 +1723,8 @@ async function loadInventory() {
     const tierLabel  = tier===0?'⭐ Genesis':'🔥 Early Access';
     const tierBadge  = tier===0?'badge-amber':'badge-red';
 
-    // Fetch real NFT image from tokenURI
-    let imgUrl = 'https://ipfs.io/ipfs/bafkreifw3rrlcu3u33rz7qbnvouwkknvxpcs4pff3ro4knkjum4suz57ky';
-    try {
-      const fetched = await mktGetNFTImage(activeTokenId);
-      if (fetched) imgUrl = fetched;
-    } catch(e) {}
+    // Use fetched image or default
+    let imgUrl = fetchedImg || 'https://ipfs.io/ipfs/bafkreifw3rrlcu3u33rz7qbnvouwkknvxpcs4pff3ro4knkjum4suz57ky';
 
     document.querySelectorAll('.profile-avatar').forEach(av => {
       av.style.backgroundImage = `url(${imgUrl})`;
@@ -1661,7 +1741,7 @@ async function loadInventory() {
     if (otherOwned.length > 0) {
       const otherCards = await Promise.all(otherOwned.map(async (tid) => {
         let od = null;
-        try { od = await nftContract.getTokenData(tid); } catch(e) {}
+        try { od = await nftData(nftContract, tid); } catch(e) {}
         const otier = od ? Number(od.tier) : 0;
         const oname = od ? (od.username || 'Unnamed') : 'Unnamed';
         const owins = od ? Number(od.bountiesWon) : 0;
@@ -2003,23 +2083,14 @@ async function loadRewardsPage() {
     let totalWeight = 0;
     const tokenDataList = [];
     for (const tid of ownedTokens.slice(0, 20)) {
-      try {
-        const stats = await nft.nftStats(Number(tid));
-        const ident = await nft.nftIdentity(Number(tid));
-        const tier  = Number(stats.tier);
-        const level = Number(stats.level);
-        if (tier === 1) totalWeight += level || 1; // Genesis only earn share
-        tokenDataList.push({ tid: Number(tid), tier, level, bountiesWon: Number(stats.bountiesWon), votesReceived: Number(stats.votesReceived), username: ident.username || '—' });
-      } catch(e) {
-        // fallback: try getTokenData
-        try {
-          const d = await nft.getTokenData(Number(tid));
-          const tier  = Number(d.tier);
-          const level = Number(d.level);
-          if (tier === 1) totalWeight += level || 1;
-          tokenDataList.push({ tid: Number(tid), tier, level, bountiesWon: Number(d.bountiesWon), votesReceived: Number(d.votesReceived), username: d.username || '—' });
-        } catch(e2) {}
-      }
+    // Batch load all token data in parallel — much faster
+    const tokenDataResults = await nftDataBatch(nft, ownedTokens.slice(0, 20));
+    for (const d of tokenDataResults) {
+      if (!d) continue;
+      const tier  = d.tier;
+      const level = Number(d.level);
+      if (tier === 1) totalWeight += level || 1; // Genesis only earn share
+      tokenDataList.push({ tid: d.tid ?? 0, tier, level, bountiesWon: Number(d.bountiesWon), votesReceived: Number(d.votesReceived), username: d.username || '—' });
     }
 
     for (const t of tokenDataList) {
@@ -2505,10 +2576,10 @@ async function mktLoadBrowse(page = 0) {
 
     // Enrich with NFT data + images in parallel
     const cards = await Promise.all(result.map(async (l, i) => {
-      let nftData = null, nftImage = null;
-      try { nftData = await nftContract.getTokenData(l.tokenId); } catch(e) {}
+      let tokenInfo = null, nftImage = null;
+      try { tokenInfo = await nftData(nftContract, l.tokenId); } catch(e) {}
       try { nftImage = await mktGetNFTImage(Number(l.tokenId)); } catch(e) {}
-      return mktBuildCard(l, nftData, i, nftImage);
+      return mktBuildCard(l, tokenInfo, i, nftImage);
     }));
 
     grid.innerHTML = cards.join('');
@@ -2703,10 +2774,10 @@ async function mktLoadMyNFTs() {
 
     // Build cards with on-chain data
     const cards = await Promise.all(ownedTokens.map(async (tid) => {
-      let nftData = null, listingData = null;
-      try { nftData = await nftContract.getTokenData(tid); } catch(e) {}
+      let tokenInfo = null, listingData = null;
+      try { tokenInfo = await nftData(nftContract, tid); } catch(e) {}
       try { listingData = await marketplaceContract.getListing(tid); } catch(e) {}
-      return mktBuildInventoryCard(tid, nftData, listingData, mktEquippedId);
+      return mktBuildInventoryCard(tid, tokenInfo, listingData, mktEquippedId);
     }));
 
     grid.innerHTML = cards.join('');
