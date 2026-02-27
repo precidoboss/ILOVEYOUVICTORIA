@@ -367,18 +367,10 @@ function onboardNext(step) {
   });
   if (step === 3) {
     userProfile = { wallet: account.toLowerCase(), username: document.getElementById('ob-username').value, x_handle: document.getElementById('ob-xhandle').value, platform: document.getElementById('ob-platform').value, channel: document.getElementById('ob-channel').value, role_str: selectedRole };
-if (nftContract && account) {
-      nftContract.hasNFT(account).then(has => {
-        document.getElementById('ob-has-nft').style.display = has ? 'block' : 'none';
-        document.getElementById('ob-no-nft').style.display  = has ? 'none' : 'block';
-      }).catch(() => {
-        document.getElementById('ob-has-nft').style.display = 'none';
-        document.getElementById('ob-no-nft').style.display  = 'block';
-      });
-    } else {
-document.getElementById('ob-has-nft').style.display = 'none';
-      document.getElementById('ob-no-nft').style.display  = 'block';
-    }
+    nftContract.hasNFT(account).then(has => {
+      document.getElementById('ob-has-nft').style.display = has ? 'block' : 'none';
+      document.getElementById('ob-no-nft').style.display  = has ? 'none' : 'block';
+    });
   }
 }
 
@@ -760,6 +752,56 @@ function getPlatformLogo(link) {
 function extractYouTubeId(url) {
   const m = url.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
   return m ? m[1] : null;
+}
+
+function extractTweetId(url) {
+  // Matches twitter.com/user/status/ID or x.com/user/status/ID
+  const m = url.match(/(?:twitter\.com|x\.com)\/[^/]+\/status(?:es)?\/(\d+)/);
+  return m ? m[1] : null;
+}
+
+function renderTweetEmbed(url, containerId) {
+  const tweetId = extractTweetId(url);
+  if (!tweetId) return `<a href="${escHtml(url)}" target="_blank" class="btn btn-ghost btn-sm">↗ Open on X</a>`;
+  // Use Twitter's oEmbed via publish.twitter.com (no API key needed)
+  const embedUrl = 'https://publish.twitter.com/oembed?url=' + encodeURIComponent(url) + '&theme=dark&omit_script=true&dnt=true';
+  return '<div id="' + containerId + '" style="max-width:550px;margin:0 auto 12px;">'
+    + '<div style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:12px;padding:16px;text-align:center;">'
+    + '<div class="spinner" style="width:24px;height:24px;border-width:2px;margin:0 auto 8px;"></div>'
+    + '<div style="font-size:0.8rem;color:var(--muted);">Loading tweet…</div>'
+    + '</div></div>';
+}
+
+// Call after embed container is in DOM to fetch + render the tweet
+async function loadTweetEmbed(url, containerId) {
+  const tweetId = extractTweetId(url);
+  if (!tweetId) return;
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  try {
+    // Use a CORS proxy approach: Twitter's publish endpoint works via script injection
+    // We inject a blockquote + load twitter widgets
+    container.innerHTML = '<blockquote class="twitter-tweet" data-theme="dark" data-dnt="true">'
+      + '<a href="' + escHtml(url) + '">Loading tweet…</a>'
+      + '</blockquote>';
+    // Load or reload Twitter widgets
+    if (window.twttr && window.twttr.widgets) {
+      window.twttr.widgets.load(container);
+    } else {
+      // Load the widgets.js script once
+      if (!document.getElementById('twitter-widgets-script')) {
+        const s = document.createElement('script');
+        s.id = 'twitter-widgets-script';
+        s.src = 'https://platform.twitter.com/widgets.js';
+        s.async = true;
+        s.charset = 'utf-8';
+        document.head.appendChild(s);
+        s.onload = () => { if (window.twttr) window.twttr.widgets.load(container); };
+      }
+    }
+  } catch(e) {
+    container.innerHTML = '<a href="' + escHtml(url) + '" target="_blank" class="btn btn-ghost btn-sm">↗ Open on X</a>';
+  }
 }
 
 function platformBadge(platform) {
@@ -1237,7 +1279,17 @@ async function openSubDetail(bountyId, subIndex) {
     if(db){try{const r=await db.from('profiles').select('*').eq('wallet',s.clipper.toLowerCase()).maybeSingle();profileData=r.data;}catch(e){}}
     const clipperName = profileData?.username || s.clipper.slice(0,10)+'…';
     const isYT = s.clipLink.includes('youtube')||s.clipLink.includes('youtu.be');
+    const isX  = s.clipLink.includes('x.com') || s.clipLink.includes('twitter.com');
     const ytId = isYT ? extractYouTubeId(s.clipLink) : null;
+    const tweetEmbedId = 'tweet-' + bountyId + '-' + subIndex;
+    // Build media embed without nested template literals
+    let mediaEmbed = '';
+    if (ytId) {
+      mediaEmbed = '<div style="position:relative;padding-bottom:56.25%;height:0;border-radius:8px;overflow:hidden;margin-bottom:12px;"><iframe src="https://www.youtube.com/embed/' + ytId + '" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;" allowfullscreen></iframe></div>';
+    } else if (isX) {
+      mediaEmbed = renderTweetEmbed(s.clipLink, tweetEmbedId);
+    }
+    const voteBlock = b.mode===1 ? '<div style="text-align:center;padding:14px;background:var(--dark);border-radius:6px;margin-bottom:10px;"><div style="font-family:var(--font-display);font-size:2rem;color:var(--orange);">' + s.voteCount + '</div><div style="font-size:0.78rem;color:var(--muted);">Community Votes</div></div>' : '';
     mc.innerHTML = `<div>
       <button class="btn btn-ghost btn-sm" onclick="openBountyDetail(${bountyId})" style="margin-bottom:12px;">← Back to Bounty</button>
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;cursor:pointer;" onclick="openClipperProfile('${s.clipper}')">
@@ -1247,9 +1299,7 @@ async function openSubDetail(bountyId, subIndex) {
         </div>
         ${s.isWinner?'<span class="badge badge-amber" style="margin-left:auto;">🏆 Winner</span>':''}
       </div>
-      ${ytId?`<div style="position:relative;padding-bottom:56.25%;height:0;border-radius:8px;overflow:hidden;margin-bottom:12px;">
-        <iframe src="https://www.youtube.com/embed/${ytId}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;" allowfullscreen></iframe>
-      </div>`:''}
+      ${mediaEmbed}
       <div style="margin-bottom:10px;">${pLogo}</div>
       <div style="background:var(--dark);border:1px solid var(--border);border-radius:6px;padding:12px;margin-bottom:10px;">
         <div style="font-size:0.7rem;color:var(--muted);margin-bottom:4px;">Clip Link</div>
@@ -1260,12 +1310,10 @@ async function openSubDetail(bountyId, subIndex) {
           <button class="btn btn-ghost btn-sm" style="color:var(--muted);" onclick="flagContent('submission',${bountyId},${subIndex})">🚩 Flag</button>
         </div>
       </div>
-      ${b.mode===1?`<div style="text-align:center;padding:14px;background:var(--dark);border-radius:6px;margin-bottom:10px;">
-        <div style="font-family:var(--font-display);font-size:2rem;color:var(--orange);">${s.voteCount}</div>
-        <div style="font-size:0.78rem;color:var(--muted);">Community Votes</div>
-      </div>`:''}
+      ${voteBlock}
       <div style="font-size:0.75rem;color:var(--muted);">Submitted: ${new Date(Number(s.timestamp)*1000).toLocaleString()}</div>
     </div>`;
+    if (isX) setTimeout(() => loadTweetEmbed(s.clipLink, tweetEmbedId), 50);
   } catch(e){ mc.innerHTML='<div class="empty-state"><p>Error</p></div>'; }
 }
 
@@ -1898,6 +1946,21 @@ async function loadReferrals() {
   // Show on-chain referrer status
   if (account && nftContract) {
     try {
+      const onChainRef = await nftContract.referredBy(account);
+      const statusEl = document.getElementById('ref-onchain-status');
+      if (statusEl) {
+        if (onChainRef && onChainRef !== ethers.ZeroAddress) {
+          statusEl.style.display = 'block';
+          statusEl.innerHTML = `✅ On-chain referrer registered: <span style="font-family:var(--font-mono)">${onChainRef.slice(0,20)}…</span> — they'll earn 5% when you mint.`;
+        } else if (refBy) {
+          statusEl.style.display = 'block';
+          statusEl.innerHTML = `⚠️ Referrer from link not yet registered on-chain. It will be registered automatically when you mint.`;
+          statusEl.style.background = 'rgba(255,150,0,0.08)';
+          statusEl.style.borderColor = 'rgba(255,150,0,0.3)';
+        }
+      }
+    } catch(e) {}
+  }
   // Load my referral count from DB
   if (account && db) {
     try {
@@ -1971,9 +2034,9 @@ async function loadReferrals() {
         <div style="font-family:var(--font-display);color:var(--orange);">${r.count} ref${r.count!==1?'s':''}</div>
         ${account&&r.referrer===account.toLowerCase()?'<span class="badge badge-green">YOU</span>':''}
       </div>`).join('');
-} catch(e) { console.warn('referral leaderboard failed', e); }
-  } catch(e) { console.warn('loadReferrals failed', e); }
+  } catch(e) { console.warn('referral leaderboard failed', e); }
 }
+
 async function storeReferral() {
   const params = new URLSearchParams(window.location.search);
   const ref = params.get('ref');
@@ -1992,7 +2055,13 @@ async function getOnChainReferrer() {
     const ref = (params.get('ref') || localStorage.getItem('clipdao_ref') || '').trim().toLowerCase();
     if (!ref || !ethers.isAddress(ref)) return null;
     if (account && ref === account.toLowerCase()) return null;
-    return ethers.getAddress(ref);
+    // Check if already set on-chain to avoid wasting gas
+    const alreadySet = await nftContract.referredBy(account);
+    if (alreadySet && alreadySet !== ethers.ZeroAddress) {
+      console.log('Referrer already set on-chain:', alreadySet);
+      return null; // already registered, setReferrer would revert
+    }
+    return ethers.getAddress(ref); // checksum address
   } catch(e) { return null; }
 }
 
@@ -2053,23 +2122,22 @@ async function loadRewardsPage() {
       ? new Date(parseInt(lastDist.toString()) * 1000).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'})
       : 'Never yet';
 
-    // Registration status
+    // Registration status — use plain strings, no nested backticks
     const registerBtn = !isHolder
-      ? `<div style="background:rgba(255,149,0,0.08);border:1px solid rgba(255,149,0,0.3);border-radius:8px;padding:12px;margin-top:10px;">
-           <div style="font-weight:700;color:var(--amber);margin-bottom:4px;">⚠️ Not yet registered</div>
-           <div style="font-size:0.78rem;color:var(--muted);margin-bottom:8px;">You must register to receive monthly distributions — one-time, free transaction.</div>
-           <button class="btn btn-primary btn-sm" onclick="registerAsGenesisHolder()">Register as Genesis Holder</button>
-         </div>`
-      : `<div style="display:inline-flex;align-items:center;gap:6px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);border-radius:20px;padding:5px 12px;font-size:0.78rem;color:var(--success);margin-top:8px;">
-           <div style="width:7px;height:7px;border-radius:50%;background:var(--success);animation:mktPulse 2s ease-in-out infinite;"></div>
-           Registered — you'll receive the next distribution automatically
-         </div>`;
+      ? '<div style="background:rgba(255,149,0,0.08);border:1px solid rgba(255,149,0,0.3);border-radius:8px;padding:12px;margin-top:10px;">'
+        + '<div style="font-weight:700;color:var(--amber);margin-bottom:4px;">\u26a0\ufe0f Not yet registered</div>'
+        + '<div style="font-size:0.78rem;color:var(--muted);margin-bottom:8px;">You must register to receive monthly distributions \u2014 one-time, free transaction.</div>'
+        + '<button class="btn btn-primary btn-sm" onclick="registerAsGenesisHolder()">Register as Genesis Holder</button>'
+        + '</div>'
+      : '<div style="display:inline-flex;align-items:center;gap:6px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);border-radius:20px;padding:5px 12px;font-size:0.78rem;color:var(--success);margin-top:8px;">'
+        + '<div style="width:7px;height:7px;border-radius:50%;background:var(--success);animation:mktPulse 2s ease-in-out infinite;"></div>'
+        + ' Registered \u2014 you will receive the next distribution automatically'
+        + '</div>';
 
     // Build token rows with weighted share estimate
     let tokenRows = '';
     let totalWeight = 0;
     const tokenDataList = [];
-    for (const tid of ownedTokens.slice(0, 20)) {
     // Batch load all token data in parallel — much faster
     const tokenDataResults = await nftDataBatch(nft, ownedTokens.slice(0, 20));
     for (const d of tokenDataResults) {
@@ -2154,143 +2222,98 @@ async function loadRewardsPage() {
     }
     const maxBar = Math.max(...monthAmounts, 0.001);
 
-    const monthlyChartHTML = `
-      <div style="display:flex;align-items:flex-end;gap:8px;height:80px;margin-top:8px;">
-        ${monthLabels.map((m, i) => {
-          const h = Math.round((monthAmounts[i] / maxBar) * 70);
-          const isEmpty = monthAmounts[i] === 0;
-          return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">
-            <div style="font-family:var(--font-display);font-size:0.62rem;color:${isEmpty?'var(--muted)':'var(--success)'};">${monthAmounts[i] > 0 ? monthAmounts[i].toFixed(4) : ''}</div>
-            <div style="width:100%;height:${Math.max(h,3)}px;background:${isEmpty?'rgba(255,255,255,0.05)':'linear-gradient(180deg,var(--success),rgba(34,197,94,0.3))'};border-radius:3px 3px 0 0;transition:height 0.5s ease;"></div>
-            <div style="font-size:0.6rem;color:var(--muted);">${m}</div>
-          </div>`;
-        }).join('')}
-      </div>`;
+    let monthlyChartHTML = '<div style="display:flex;align-items:flex-end;gap:8px;height:80px;margin-top:8px;">';
+    for (let i = 0; i < monthLabels.length; i++) {
+      const h = Math.round((monthAmounts[i] / maxBar) * 70);
+      const isEmpty = monthAmounts[i] === 0;
+      const amtLabel = monthAmounts[i] > 0 ? monthAmounts[i].toFixed(4) : '';
+      const barColor = isEmpty ? 'rgba(255,255,255,0.05)' : 'linear-gradient(180deg,var(--success),rgba(34,197,94,0.3))';
+      const lblColor = isEmpty ? 'var(--muted)' : 'var(--success)';
+      monthlyChartHTML += '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">'
+        + '<div style="font-family:var(--font-display);font-size:0.62rem;color:' + lblColor + ';">' + amtLabel + '</div>'
+        + '<div style="width:100%;height:' + Math.max(h, 3) + 'px;background:' + barColor + ';border-radius:3px 3px 0 0;transition:height 0.5s ease;"></div>'
+        + '<div style="font-size:0.6rem;color:var(--muted);">' + monthLabels[i] + '</div>'
+        + '</div>';
+    }
+    monthlyChartHTML += '</div>';
 
     const historyHTML = paymentHistory.length > 0
-      ? paymentHistory.map(p => `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
-            <div style="display:flex;align-items:center;gap:10px;">
-              <div style="width:34px;height:34px;border-radius:50%;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.25);display:flex;align-items:center;justify-content:center;font-size:0.9rem;flex-shrink:0;">💰</div>
-              <div>
-                <div style="font-family:var(--font-display);color:var(--success);font-size:1.1rem;">+${p.amount.toFixed(4)} AVAX</div>
-                <div style="font-size:0.72rem;color:var(--muted);">${p.date} &nbsp;·&nbsp; Block #${p.block}</div>
-              </div>
-            </div>
-            <a href="https://testnet.snowtrace.io/tx/${p.tx}" target="_blank" class="btn btn-ghost btn-sm" style="font-size:0.7rem;">View ↗</a>
-          </div>`).join('')
-      : `<div style="text-align:center;padding:24px 0;">
-           <div style="font-size:2rem;margin-bottom:8px;">📭</div>
-           <div style="color:var(--muted);font-size:0.84rem;">No payments found in recent blocks.</div>
-           ${!isHolder ? '<div style="color:var(--amber);font-size:0.78rem;margin-top:6px;">Register as a Genesis holder above to start receiving distributions.</div>' : ''}
-         </div>`;
+      ? paymentHistory.map(function(p) {
+          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">'
+            + '<div style="display:flex;align-items:center;gap:10px;">'
+            + '<div style="width:34px;height:34px;border-radius:50%;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.25);display:flex;align-items:center;justify-content:center;font-size:0.9rem;flex-shrink:0;">\uD83D\uDCB0</div>'
+            + '<div>'
+            + '<div style="font-family:var(--font-display);color:var(--success);font-size:1.1rem;">+' + p.amount.toFixed(4) + ' AVAX</div>'
+            + '<div style="font-size:0.72rem;color:var(--muted);">' + p.date + ' &nbsp;\u00b7&nbsp; Block #' + p.block + '</div>'
+            + '</div></div>'
+            + '<a href="https://testnet.snowtrace.io/tx/' + p.tx + '" target="_blank" class="btn btn-ghost btn-sm" style="font-size:0.7rem;">View \u2197</a>'
+            + '</div>';
+        }).join('')
+      : '<div style="text-align:center;padding:24px 0;">'
+        + '<div style="font-size:2rem;margin-bottom:8px;">\uD83D\uDCED</div>'
+        + '<div style="color:var(--muted);font-size:0.84rem;">No payments found in recent blocks.</div>'
+        + (!isHolder ? '<div style="color:var(--amber);font-size:0.78rem;margin-top:6px;">Register as a Genesis holder above to start receiving distributions.</div>' : '')
+        + '</div>';
 
-    el.innerHTML = `
-      <!-- TOP OVERVIEW GRID -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:20px;">
-        <div class="card" style="text-align:center;border-top:3px solid var(--amber);padding:14px;">
-          <div style="font-family:var(--font-display);font-size:1.8rem;color:var(--amber);">${balNum.toFixed(3)}</div>
-          <div style="font-size:0.65rem;color:var(--muted);text-transform:uppercase;margin-top:2px;">Treasury Balance</div>
-          <div style="font-size:0.62rem;color:var(--muted);">AVAX</div>
-        </div>
-        <div class="card" style="text-align:center;border-top:3px solid var(--orange);padding:14px;">
-          <div style="font-family:var(--font-display);font-size:1.8rem;color:var(--orange);">${pot.toFixed(3)}</div>
-          <div style="font-size:0.65rem;color:var(--muted);text-transform:uppercase;margin-top:2px;">Next Pool (30%)</div>
-          <div style="font-size:0.62rem;color:var(--muted);">AVAX</div>
-        </div>
-        <div class="card" style="text-align:center;border-top:3px solid var(--success);padding:14px;">
-          <div style="font-family:var(--font-display);font-size:1.8rem;color:var(--success);">${perHolder.toFixed(4)}</div>
-          <div style="font-size:0.65rem;color:var(--muted);text-transform:uppercase;margin-top:2px;">Est. Your Share</div>
-          <div style="font-size:0.62rem;color:var(--muted);">AVAX / month</div>
-        </div>
-        <div class="card" style="text-align:center;border-top:3px solid var(--red);padding:14px;">
-          <div style="font-family:var(--font-display);font-size:1.8rem;color:var(--red);">${totalReceived.toFixed(4)}</div>
-          <div style="font-size:0.65rem;color:var(--muted);text-transform:uppercase;margin-top:2px;">Total Received</div>
-          <div style="font-size:0.62rem;color:var(--muted);">AVAX all time</div>
-        </div>
-      </div>
+    const treasuryExplorerUrl = 'https://testnet.snowtrace.io/address/' + TREASURY_ADDRESS + '#events';
 
-      <!-- NEXT DISTRIBUTION COUNTDOWN -->
-      <div class="card" style="margin-bottom:16px;background:linear-gradient(135deg,rgba(255,149,0,0.05),transparent);border-left:3px solid var(--amber);">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
-          <div>
-            <div style="font-size:0.68rem;color:var(--amber);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">📅 Next Distribution</div>
-            <div style="font-size:1rem;margin-bottom:4px;">${nextStr}</div>
-            <div style="font-size:0.72rem;color:var(--muted);">
-              Last payout: <strong style="color:var(--text);">${lastDistDate}</strong> &nbsp;·&nbsp;
-              <strong style="color:var(--text);">${holderNum}</strong> registered holders &nbsp;·&nbsp; Every 30 days
-            </div>
-          </div>
-          <div style="flex-shrink:0;">${registerBtn}</div>
-        </div>
+    const distBreakdownLabel = Object.keys(monthlyBreakdown).length > 0
+      ? ' across ' + Object.keys(monthlyBreakdown).length + ' distribution(s)' : '';
 
-        <!-- Projected payout breakdown -->
-        <div style="margin-top:14px;padding:10px;background:rgba(255,255,255,0.03);border-radius:6px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center;">
-          <div>
-            <div style="font-family:var(--font-display);font-size:1.1rem;color:var(--amber);">${balNum.toFixed(3)}</div>
-            <div style="font-size:0.62rem;color:var(--muted);">Treasury</div>
-          </div>
-          <div style="display:flex;align-items:center;justify-content:center;font-size:0.7rem;color:var(--muted);">× 30% ÷ ${holderNum} holders</div>
-          <div>
-            <div style="font-family:var(--font-display);font-size:1.1rem;color:var(--success);">= ${perHolder.toFixed(4)}</div>
-            <div style="font-size:0.62rem;color:var(--muted);">Your est. share</div>
-          </div>
-        </div>
-      </div>
+    const html = ''
+      // OVERVIEW GRID
+      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:20px;">'
+      + '<div class="card" style="text-align:center;border-top:3px solid var(--amber);padding:14px;">'
+      + '<div style="font-family:var(--font-display);font-size:1.8rem;color:var(--amber);">' + balNum.toFixed(3) + '</div>'
+      + '<div style="font-size:0.65rem;color:var(--muted);text-transform:uppercase;margin-top:2px;">Treasury Balance</div>'
+      + '<div style="font-size:0.62rem;color:var(--muted);">AVAX</div></div>'
+      + '<div class="card" style="text-align:center;border-top:3px solid var(--orange);padding:14px;">'
+      + '<div style="font-family:var(--font-display);font-size:1.8rem;color:var(--orange);">' + pot.toFixed(3) + '</div>'
+      + '<div style="font-size:0.65rem;color:var(--muted);text-transform:uppercase;margin-top:2px;">Next Pool (30%)</div>'
+      + '<div style="font-size:0.62rem;color:var(--muted);">AVAX</div></div>'
+      + '<div class="card" style="text-align:center;border-top:3px solid var(--success);padding:14px;">'
+      + '<div style="font-family:var(--font-display);font-size:1.8rem;color:var(--success);">' + perHolder.toFixed(4) + '</div>'
+      + '<div style="font-size:0.65rem;color:var(--muted);text-transform:uppercase;margin-top:2px;">Est. Your Share</div>'
+      + '<div style="font-size:0.62rem;color:var(--muted);">AVAX / month</div></div>'
+      + '<div class="card" style="text-align:center;border-top:3px solid var(--red);padding:14px;">'
+      + '<div style="font-family:var(--font-display);font-size:1.8rem;color:var(--red);">' + totalReceived.toFixed(4) + '</div>'
+      + '<div style="font-size:0.65rem;color:var(--muted);text-transform:uppercase;margin-top:2px;">Total Received</div>'
+      + '<div style="font-size:0.62rem;color:var(--muted);">AVAX all time</div></div></div>'
+      // NEXT DISTRIBUTION
+      + '<div class="card" style="margin-bottom:16px;background:linear-gradient(135deg,rgba(255,149,0,0.05),transparent);border-left:3px solid var(--amber);">'
+      + '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">'
+      + '<div><div style="font-size:0.68rem;color:var(--amber);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">\uD83D\uDCC5 Next Distribution</div>'
+      + '<div style="font-size:1rem;margin-bottom:4px;">' + nextStr + '</div>'
+      + '<div style="font-size:0.72rem;color:var(--muted);">Last payout: <strong style="color:var(--text);">' + lastDistDate + '</strong> &nbsp;\u00b7&nbsp; <strong style="color:var(--text);">' + holderNum + '</strong> registered holders &nbsp;\u00b7&nbsp; Every 30 days</div>'
+      + '</div><div style="flex-shrink:0;">' + registerBtn + '</div></div>'
+      + '<div style="margin-top:14px;padding:10px;background:rgba(255,255,255,0.03);border-radius:6px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center;">'
+      + '<div><div style="font-family:var(--font-display);font-size:1.1rem;color:var(--amber);">' + balNum.toFixed(3) + '</div><div style="font-size:0.62rem;color:var(--muted);">Treasury</div></div>'
+      + '<div style="display:flex;align-items:center;justify-content:center;font-size:0.7rem;color:var(--muted);">\u00d7 30% \u00f7 ' + holderNum + ' holders</div>'
+      + '<div><div style="font-family:var(--font-display);font-size:1.1rem;color:var(--success);">= ' + perHolder.toFixed(4) + '</div><div style="font-size:0.62rem;color:var(--muted);">Your est. share</div></div>'
+      + '</div></div>'
+      // MONTHLY CHART
+      + '<div class="card" style="margin-bottom:16px;">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'
+      + '<div style="font-weight:700;color:var(--orange);">\uD83D\uDCCA Monthly Earnings</div>'
+      + '<div style="font-size:0.72rem;color:var(--muted);">Last 6 months</div></div>'
+      + monthlyChartHTML
+      + '<div style="font-size:0.68rem;color:var(--muted);margin-top:4px;">Total received: <strong style="color:var(--success);">' + totalReceived.toFixed(4) + ' AVAX</strong>' + distBreakdownLabel + '</div>'
+      + '</div>'
+      // NFT TABLE
+      + nftTableHTML
+      // PAYMENT HISTORY
+      + '<div class="card">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">'
+      + '<div style="font-weight:700;color:var(--orange);">\uD83D\uDCB0 Payment History</div>'
+      + '<div style="font-size:0.72rem;color:var(--muted);">Verified on-chain</div></div>'
+      + historyHTML
+      + '<div style="font-size:0.65rem;color:var(--muted);margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.05);">Scanning last ~100k blocks. Check Snowtrace for full history: <a href="' + treasuryExplorerUrl + '" target="_blank" style="color:var(--orange);">Treasury Events \u2197</a></div>'
+      + '</div>';
 
-      <!-- MONTHLY EARNINGS CHART -->
-      <div class="card" style="margin-bottom:16px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-          <div style="font-weight:700;color:var(--orange);">📊 Monthly Earnings</div>
-          <div style="font-size:0.72rem;color:var(--muted);">Last 6 months</div>
-        </div>
-        ${monthlyChartHTML}
-        <div style="font-size:0.68rem;color:var(--muted);margin-top:4px;">
-          Total received: <strong style="color:var(--success);">${totalReceived.toFixed(4)} AVAX</strong>
-          ${Object.keys(monthlyBreakdown).length > 0 ? ' across ' + Object.keys(monthlyBreakdown).length + ' distribution(s)' : ''}
-        </div>
-      </div>
-
-      <!-- MY NFTs TABLE -->
-      ${tokenDataList.length > 0 ? `
-      <div class="card" style="margin-bottom:16px;overflow:hidden;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-          <div style="font-weight:700;color:var(--orange);">🎫 My NFTs & Projected Shares</div>
-          <div style="font-size:0.68rem;color:var(--muted);">Level × weight = share</div>
-        </div>
-        <div style="overflow-x:auto;">
-          <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
-            <thead>
-              <tr style="color:var(--muted);font-size:0.65rem;text-transform:uppercase;">
-                <th style="text-align:left;padding:6px 6px 10px;">Token</th>
-                <th style="text-align:left;padding:6px 6px 10px;">Tier</th>
-                <th style="text-align:left;padding:6px 6px 10px;">Level</th>
-                <th style="text-align:left;padding:6px 6px 10px;">Activity</th>
-                <th style="text-align:left;padding:6px 6px 10px;">Username</th>
-                <th style="text-align:left;padding:6px 6px 10px;">Est. Share</th>
-              </tr>
-            </thead>
-            <tbody>${tokenRows}</tbody>
-          </table>
-        </div>
-        <div style="font-size:0.68rem;color:var(--muted);margin-top:10px;padding-top:8px;border-top:1px solid var(--border);">
-          💡 <strong>Weighted by level:</strong> Lv.10 Genesis earns 10× the share of Lv.1. Only Genesis NFTs receive monthly distributions. Early Access holders earn reduced platform fees instead.
-        </div>
-      </div>` : ''}
-
-      <!-- PAYMENT HISTORY -->
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-          <div style="font-weight:700;color:var(--orange);">💰 Payment History</div>
-          <div style="font-size:0.72rem;color:var(--muted);">Verified on-chain</div>
-        </div>
-        ${historyHTML}
-        <div style="font-size:0.65rem;color:var(--muted);margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.05);">Scanning last ~100k blocks. Older payments may not appear here. Check Snowtrace for full history: <a href="https://testnet.snowtrace.io/address/${TREASURY_ADDRESS}#events" target="_blank" style="color:var(--orange);">Treasury Events ↗</a></div>
-      </div>
-    `;
+    el.innerHTML = html;
   } catch(e) {
     console.error('loadRewardsPage error:', e);
-    el.innerHTML = `<div class="empty-state"><p>Failed to load rewards: ${e.message}</p></div>`;
+    el.innerHTML = '<div class="empty-state"><p>Failed to load rewards: ' + (e.message||'unknown error') + '</p></div>';
   }
 }
 
