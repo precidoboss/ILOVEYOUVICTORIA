@@ -26,36 +26,9 @@ const AVAX_LOGO  = 'https://raw.githubusercontent.com/precidoboss/my-game-sprite
 </script>
 
 <script>
-// IdentityParams tuple components — used by mint, confirmIdentity, updateProfile
-const _ID_COMPONENTS = [
-  { name: "username",    type: "string" },
-  { name: "xHandle",    type: "string" },
-  { name: "platform",   type: "string" },
-  { name: "channel",    type: "string" },
-  { name: "blazeHandle",type: "string" },
-  { name: "arenaHandle",type: "string" },
-  { name: "ytHandle",   type: "string" }
-];
-
 const NFT_ABI = [
-  // mintGenesis — JSON ABI ensures tuple encoding works correctly in ethers v6
-  {
-    name: "mintGenesis", type: "function", stateMutability: "payable",
-    inputs: [
-      { name: "_role", type: "uint8" },
-      { name: "p",     type: "tuple", components: _ID_COMPONENTS }
-    ],
-    outputs: []
-  },
-  // mintEarlyAccess — JSON ABI
-  {
-    name: "mintEarlyAccess", type: "function", stateMutability: "payable",
-    inputs: [
-      { name: "_role", type: "uint8" },
-      { name: "p",     type: "tuple", components: _ID_COMPONENTS }
-    ],
-    outputs: []
-  },
+  "function mintGenesis(uint8 _role, string _username, string _xHandle, string _platform) payable",
+  "function mintEarlyAccess(uint8 _role, string _username, string _xHandle, string _platform) payable",
   "function hasNFT(address wallet) view returns (bool)",
   "function getTier(address wallet) view returns (uint8)",
   "function votingPower(address wallet) view returns (uint256)",
@@ -79,25 +52,8 @@ const NFT_ABI = [
   "function votingPower(address wallet) view returns (uint256)",
   "function platformFeeBps(address wallet) view returns (uint256)",
   "function setReferrer(address referrer)",
-  // confirmIdentity — JSON ABI for tuple
-  {
-    name: "confirmIdentity", type: "function", stateMutability: "nonpayable",
-    inputs: [
-      { name: "id",    type: "uint256" },
-      { name: "p",     type: "tuple", components: _ID_COMPONENTS },
-      { name: "_role", type: "uint8" }
-    ],
-    outputs: []
-  },
-  // updateProfile — JSON ABI for tuple
-  {
-    name: "updateProfile", type: "function", stateMutability: "nonpayable",
-    inputs: [
-      { name: "p",     type: "tuple", components: _ID_COMPONENTS },
-      { name: "_role", type: "uint8" }
-    ],
-    outputs: []
-  },
+  "function confirmIdentity(uint256 tokenId, tuple(string username,string xHandle,string platform,string channel,string blazeHandle,string arenaHandle,string ytHandle) _id, uint8 _role)",
+  "function updateProfile(tuple(string username,string xHandle,string platform,string channel,string blazeHandle,string arenaHandle,string ytHandle) _id, uint8 _role)",
   "function equipToken(uint256 tokenId)",
   "function unequipToken()",
   "function nftStats(uint256 tokenId) view returns (uint8 tier, uint8 role, uint8 level, uint32 bountiesWon, uint32 bountiesPosted, uint32 votesReceived, uint32 clipsSubmitted, uint16 winStreak, uint16 disputesAgainst, uint64 lastActivityAt, uint64 mintedAt, bool identityConfirmed, address originalMinter)",
@@ -285,44 +241,32 @@ function updateNavWallet() {
   }).catch(() => {});
 }
 
-// ─── NFT DATA COMPAT HELPER ─────────────────────────────────────────────────
-// Deployed contract uses nftStats + nftIdentity (split struct pattern).
-// This merges them into a single object matching old getTokenData field names.
+// === NFT DATA COMPAT HELPER ===
+// Contract uses nftStats + nftIdentity (split structs). Merges them into one object.
 async function nftData(contract, tokenId) {
   const id = Number(tokenId);
-  const [s, ident] = await Promise.all([
-    contract.nftStats(id),
-    contract.nftIdentity(id)
-  ]);
+  const [s, ident] = await Promise.all([contract.nftStats(id), contract.nftIdentity(id)]);
   return {
-    tier:           Number(s.tier),
-    role:           Number(s.role),
-    level:          Number(s.level),
-    bountiesWon:    Number(s.bountiesWon),
-    bountiesPosted: Number(s.bountiesPosted),
-    votesReceived:  Number(s.votesReceived),
-    clipsSubmitted: Number(s.clipsSubmitted),
-    winStreak:      Number(s.winStreak),
-    mintedAt:       Number(s.mintedAt),
-    identityConfirmed: s.identityConfirmed,
-    originalMinter: s.originalMinter,
-    username:    ident.username  || '',
-    platform:    ident.platform  || '',
-    xHandle:     ident.xHandle   || '',
-    ytHandle:    ident.ytHandle  || '',
-    blazeHandle: ident.blazeHandle || '',
-    arenaHandle: ident.arenaHandle || '',
-    channel:     ident.channel   || '',
+    tier: Number(s.tier), role: Number(s.role), level: Number(s.level),
+    bountiesWon: Number(s.bountiesWon), bountiesPosted: Number(s.bountiesPosted),
+    votesReceived: Number(s.votesReceived), clipsSubmitted: Number(s.clipsSubmitted),
+    winStreak: Number(s.winStreak), mintedAt: Number(s.mintedAt),
+    identityConfirmed: s.identityConfirmed, originalMinter: s.originalMinter,
+    username: ident.username || '', platform: ident.platform || '',
+    xHandle: ident.xHandle || '', ytHandle: ident.ytHandle || '',
+    blazeHandle: ident.blazeHandle || '', arenaHandle: ident.arenaHandle || '',
+    channel: ident.channel || '',
   };
 }
-
-// Batch-load multiple tokens in parallel — much faster than sequential awaits
 async function nftDataBatch(contract, tokenIds) {
-  return Promise.all(tokenIds.map(id =>
-    nftData(contract, id).then(d => ({ ...d, tid: Number(id) })).catch(() => null)
-  ));
+  return Promise.all(tokenIds.map(function(id) {
+    return nftData(contract, id).then(function(d) {
+      d.tid = Number(id); return d;
+    }).catch(function() { return null; });
+  }));
 }
-// ────────────────────────────────────────────────────────────────────────────
+// ==============================
+
 
 async function loadUserData() {
   try {
@@ -426,7 +370,7 @@ async function mintGenesis() {
         showTxClapper('Registering referrer…');
         const refTx = await nftContract.setReferrer(refAddr);
         await refTx.wait();
-        toast('Referrer registered \u2014 you will earn 5% on their mint!', 'success');
+        toast('Referrer registered — you will earn 5% on their mint!', 'success');
       } catch(re) {
         // Already set or same wallet — not fatal, continue
         console.log('setReferrer skipped:', re.reason || re.message);
@@ -437,7 +381,7 @@ async function mintGenesis() {
     showTxClapper('Minting Genesis NFT…');
     const price = await nftContract.GENESIS_PRICE();
     // V2 contract: mintGenesis(role, IdentityParams tuple)
-    const idParams = { username, xHandle: xhandle, platform, channel, blazeHandle, arenaHandle, ytHandle };
+    const idParams = [username, xhandle, platform, channel, blazeHandle, arenaHandle, ytHandle];
     const tx = await nftContract.mintGenesis(role, idParams, { value: price });
     setTxStatus('tx-genesis', '⏳ Transaction pending...', 'pending');
     showTxClapper('Confirming on Avalanche…');
@@ -486,7 +430,7 @@ async function mintEarlyAccess() {
     showTxClapper('Minting Early Access NFT…');
     const price = await nftContract.EARLY_ACCESS_PRICE();
     // V2 contract: mintEarlyAccess(role, IdentityParams tuple)
-    const idParams = { username, xHandle: xhandle, platform, channel, blazeHandle, arenaHandle, ytHandle };
+    const idParams = [username, xhandle, platform, channel, blazeHandle, arenaHandle, ytHandle];
     const tx = await nftContract.mintEarlyAccess(role, idParams, { value: price });
     setTxStatus('tx-early', '⏳ Transaction pending...', 'pending');
     showTxClapper('Confirming on Avalanche…');
@@ -752,56 +696,6 @@ function getPlatformLogo(link) {
 function extractYouTubeId(url) {
   const m = url.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
   return m ? m[1] : null;
-}
-
-function extractTweetId(url) {
-  // Matches twitter.com/user/status/ID or x.com/user/status/ID
-  const m = url.match(/(?:twitter\.com|x\.com)\/[^/]+\/status(?:es)?\/(\d+)/);
-  return m ? m[1] : null;
-}
-
-function renderTweetEmbed(url, containerId) {
-  const tweetId = extractTweetId(url);
-  if (!tweetId) return `<a href="${escHtml(url)}" target="_blank" class="btn btn-ghost btn-sm">↗ Open on X</a>`;
-  // Use Twitter's oEmbed via publish.twitter.com (no API key needed)
-  const embedUrl = 'https://publish.twitter.com/oembed?url=' + encodeURIComponent(url) + '&theme=dark&omit_script=true&dnt=true';
-  return '<div id="' + containerId + '" style="max-width:550px;margin:0 auto 12px;">'
-    + '<div style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:12px;padding:16px;text-align:center;">'
-    + '<div class="spinner" style="width:24px;height:24px;border-width:2px;margin:0 auto 8px;"></div>'
-    + '<div style="font-size:0.8rem;color:var(--muted);">Loading tweet…</div>'
-    + '</div></div>';
-}
-
-// Call after embed container is in DOM to fetch + render the tweet
-async function loadTweetEmbed(url, containerId) {
-  const tweetId = extractTweetId(url);
-  if (!tweetId) return;
-  const container = document.getElementById(containerId);
-  if (!container) return;
-  try {
-    // Use a CORS proxy approach: Twitter's publish endpoint works via script injection
-    // We inject a blockquote + load twitter widgets
-    container.innerHTML = '<blockquote class="twitter-tweet" data-theme="dark" data-dnt="true">'
-      + '<a href="' + escHtml(url) + '">Loading tweet…</a>'
-      + '</blockquote>';
-    // Load or reload Twitter widgets
-    if (window.twttr && window.twttr.widgets) {
-      window.twttr.widgets.load(container);
-    } else {
-      // Load the widgets.js script once
-      if (!document.getElementById('twitter-widgets-script')) {
-        const s = document.createElement('script');
-        s.id = 'twitter-widgets-script';
-        s.src = 'https://platform.twitter.com/widgets.js';
-        s.async = true;
-        s.charset = 'utf-8';
-        document.head.appendChild(s);
-        s.onload = () => { if (window.twttr) window.twttr.widgets.load(container); };
-      }
-    }
-  } catch(e) {
-    container.innerHTML = '<a href="' + escHtml(url) + '" target="_blank" class="btn btn-ghost btn-sm">↗ Open on X</a>';
-  }
 }
 
 function platformBadge(platform) {
@@ -1278,18 +1172,8 @@ async function openSubDetail(bountyId, subIndex) {
     let profileData=null;
     if(db){try{const r=await db.from('profiles').select('*').eq('wallet',s.clipper.toLowerCase()).maybeSingle();profileData=r.data;}catch(e){}}
     const clipperName = profileData?.username || s.clipper.slice(0,10)+'…';
-    const isYT = s.clipLink.includes('youtube')||s.clipLink.includes('youtu.be');
-    const isX  = s.clipLink.includes('x.com') || s.clipLink.includes('twitter.com');
-    const ytId = isYT ? extractYouTubeId(s.clipLink) : null;
-    const tweetEmbedId = 'tweet-' + bountyId + '-' + subIndex;
-    // Build media embed without nested template literals
-    let mediaEmbed = '';
-    if (ytId) {
-      mediaEmbed = '<div style="position:relative;padding-bottom:56.25%;height:0;border-radius:8px;overflow:hidden;margin-bottom:12px;"><iframe src="https://www.youtube.com/embed/' + ytId + '" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;" allowfullscreen></iframe></div>';
-    } else if (isX) {
-      mediaEmbed = renderTweetEmbed(s.clipLink, tweetEmbedId);
-    }
-    const voteBlock = b.mode===1 ? '<div style="text-align:center;padding:14px;background:var(--dark);border-radius:6px;margin-bottom:10px;"><div style="font-family:var(--font-display);font-size:2rem;color:var(--orange);">' + s.voteCount + '</div><div style="font-size:0.78rem;color:var(--muted);">Community Votes</div></div>' : '';
+    const embedId = 'clip-embed-' + bountyId + '-' + subIndex;
+    const embedHTML = renderClipEmbed(s.clipLink, embedId);
     mc.innerHTML = `<div>
       <button class="btn btn-ghost btn-sm" onclick="openBountyDetail(${bountyId})" style="margin-bottom:12px;">← Back to Bounty</button>
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;cursor:pointer;" onclick="openClipperProfile('${s.clipper}')">
@@ -1299,8 +1183,7 @@ async function openSubDetail(bountyId, subIndex) {
         </div>
         ${s.isWinner?'<span class="badge badge-amber" style="margin-left:auto;">🏆 Winner</span>':''}
       </div>
-      ${mediaEmbed}
-      <div style="margin-bottom:10px;">${pLogo}</div>
+      ${embedHTML}
       <div style="background:var(--dark);border:1px solid var(--border);border-radius:6px;padding:12px;margin-bottom:10px;">
         <div style="font-size:0.7rem;color:var(--muted);margin-bottom:4px;">Clip Link</div>
         <div style="word-break:break-all;font-family:var(--font-mono);font-size:0.8rem;color:var(--orange);">${escHtml(s.clipLink)}</div>
@@ -1310,10 +1193,12 @@ async function openSubDetail(bountyId, subIndex) {
           <button class="btn btn-ghost btn-sm" style="color:var(--muted);" onclick="flagContent('submission',${bountyId},${subIndex})">🚩 Flag</button>
         </div>
       </div>
-      ${voteBlock}
+      ${b.mode===1?`<div style="text-align:center;padding:14px;background:var(--dark);border-radius:6px;margin-bottom:10px;">
+        <div style="font-family:var(--font-display);font-size:2rem;color:var(--orange);">${s.voteCount}</div>
+        <div style="font-size:0.78rem;color:var(--muted);">Community Votes</div>
+      </div>`:''}
       <div style="font-size:0.75rem;color:var(--muted);">Submitted: ${new Date(Number(s.timestamp)*1000).toLocaleString()}</div>
     </div>`;
-    if (isX) setTimeout(() => loadTweetEmbed(s.clipLink, tweetEmbedId), 50);
   } catch(e){ mc.innerHTML='<div class="empty-state"><p>Error</p></div>'; }
 }
 
@@ -1760,10 +1645,10 @@ async function loadInventory() {
       return;
     }
 
-    // Step 2: Load data + image for active token in parallel
+    // Step 2: Load data + image in parallel (faster)
     const [d, fetchedImg] = await Promise.all([
       nftData(nftContract, activeTokenId),
-      mktGetNFTImage(activeTokenId).catch(() => null)
+      mktGetNFTImage(activeTokenId).catch(function() { return null; })
     ]);
     const tier       = Number(d.tier);
     const role       = Number(d.role);
@@ -1779,7 +1664,6 @@ async function loadInventory() {
     const tierLabel  = tier===0?'⭐ Genesis':'🔥 Early Access';
     const tierBadge  = tier===0?'badge-amber':'badge-red';
 
-    // Use fetched image or default
     let imgUrl = fetchedImg || 'https://ipfs.io/ipfs/bafkreifw3rrlcu3u33rz7qbnvouwkknvxpcs4pff3ro4knkjum4suz57ky';
 
     document.querySelectorAll('.profile-avatar').forEach(av => {
@@ -2104,84 +1988,63 @@ async function loadRewardsPage() {
     let ownedTokens = [];
     try { ownedTokens = await nft.getOwnedTokens(account); } catch(e) {}
 
-    // Calculate stats
-    const balNum    = parseFloat(ethers.formatEther(balance));
-    const holderNum = parseInt(holderCount.toString()) || 1;
-    const shareNum  = parseInt(shareBps.toString()) / 10000;
-    const pot       = balNum * shareNum;
-    const perHolder = pot / holderNum;
+    // Calculate estimated share
+    const balNum      = parseFloat(ethers.formatEther(balance));
+    const holderNum   = parseInt(holderCount.toString()) || 1;
+    const shareNum    = parseInt(shareBps.toString()) / 10000;
+    const pot         = balNum * shareNum;
+    const perHolder   = pot / holderNum;
 
     // Next distribution countdown
-    const nextSecs = parseInt(nextIn.toString());
-    const nextStr  = nextSecs <= 0
-      ? '<span style="color:var(--success);font-weight:700;font-size:1.1rem;">🟢 Ready Now!</span>'
+    const nextSecs  = parseInt(nextIn.toString());
+    const nextStr   = nextSecs <= 0
+      ? '<span style="color:var(--success);font-weight:700;">Ready now!</span>'
       : formatCountdown(nextSecs);
 
     // Last distribution date
     const lastDistDate = parseInt(lastDist.toString()) > 0
       ? new Date(parseInt(lastDist.toString()) * 1000).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'})
-      : 'Never yet';
+      : 'Never';
 
-    // Registration status — use plain strings, no nested backticks
+    // Is this wallet registered as a Genesis holder?
     const registerBtn = !isHolder
-      ? '<div style="background:rgba(255,149,0,0.08);border:1px solid rgba(255,149,0,0.3);border-radius:8px;padding:12px;margin-top:10px;">'
-        + '<div style="font-weight:700;color:var(--amber);margin-bottom:4px;">\u26a0\ufe0f Not yet registered</div>'
-        + '<div style="font-size:0.78rem;color:var(--muted);margin-bottom:8px;">You must register to receive monthly distributions \u2014 one-time, free transaction.</div>'
-        + '<button class="btn btn-primary btn-sm" onclick="registerAsGenesisHolder()">Register as Genesis Holder</button>'
-        + '</div>'
-      : '<div style="display:inline-flex;align-items:center;gap:6px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);border-radius:20px;padding:5px 12px;font-size:0.78rem;color:var(--success);margin-top:8px;">'
-        + '<div style="width:7px;height:7px;border-radius:50%;background:var(--success);animation:mktPulse 2s ease-in-out infinite;"></div>'
-        + ' Registered \u2014 you will receive the next distribution automatically'
-        + '</div>';
+      ? `<button class="btn btn-primary btn-sm" onclick="registerAsGenesisHolder()" style="margin-top:10px;">Register as Genesis Holder</button>
+         <div style="font-size:0.72rem;color:var(--muted);margin-top:4px;">You must register to receive monthly distributions</div>`
+      : `<div style="color:var(--success);font-size:0.82rem;margin-top:8px;">✅ Registered as Genesis holder</div>`;
 
-    // Build token rows with weighted share estimate
+    // Build token stats
     let tokenRows = '';
-    let totalWeight = 0;
-    const tokenDataList = [];
-    // Batch load all token data in parallel — much faster
-    const tokenDataResults = await nftDataBatch(nft, ownedTokens.slice(0, 20));
-    for (const d of tokenDataResults) {
-      if (!d) continue;
-      const tier  = d.tier;
-      const level = Number(d.level);
-      if (tier === 1) totalWeight += level || 1; // Genesis only earn share
-      tokenDataList.push({ tid: d.tid ?? 0, tier, level, bountiesWon: Number(d.bountiesWon), votesReceived: Number(d.votesReceived), username: d.username || '—' });
+    for (const tid of ownedTokens.slice(0, 10)) {
+      try {
+        const [statsData, identData] = await nftData(nft, tid);
+        const tierLabel = statsData.tier === 1 ? '🟡 Genesis' : '🔵 Early Access';
+        const level     = statsData.level;
+        const wins      = statsData.bountiesWon;
+        tokenRows += `
+          <tr>
+            <td style="font-family:var(--font-mono);color:var(--orange);">#${tid}</td>
+            <td>${tierLabel}</td>
+            <td style="font-family:var(--font-display);color:var(--amber);">Lv.${level}</td>
+            <td style="color:var(--success);">${wins} wins</td>
+            <td style="color:var(--orange);">${identData.username || '—'}</td>
+          </tr>`;
+      } catch(e) {}
     }
 
-    for (const t of tokenDataList) {
-      const isGenesis = t.tier === 1;
-      const weight    = isGenesis ? (t.level || 1) : 0;
-      const myShare   = isGenesis && totalWeight > 0 ? (pot * weight / totalWeight) : 0;
-      tokenRows += `
-        <tr style="border-bottom:1px solid var(--border);">
-          <td style="padding:8px 6px;font-family:var(--font-mono);color:var(--orange);">#${t.tid}</td>
-          <td style="padding:8px 6px;">${isGenesis ? '<span class="badge badge-amber" style="font-size:0.6rem;">⭐ Genesis</span>' : '<span class="badge badge-red" style="font-size:0.6rem;">🔥 Early</span>'}</td>
-          <td style="padding:8px 6px;font-family:var(--font-display);color:var(--amber);">Lv.${t.level}</td>
-          <td style="padding:8px 6px;color:var(--success);">${t.bountiesWon} wins</td>
-          <td style="padding:8px 6px;">${escHtml(t.username)}</td>
-          <td style="padding:8px 6px;font-family:var(--font-display);color:${isGenesis?'var(--success)':'var(--muted)'};">${isGenesis ? myShare.toFixed(5)+' AVAX' : '—'}</td>
-        </tr>`;
-    }
-
-    // Scan HolderPaid + DistributedWeighted events for full payment history
-    let totalReceived  = 0;
+    // Scan for HolderPaid events (last 50k blocks in 2k chunks)
+    let totalReceived = 0;
     let paymentHistory = [];
-    let monthlyBreakdown = {}; // month -> amount
-
     try {
       const currentBlock = await provider.getBlockNumber();
-      const fromBlock    = Math.max(0, currentBlock - 100000);
-      const iface        = new ethers.Interface(TREASURY_ABI);
-      const paidTopic    = ethers.id('HolderPaid(address,uint256)');
-      const distTopic    = ethers.id('DistributedWeighted(uint256,uint256,uint256)');
-
-      for (let start = fromBlock; start < currentBlock; start += 2000) {
+      const from = Math.max(0, currentBlock - 50000);
+      const iface = new ethers.Interface(TREASURY_ABI);
+      const topic = ethers.id('HolderPaid(address,uint256)');
+      for (let start = from; start < currentBlock; start += 2000) {
         const end = Math.min(start + 1999, currentBlock);
         try {
-          // Logs where this wallet was paid
           const logs = await provider.getLogs({
             address: TREASURY_ADDRESS,
-            topics: [paidTopic, ethers.zeroPadValue(account.toLowerCase(), 32)],
+            topics: [topic, ethers.zeroPadValue(account.toLowerCase(), 32)],
             fromBlock: start,
             toBlock: end
           });
@@ -2189,133 +2052,147 @@ async function loadRewardsPage() {
             try {
               const parsed = iface.parseLog(log);
               if (parsed) {
-                const amt   = parseFloat(ethers.formatEther(parsed.args[1]));
-                const block = await provider.getBlock(log.blockNumber);
-                const ts    = block ? block.timestamp * 1000 : Date.now();
-                const monthKey = new Date(ts).toLocaleDateString('en-US', {month:'short', year:'numeric'});
+                const amt = parseFloat(ethers.formatEther(parsed.args[1]));
                 totalReceived += amt;
-                monthlyBreakdown[monthKey] = (monthlyBreakdown[monthKey] || 0) + amt;
+                const block = await provider.getBlock(log.blockNumber);
                 paymentHistory.push({
                   amount: amt,
-                  date: new Date(ts).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
-                  month: monthKey,
-                  tx: log.transactionHash,
-                  block: log.blockNumber
+                  date: block ? new Date(block.timestamp*1000).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : 'Unknown',
+                  tx: log.transactionHash
                 });
               }
             } catch(pe) {}
           }
         } catch(e) {}
       }
-      paymentHistory.sort((a,b) => b.block - a.block);
+      paymentHistory.reverse(); // newest first
     } catch(e) { console.warn('Event scan failed:', e); }
 
-    // Build monthly chart data — last 6 months
-    const monthLabels = [];
-    const monthAmounts = [];
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date();
-      d.setMonth(d.getMonth() - i);
-      const k = d.toLocaleDateString('en-US', {month:'short', year:'numeric'});
-      monthLabels.push(d.toLocaleDateString('en-US', {month:'short'}));
-      monthAmounts.push(monthlyBreakdown[k] || 0);
-    }
-    const maxBar = Math.max(...monthAmounts, 0.001);
-
-    let monthlyChartHTML = '<div style="display:flex;align-items:flex-end;gap:8px;height:80px;margin-top:8px;">';
-    for (let i = 0; i < monthLabels.length; i++) {
-      const h = Math.round((monthAmounts[i] / maxBar) * 70);
-      const isEmpty = monthAmounts[i] === 0;
-      const amtLabel = monthAmounts[i] > 0 ? monthAmounts[i].toFixed(4) : '';
-      const barColor = isEmpty ? 'rgba(255,255,255,0.05)' : 'linear-gradient(180deg,var(--success),rgba(34,197,94,0.3))';
-      const lblColor = isEmpty ? 'var(--muted)' : 'var(--success)';
-      monthlyChartHTML += '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">'
-        + '<div style="font-family:var(--font-display);font-size:0.62rem;color:' + lblColor + ';">' + amtLabel + '</div>'
-        + '<div style="width:100%;height:' + Math.max(h, 3) + 'px;background:' + barColor + ';border-radius:3px 3px 0 0;transition:height 0.5s ease;"></div>'
-        + '<div style="font-size:0.6rem;color:var(--muted);">' + monthLabels[i] + '</div>'
-        + '</div>';
-    }
-    monthlyChartHTML += '</div>';
-
     const historyHTML = paymentHistory.length > 0
-      ? paymentHistory.map(function(p) {
-          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">'
-            + '<div style="display:flex;align-items:center;gap:10px;">'
-            + '<div style="width:34px;height:34px;border-radius:50%;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.25);display:flex;align-items:center;justify-content:center;font-size:0.9rem;flex-shrink:0;">\uD83D\uDCB0</div>'
-            + '<div>'
-            + '<div style="font-family:var(--font-display);color:var(--success);font-size:1.1rem;">+' + p.amount.toFixed(4) + ' AVAX</div>'
-            + '<div style="font-size:0.72rem;color:var(--muted);">' + p.date + ' &nbsp;\u00b7&nbsp; Block #' + p.block + '</div>'
-            + '</div></div>'
-            + '<a href="https://testnet.snowtrace.io/tx/' + p.tx + '" target="_blank" class="btn btn-ghost btn-sm" style="font-size:0.7rem;">View \u2197</a>'
-            + '</div>';
-        }).join('')
-      : '<div style="text-align:center;padding:24px 0;">'
-        + '<div style="font-size:2rem;margin-bottom:8px;">\uD83D\uDCED</div>'
-        + '<div style="color:var(--muted);font-size:0.84rem;">No payments found in recent blocks.</div>'
-        + (!isHolder ? '<div style="color:var(--amber);font-size:0.78rem;margin-top:6px;">Register as a Genesis holder above to start receiving distributions.</div>' : '')
-        + '</div>';
+      ? paymentHistory.map(p => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
+            <div>
+              <div style="font-family:var(--font-display);color:var(--success);font-size:1.1rem;">+${p.amount.toFixed(4)} AVAX</div>
+              <div style="font-size:0.72rem;color:var(--muted);">${p.date}</div>
+            </div>
+            <a href="https://testnet.snowtrace.io/tx/${p.tx}" target="_blank" style="font-size:0.7rem;color:var(--orange);">View ↗</a>
+          </div>`).join('')
+      : '<div style="color:var(--muted);font-size:0.85rem;padding:10px 0;">No payment history found in recent blocks.</div>';
 
-    const treasuryExplorerUrl = 'https://testnet.snowtrace.io/address/' + TREASURY_ADDRESS + '#events';
+    el.innerHTML = `
+      <!-- OVERVIEW CARDS -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px;">
+        <div class="card" style="text-align:center;border-left:3px solid var(--amber);">
+          <div style="font-family:var(--font-display);font-size:1.6rem;color:var(--amber);">${balNum.toFixed(3)}</div>
+          <div style="font-size:0.68rem;color:var(--muted);text-transform:uppercase;margin-top:2px;">Treasury Balance (AVAX)</div>
+        </div>
+        <div class="card" style="text-align:center;border-left:3px solid var(--orange);">
+          <div style="font-family:var(--font-display);font-size:1.6rem;color:var(--orange);">${pot.toFixed(3)}</div>
+          <div style="font-size:0.68rem;color:var(--muted);text-transform:uppercase;margin-top:2px;">Next Distribution Pool (30%)</div>
+        </div>
+        <div class="card" style="text-align:center;border-left:3px solid var(--success);">
+          <div style="font-family:var(--font-display);font-size:1.6rem;color:var(--success);">${perHolder.toFixed(4)}</div>
+          <div style="font-size:0.68rem;color:var(--muted);text-transform:uppercase;margin-top:2px;">Est. Your Share (AVAX)</div>
+        </div>
+        <div class="card" style="text-align:center;border-left:3px solid var(--red);">
+          <div style="font-family:var(--font-display);font-size:1.6rem;color:var(--red);">${totalReceived.toFixed(4)}</div>
+          <div style="font-size:0.68rem;color:var(--muted);text-transform:uppercase;margin-top:2px;">Total Received (AVAX)</div>
+        </div>
+      </div>
 
-    const distBreakdownLabel = Object.keys(monthlyBreakdown).length > 0
-      ? ' across ' + Object.keys(monthlyBreakdown).length + ' distribution(s)' : '';
+      <!-- NEXT DISTRIBUTION -->
+      <div class="card" style="margin-bottom:16px;border-left:3px solid var(--orange);">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+          <div>
+            <div style="font-weight:700;color:var(--orange);margin-bottom:4px;">📅 Next Distribution</div>
+            <div style="font-size:0.85rem;">${nextStr}</div>
+            <div style="font-size:0.72rem;color:var(--muted);margin-top:4px;">Last payout: ${lastDistDate} &nbsp;|&nbsp; ${holderNum} registered holders &nbsp;|&nbsp; Every 30 days</div>
+          </div>
+          <div>${registerBtn}</div>
+        </div>
+      </div>
 
-    const html = ''
-      // OVERVIEW GRID
-      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:20px;">'
-      + '<div class="card" style="text-align:center;border-top:3px solid var(--amber);padding:14px;">'
-      + '<div style="font-family:var(--font-display);font-size:1.8rem;color:var(--amber);">' + balNum.toFixed(3) + '</div>'
-      + '<div style="font-size:0.65rem;color:var(--muted);text-transform:uppercase;margin-top:2px;">Treasury Balance</div>'
-      + '<div style="font-size:0.62rem;color:var(--muted);">AVAX</div></div>'
-      + '<div class="card" style="text-align:center;border-top:3px solid var(--orange);padding:14px;">'
-      + '<div style="font-family:var(--font-display);font-size:1.8rem;color:var(--orange);">' + pot.toFixed(3) + '</div>'
-      + '<div style="font-size:0.65rem;color:var(--muted);text-transform:uppercase;margin-top:2px;">Next Pool (30%)</div>'
-      + '<div style="font-size:0.62rem;color:var(--muted);">AVAX</div></div>'
-      + '<div class="card" style="text-align:center;border-top:3px solid var(--success);padding:14px;">'
-      + '<div style="font-family:var(--font-display);font-size:1.8rem;color:var(--success);">' + perHolder.toFixed(4) + '</div>'
-      + '<div style="font-size:0.65rem;color:var(--muted);text-transform:uppercase;margin-top:2px;">Est. Your Share</div>'
-      + '<div style="font-size:0.62rem;color:var(--muted);">AVAX / month</div></div>'
-      + '<div class="card" style="text-align:center;border-top:3px solid var(--red);padding:14px;">'
-      + '<div style="font-family:var(--font-display);font-size:1.8rem;color:var(--red);">' + totalReceived.toFixed(4) + '</div>'
-      + '<div style="font-size:0.65rem;color:var(--muted);text-transform:uppercase;margin-top:2px;">Total Received</div>'
-      + '<div style="font-size:0.62rem;color:var(--muted);">AVAX all time</div></div></div>'
-      // NEXT DISTRIBUTION
-      + '<div class="card" style="margin-bottom:16px;background:linear-gradient(135deg,rgba(255,149,0,0.05),transparent);border-left:3px solid var(--amber);">'
-      + '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">'
-      + '<div><div style="font-size:0.68rem;color:var(--amber);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">\uD83D\uDCC5 Next Distribution</div>'
-      + '<div style="font-size:1rem;margin-bottom:4px;">' + nextStr + '</div>'
-      + '<div style="font-size:0.72rem;color:var(--muted);">Last payout: <strong style="color:var(--text);">' + lastDistDate + '</strong> &nbsp;\u00b7&nbsp; <strong style="color:var(--text);">' + holderNum + '</strong> registered holders &nbsp;\u00b7&nbsp; Every 30 days</div>'
-      + '</div><div style="flex-shrink:0;">' + registerBtn + '</div></div>'
-      + '<div style="margin-top:14px;padding:10px;background:rgba(255,255,255,0.03);border-radius:6px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center;">'
-      + '<div><div style="font-family:var(--font-display);font-size:1.1rem;color:var(--amber);">' + balNum.toFixed(3) + '</div><div style="font-size:0.62rem;color:var(--muted);">Treasury</div></div>'
-      + '<div style="display:flex;align-items:center;justify-content:center;font-size:0.7rem;color:var(--muted);">\u00d7 30% \u00f7 ' + holderNum + ' holders</div>'
-      + '<div><div style="font-family:var(--font-display);font-size:1.1rem;color:var(--success);">= ' + perHolder.toFixed(4) + '</div><div style="font-size:0.62rem;color:var(--muted);">Your est. share</div></div>'
-      + '</div></div>'
-      // MONTHLY CHART
-      + '<div class="card" style="margin-bottom:16px;">'
-      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'
-      + '<div style="font-weight:700;color:var(--orange);">\uD83D\uDCCA Monthly Earnings</div>'
-      + '<div style="font-size:0.72rem;color:var(--muted);">Last 6 months</div></div>'
-      + monthlyChartHTML
-      + '<div style="font-size:0.68rem;color:var(--muted);margin-top:4px;">Total received: <strong style="color:var(--success);">' + totalReceived.toFixed(4) + ' AVAX</strong>' + distBreakdownLabel + '</div>'
-      + '</div>'
-      // NFT TABLE
-      + nftTableHTML
-      // PAYMENT HISTORY
-      + '<div class="card">'
-      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">'
-      + '<div style="font-weight:700;color:var(--orange);">\uD83D\uDCB0 Payment History</div>'
-      + '<div style="font-size:0.72rem;color:var(--muted);">Verified on-chain</div></div>'
-      + historyHTML
-      + '<div style="font-size:0.65rem;color:var(--muted);margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.05);">Scanning last ~100k blocks. Check Snowtrace for full history: <a href="' + treasuryExplorerUrl + '" target="_blank" style="color:var(--orange);">Treasury Events \u2197</a></div>'
-      + '</div>';
+      <!-- MY TOKENS TABLE -->
+      ${ownedTokens.length > 0 ? `
+      <div class="card" style="margin-bottom:16px;overflow:hidden;">
+        <div style="font-weight:700;margin-bottom:12px;color:var(--orange);">🎫 My NFTs</div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+            <thead><tr style="color:var(--muted);font-size:0.68rem;text-transform:uppercase;border-bottom:1px solid var(--border);">
+              <th style="text-align:left;padding:6px 4px;">Token</th>
+              <th style="text-align:left;padding:6px 4px;">Tier</th>
+              <th style="text-align:left;padding:6px 4px;">Level</th>
+              <th style="text-align:left;padding:6px 4px;">Activity</th>
+              <th style="text-align:left;padding:6px 4px;">Username</th>
+            </tr></thead>
+            <tbody>${tokenRows}</tbody>
+          </table>
+        </div>
+        <div style="font-size:0.7rem;color:var(--muted);margin-top:8px;">💡 Weighted distribution: higher level Genesis NFTs earn a larger share of the pool.</div>
+      </div>` : ''}
 
-    el.innerHTML = html;
+      <!-- PAYMENT HISTORY -->
+      <div class="card">
+        <div style="font-weight:700;margin-bottom:12px;color:var(--orange);">💰 Payment History</div>
+        ${historyHTML}
+        <div style="font-size:0.68rem;color:var(--muted);margin-top:10px;">Showing recent blocks. Historical payments may not all be visible.</div>
+      </div>
+    `;
   } catch(e) {
     console.error('loadRewardsPage error:', e);
-    el.innerHTML = '<div class="empty-state"><p>Failed to load rewards: ' + (e.message||'unknown error') + '</p></div>';
+    el.innerHTML = `<div class="empty-state"><p>Failed to load rewards: ${e.message}</p></div>`;
   }
 }
+
+// === TWITTER / X VIDEO EMBED ===
+function extractTweetId(url) {
+  if (!url) return null;
+  var m = url.match(/(?:twitter\.com|x\.com)\/[^/]+\/status(?:es)?\/(\d+)/);
+  return m ? m[1] : null;
+}
+function renderClipEmbed(link, containerId) {
+  if (!link) return '<div style="color:var(--muted);font-size:0.85rem;padding:10px;">No clip link</div>';
+  var ytId = extractYouTubeId(link);
+  var tweetId = extractTweetId(link);
+  if (ytId) {
+    return '<div style="position:relative;padding-bottom:56.25%;height:0;border-radius:8px;overflow:hidden;margin-bottom:10px;">'
+      + '<iframe src="https://www.youtube.com/embed/' + ytId + '" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;" allowfullscreen loading="lazy"></iframe>'
+      + '</div>';
+  }
+  if (tweetId) {
+    var uid = 'tw_' + tweetId + '_' + Math.random().toString(36).slice(2, 7);
+    // Render placeholder, then boot Twitter widget
+    setTimeout(function() {
+      var el = document.getElementById(uid);
+      if (!el) return;
+      if (window.twttr && window.twttr.widgets) {
+        window.twttr.widgets.createTweet(tweetId, el, { theme: 'dark', dnt: true, align: 'center' });
+      } else if (!document.getElementById('twitter-wjs')) {
+        var s = document.createElement('script');
+        s.id = 'twitter-wjs'; s.charset = 'utf-8';
+        s.src = 'https://platform.twitter.com/widgets.js';
+        s.onload = function() {
+          var el2 = document.getElementById(uid);
+          if (el2 && window.twttr && window.twttr.widgets) {
+            window.twttr.widgets.createTweet(tweetId, el2, { theme: 'dark', dnt: true, align: 'center' });
+          }
+        };
+        document.head.appendChild(s);
+      }
+    }, 150);
+    return '<div id="' + uid + '" style="margin-bottom:10px;min-height:120px;display:flex;align-items:center;justify-content:center;">'
+      + '<div style="color:var(--muted);font-size:0.78rem;">Loading tweet...</div>'
+      + '</div>';
+  }
+  // Fallback chip
+  return '<div style="background:var(--dark);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:10px;display:flex;align-items:center;gap:10px;">'
+    + getPlatformLogo(link)
+    + '<div style="font-family:var(--font-mono);font-size:0.78rem;color:var(--orange);word-break:break-all;flex:1;">' + escHtml(link) + '</div>'
+    + '<a href="' + escHtml(link) + '" target="_blank" class="btn btn-ghost btn-sm">&#x2197;</a>'
+    + '</div>';
+}
+// ==============================
+
 
 function formatCountdown(seconds) {
   const d = Math.floor(seconds / 86400);
@@ -2586,8 +2463,8 @@ async function mktLoadBrowse(page = 0) {
 
     // Enrich with NFT data + images in parallel
     const cards = await Promise.all(result.map(async (l, i) => {
-      let tokenInfo = null, nftImage = null;
-      try { tokenInfo = await nftData(nftContract, l.tokenId); } catch(e) {}
+      let nftData = null, nftImage = null;
+      try { nftData = await nftData(nftContract, l.tokenId); } catch(e) {}
       try { nftImage = await mktGetNFTImage(Number(l.tokenId)); } catch(e) {}
       return mktBuildCard(l, tokenInfo, i, nftImage);
     }));
@@ -3145,31 +3022,21 @@ h3 { font-size: 1.3rem; }
 .divider { height: 1px; background: var(--border); margin: 20px 0; }
 
 /* NAV */
-nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba(10,10,10,0.97); border-bottom: 1px solid var(--border); backdrop-filter: blur(16px); padding: 0 20px; height: 54px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba(10,10,10,0.97); border-bottom: 1px solid var(--border); backdrop-filter: blur(16px); padding: 0 16px; height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .btn-orange { background: linear-gradient(135deg,var(--red),var(--orange)); color: #fff; border: none; font-weight: 700; }
 .btn-orange:hover { opacity: 0.88; }
 .nav-dash-btn { letter-spacing: 0.02em; }
-
-/* ── MOBILE NAV: tight, lightning always shows ── */
 @media (max-width: 640px) {
   .nav-desktop-only { display: none !important; }
-  nav { padding: 0 10px; gap: 5px; height: 50px; }
+  nav { padding: 0 8px; gap: 4px; height: 48px; }
   .nav-addr { display: none !important; }
   .dash-text { display: none !important; }
-  /* Lightning btn stays inline, small but clear */
-  #btn-dashboard {
-    min-width: 38px !important;
-    padding: 0 9px !important;
-    font-size: 1.05rem !important;
-    height: 34px !important;
-    border-radius: 8px !important;
-  }
-  #btn-connect { padding: 0 12px; height: 34px; font-size: 0.74rem; border-radius: 8px; }
-  .nav-logo svg { height: 24px; width: auto; }
+  #btn-dashboard { min-width: 36px !important; padding: 0 8px !important; font-size: 0.95rem !important; height: 32px !important; border-radius: 7px !important; }
+  #btn-connect { height: 32px !important; padding: 0 10px !important; font-size: 0.72rem !important; border-radius: 7px !important; }
 }
-
-.nav-logo { cursor: pointer; flex-shrink: 0; display: flex; align-items: center; }
-.nav-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; min-width: 0; }
+.nav-logo { font-family: var(--font-display); font-size: 1.7rem; letter-spacing: 3px; cursor: pointer; flex-shrink: 0; }
+.nav-logo span { color: var(--red); }
+.nav-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; min-width: 0; }
 .nav-addr { font-family: var(--font-mono); font-size: 0.72rem; color: var(--orange); background: rgba(255,107,26,0.1); padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(255,107,26,0.3); white-space: nowrap; }
 
 /* BUTTONS */
@@ -3224,7 +3091,7 @@ textarea { resize: vertical; min-height: 76px; }
 }
 
 /* PAGES */
-.page { display: none; padding-top: 54px; min-height: 100vh; }
+.page { display: none; padding-top: 52px; min-height: 100vh; }
 .page.active { display: block; }
 
 /* HERO */
@@ -3383,11 +3250,11 @@ textarea { resize: vertical; min-height: 76px; }
 
 /* ─── MOBILE RESPONSIVE ─── */
 @media (max-width: 768px) {
-  nav { padding: 0 10px; height: 50px; gap: 5px; }
-  .nav-logo svg { height: 24px; width: auto; }
+  nav { padding: 0 12px; height: 54px; gap: 6px; }
+  .nav-logo { font-size: 1.4rem; letter-spacing: 2px; }
   .nav-right { gap: 5px; }
   .nav-addr { font-size: 0.64rem; padding: 3px 6px; max-width: 80px; overflow: hidden; text-overflow: ellipsis; }
-  .page { padding-top: 50px; }
+  .page { padding-top: 54px; }
   #mobile-bottom-nav { display: flex; }
   .dashboard-grid { grid-template-columns: 1fr; padding-bottom: 72px; }
   .sidebar { display: none; }
@@ -3837,9 +3704,9 @@ function hideTxClapper() {
     <button class="mobile-drawer-btn" onclick="switchTab('tab-inventory');closeMobileDrawer()"><span style="font-size:1.3rem;">🖼️</span><span>My NFT</span></button>
     <button class="mobile-drawer-btn" onclick="switchTab('tab-submissions');closeMobileDrawer()"><span style="font-size:1.3rem;">📎</span><span>Submissions</span></button>
     <button class="mobile-drawer-btn" onclick="switchTab('tab-streamer');loadStreamerDashboard();closeMobileDrawer()"><span style="font-size:1.3rem;">📡</span><span>Streamer</span></button>
-    <button class="mobile-drawer-btn" onclick="showPage('rewards');closeMobileDrawer()" style="border-color:rgba(255,149,0,0.3);"><span style="font-size:1.3rem;">💰</span><span style="color:var(--amber);">Rewards</span></button>
-    <button class="mobile-drawer-btn" onclick="showPage('referrals');closeMobileDrawer()" style="border-color:rgba(255,107,26,0.3);"><span style="font-size:1.3rem;">💸</span><span style="color:var(--orange);">Referrals</span></button>
     <button class="mobile-drawer-btn" onclick="showPage('mint');closeMobileDrawer()"><span style="font-size:1.3rem;">🔑</span><span>Mint NFT</span></button>
+    <button class="mobile-drawer-btn" onclick="showPage('rewards');closeMobileDrawer()"><span style="font-size:1.3rem;">💰</span><span>Rewards</span></button>
+    <button class="mobile-drawer-btn" onclick="showPage('referrals');closeMobileDrawer()"><span style="font-size:1.3rem;">💸</span><span>Referrals</span></button>
     <button class="mobile-drawer-btn" onclick="showPage('marketplace');closeMobileDrawer()"><span style="font-size:1.3rem;">🛒</span><span>Market</span></button>
     <button class="mobile-drawer-btn" onclick="showPage('docs');closeMobileDrawer()"><span style="font-size:1.3rem;">📖</span><span>Docs</span></button>
     <button id="mob-admin-btn" class="mobile-drawer-btn" style="display:none;" onclick="showPage('admin');closeMobileDrawer()"><span style="font-size:1.3rem;">⚙️</span><span>Admin</span></button>
@@ -4157,14 +4024,6 @@ function hideTxClapper() {
       </div>
       <div style="margin-top:10px;font-size:0.76rem;color:var(--muted);">
         <strong style="color:var(--success);">✅ On-chain automatic:</strong> Genesis mint (0.5 AVAX) → you earn <strong>0.025 AVAX</strong> instantly to your wallet &nbsp;|&nbsp; Early Access (0.1 AVAX) → you earn <strong>0.005 AVAX</strong> instantly. No claiming needed — paid directly by the smart contract on every mint.
-      </div>
-      <div style="margin-top:8px;padding:8px 10px;background:rgba(255,107,26,0.05);border:1px solid rgba(255,107,26,0.15);border-radius:6px;font-size:0.74rem;color:var(--muted);">
-        <strong style="color:var(--amber);">How it works:</strong>
-        <div style="margin-top:4px;display:flex;flex-direction:column;gap:3px;">
-          <div>1️⃣ Share your link — anyone who opens it gets your address stored</div>
-          <div>2️⃣ When they connect wallet, your address is registered on-chain (automatically during mint)</div>
-          <div>3️⃣ Smart contract pays 5% of mint price to your wallet instantly — zero delay, zero claiming</div>
-        </div>
       </div>
       <div id="ref-onchain-status" style="margin-top:8px;font-size:0.75rem;padding:6px 10px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);border-radius:6px;display:none;"></div>
     </div>
