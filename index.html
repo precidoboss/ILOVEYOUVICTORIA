@@ -114,7 +114,26 @@ const ESCROW_ABI = [
   "event ClipSubmitted(uint256 indexed bountyId, uint256 submissionId, address indexed clipper, string link)",
   "event Voted(uint256 indexed bountyId, uint256 indexed submissionId, address indexed voter, uint256 weight)",
   "event WinnersSelected(uint256 indexed bountyId, uint256[] winnerIds)",
-  "event Payout(uint256 indexed bountyId, address indexed clipper, uint256 amount)"
+  "event Payout(uint256 indexed bountyId, address indexed clipper, uint256 amount)",
+  "error NeedNFT()",
+  "error IdentityNotConfirmed()",
+  "error BountyNotFound()",
+  "error BountyNotOpen()",
+  "error Expired()",
+  "error NotStreamer()",
+  "error SubmissionLimitReached()",
+  "error StreamerCannotSubmit()",
+  "error AlreadyVoted()",
+  "error CannotVoteOwn()",
+  "error NotCommunityVote()",
+  "error InvalidSubmission()",
+  "error WrongWinnerCount()",
+  "error SplitsMismatch()",
+  "error SplitsMustTotal100()",
+  "error DeadlineNotPassed()",
+  "error NoSubmissions()",
+  "error EditWindowClosed()",
+  "error PayoutFailed()"
 ];
 
 const TREASURY_ABI = [
@@ -293,7 +312,16 @@ function updateNavWallet() {
 }
 
 // === NFT DATA COMPAT HELPER ===
-// Contract uses nftStats + nftIdentity (split structs). Merges them into one object.
+// Contract uses nftStats + nftIdentity (split structs). Merges into one object.
+// Shared read-only contract instance — avoids creating new provider per call.
+let _roNftContract = null;
+async function _getRONft() {
+  if (_roNftContract) return _roNftContract;
+  const p = await getFujiProvider();
+  _roNftContract = new ethers.Contract(NFT_ADDRESS, NFT_ABI, p);
+  return _roNftContract;
+}
+
 async function nftData(contract, tokenId) {
   const id = Number(tokenId);
   const [s, ident] = await Promise.all([contract.nftStats(id), contract.nftIdentity(id)]);
@@ -309,12 +337,38 @@ async function nftData(contract, tokenId) {
     channel: ident.channel || '',
   };
 }
+
 async function nftDataBatch(contract, tokenIds) {
-  return Promise.all(tokenIds.map(function(id) {
-    return nftData(contract, id).then(function(d) {
-      d.tid = Number(id); return d;
-    }).catch(function() { return null; });
-  }));
+  if (!tokenIds || tokenIds.length === 0) return [];
+  return Promise.all(tokenIds.map(id =>
+    nftData(contract, id).then(d => ({ ...d, tid: Number(id) })).catch(() => null)
+  ));
+}
+
+// Ultra-fast: fires ALL nftStats + nftIdentity calls simultaneously with one shared provider
+async function nftDataBatchFast(tokenIds) {
+  if (!tokenIds || tokenIds.length === 0) return [];
+  const ro = await _getRONft();
+  const [allStats, allIdents] = await Promise.all([
+    Promise.all(tokenIds.map(id => ro.nftStats(Number(id)).catch(() => null))),
+    Promise.all(tokenIds.map(id => ro.nftIdentity(Number(id)).catch(() => null))),
+  ]);
+  return tokenIds.map((id, i) => {
+    const s = allStats[i]; const ident = allIdents[i];
+    if (!s) return null;
+    return {
+      tid: Number(id),
+      tier: Number(s.tier), role: Number(s.role), level: Number(s.level),
+      bountiesWon: Number(s.bountiesWon), bountiesPosted: Number(s.bountiesPosted),
+      votesReceived: Number(s.votesReceived), clipsSubmitted: Number(s.clipsSubmitted),
+      winStreak: Number(s.winStreak), identityConfirmed: s.identityConfirmed,
+      mintedAt: Number(s.mintedAt), originalMinter: s.originalMinter,
+      username: ident?.username || '', platform: ident?.platform || '',
+      xHandle: ident?.xHandle || '', ytHandle: ident?.ytHandle || '',
+      blazeHandle: ident?.blazeHandle || '', arenaHandle: ident?.arenaHandle || '',
+      channel: ident?.channel || '',
+    };
+  });
 }
 // ==============================
 
@@ -631,15 +685,40 @@ function updateProfileUI() {
 // DASHBOARD
 async function loadDashboard() {
   updateProfileUI();
-  // Set sidebar username
   const su = document.getElementById('sidebar-username');
   if (su && userProfile) su.textContent = userProfile.username || account?.slice(0,10)+'…' || '—';
   await Promise.all([loadReputation(), loadNFTStats(), loadBounties(), loadRecentActivity()]);
   await setNFTProfilePicture();
-  // Show admin tab if admin
   if (account && account.toLowerCase() === ADMIN_WALLET) {
     document.getElementById('nav-admin-link').style.display = 'flex';
   }
+  // Check identity confirmation status — show warning banner if not confirmed
+  try {
+    const tokenId = await nftContract.walletToToken(account).catch(() => 0n);
+    if (tokenId && Number(tokenId) > 0) {
+      const confirmed = await nftContract.isIdentityConfirmed(Number(tokenId));
+      if (!confirmed) {
+        // Show banner if not already there
+        const existing = document.getElementById('identity-warning-banner');
+        if (!existing) {
+          const banner = document.createElement('div');
+          banner.id = 'identity-warning-banner';
+          banner.style.cssText = 'background:rgba(255,149,0,0.12);border:1px solid rgba(255,149,0,0.4);border-radius:10px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px;';
+          banner.innerHTML = `
+            <div style="font-size:1.4rem;flex-shrink:0;">⚠️</div>
+            <div style="flex:1;">
+              <div style="font-weight:700;color:var(--amber);margin-bottom:3px;">Identity Not Confirmed</div>
+              <div style="font-size:0.8rem;color:var(--muted);">Your NFT identity must be confirmed on-chain before you can post bounties, submit clips, or vote.</div>
+            </div>
+            <button class="btn btn-orange btn-sm" onclick="showPage('profile')" style="flex-shrink:0;">Confirm Now →</button>
+          `;
+          const pageEl = document.getElementById('page-dashboard');
+          const header = pageEl?.querySelector('.page-header');
+          if (header) header.after(banner);
+        }
+      }
+    }
+  } catch(e) {}
 }
 
 async function loadRecentActivity() {
@@ -1430,14 +1509,21 @@ async function postBounty() {
   const note       = document.getElementById('post-note').value.trim();
   if (!title || !desc || !reward) { toast('Fill in title, description and reward', 'error'); return; }
   if (parseFloat(reward) < 0.1) { toast('Minimum bounty reward is 0.1 AVAX', 'error'); return; }
-  // Check NFT
+  // Check NFT + identity confirmation
   try {
     const hasNft = await nftContract.hasNFT(account);
     if (!hasNft) {
-      const trialUsed = await checkFreeTrial();
-      if (trialUsed) { toast('Free trial used. Mint an NFT to continue posting bounties.', 'error'); showPage('mint'); return; }
-      if (!confirm('You don\'t have a ClipDAO NFT. You get 1 FREE trial bounty. Continue?')) return;
-      await markTrialUsed();
+      toast('You need a ClipDAO NFT to post bounties. Mint one first.', 'error'); showPage('mint'); return;
+    }
+    // Check identity is confirmed (required by contract)
+    const tokenId = await nftContract.walletToToken(account);
+    if (tokenId && Number(tokenId) > 0) {
+      const confirmed = await nftContract.isIdentityConfirmed(Number(tokenId));
+      if (!confirmed) {
+        toast('❌ Your NFT identity must be confirmed before posting bounties. Go to Profile → Confirm Identity.', 'error');
+        showPage('dashboard');
+        return;
+      }
     }
   } catch(e) {}
   const streamTime       = document.getElementById('post-stream-time').value.trim();
@@ -1647,7 +1733,14 @@ function friendlyError(e) {
   if (errName === 'NeedRole'   || raw.includes('needrole'))   return '❌ Please select a role (Clipper or Streamer).';
   if (errName === 'NeedUsername' || raw.includes('needusername')) return '❌ Username is required.';
   if (errName === 'UsernameTaken' || raw.includes('usernametaken')) return '❌ That username is already taken. Choose another.';
-  if (errName === 'BadReferrer' || raw.includes('badreferrer')) return '❌ Invalid referrer address.';
+  if (errName === 'IdentityNotConfirmed' || raw.includes('identitynotconfirmed') || raw.includes('identity not confirmed'))
+    return '❌ Your NFT identity isn\'t confirmed yet. Go to Profile → confirm your identity on-chain first.';
+  if (errName === 'NeedNFT' || raw.includes('neednft'))
+    return '❌ You need a ClipDAO NFT to do this. Mint one first.';
+  if (errName === 'NothingEquipped' || raw.includes('nothingequipped'))
+    return '❌ No NFT is currently equipped. Equip an NFT first from your inventory or marketplace.';
+  if (errName === 'DoNotOwnToken' || raw.includes('donotowntoken'))
+    return '❌ You don\'t own this NFT token.';
   if (errName === 'NotOwner'   || raw.includes('notowner'))   return '❌ You don\'t own that NFT.';
   if (errName === 'NotAuth'    || raw.includes('notauth'))    return '❌ Not authorized.';
 
@@ -1754,11 +1847,11 @@ async function loadInventory() {
     const votes      = Number(d.votesReceived);
     const roleName   = role===1?'Clipper':'Streamer';
     const levelPct   = Math.min(100,(level/10)*100);
-    const votePwr    = tier===0?'3x':tier===1?'1.5x':'1x';
-    const feePct     = tier===0?'1%':tier===1?'2.5%':'5%';
-    const tierColor  = tier===0?'rgba(255,149,0,0.5)':'rgba(232,53,10,0.5)';
-    const tierLabel  = tier===0?'⭐ Genesis':'🔥 Early Access';
-    const tierBadge  = tier===0?'badge-amber':'badge-red';
+    const votePwr    = tier===1?'3x':tier===2?'1.5x':'1x';
+    const feePct     = tier===1?'1%':tier===2?'2.5%':'5%';
+    const tierColor  = tier===1?'rgba(255,149,0,0.5)':'rgba(232,53,10,0.5)';
+    const tierLabel  = tier===1?'⭐ Genesis':'🔥 Early Access';
+    const tierBadge  = tier===1?'badge-amber':'badge-red';
 
     // Use known CID immediately — fast, no extra RPC or fetch
     const imgUrl = nftImageFromTier(tier);
@@ -1776,22 +1869,23 @@ async function loadInventory() {
     // Build other tokens mini-cards
     let otherHTML = '';
     if (otherOwned.length > 0) {
-      const otherCards = await Promise.all(otherOwned.map(async (tid) => {
-        let od = null;
-        try { od = await nftData(nftContract, tid); } catch(e) {}
-        const otier = od ? Number(od.tier) : 0;
+      // Batch load all other tokens simultaneously — much faster
+      const otherBatch = await nftDataBatchFast(otherOwned);
+      const otherCards = otherOwned.map((tid, idx) => {
+        const od = otherBatch[idx];
+        const otier = od ? Number(od.tier) : 2;
         const oname = od ? (od.username || 'Unnamed') : 'Unnamed';
         const owins = od ? Number(od.bountiesWon) : 0;
         return `<div style="display:flex;align-items:center;gap:12px;background:var(--dark);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:8px;">
-          <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,${otier===0?'#FF9500':'#E8350A'},#0d0d0d);display:flex;align-items:center;justify-content:center;font-size:0.8rem;flex-shrink:0;">${otier===0?'⭐':'🔥'}</div>
+          <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,${otier===1?'#FF9500':'#E8350A'},#0d0d0d);display:flex;align-items:center;justify-content:center;font-size:0.8rem;flex-shrink:0;">${otier===1?'⭐':'🔥'}</div>
           <div style="flex:1;min-width:0;">
             <div style="font-weight:700;font-size:0.88rem;">#${tid} — ${escHtml(oname)}</div>
-            <div style="font-size:0.72rem;color:var(--muted);">${otier===0?'Genesis':'Early Access'} · ${owins} wins</div>
+            <div style="font-size:0.72rem;color:var(--muted);">${otier===1?'Genesis':'Early Access'} · ${owins} wins</div>
           </div>
           <button class="btn btn-ghost btn-sm" onclick="mktEquipFromInventory(${tid})" style="flex-shrink:0;white-space:nowrap;">⚡ Equip</button>
           <a href="https://testnet.snowtrace.io/token/${NFT_ADDRESS}?a=${tid}" target="_blank" class="btn btn-ghost btn-sm" style="flex-shrink:0;">↗</a>
         </div>`;
-      }));
+      });
       otherHTML = `
         <div class="card" style="margin-bottom:14px;">
           <div style="font-weight:700;margin-bottom:10px;color:var(--orange);display:flex;align-items:center;justify-content:space-between;">
@@ -1862,7 +1956,7 @@ async function loadInventory() {
           <div style="display:flex;flex-direction:column;gap:6px;">
             <div style="display:flex;justify-content:space-between;padding:8px;background:var(--dark);border-radius:5px;font-size:0.85rem;"><span style="color:var(--muted);">Platform Fee</span><strong style="color:var(--success);">${feePct}</strong></div>
             <div style="display:flex;justify-content:space-between;padding:8px;background:var(--dark);border-radius:5px;font-size:0.85rem;"><span style="color:var(--muted);">Voting Power</span><strong style="color:var(--orange);">${votePwr}</strong></div>
-            ${tier===0?`<div style="display:flex;justify-content:space-between;padding:8px;background:var(--dark);border-radius:5px;font-size:0.85rem;"><span style="color:var(--muted);">Revenue Share</span><strong style="color:var(--amber);">30% monthly</strong></div>`:''}
+            ${tier===1?`<div style="display:flex;justify-content:space-between;padding:8px;background:var(--dark);border-radius:5px;font-size:0.85rem;"><span style="color:var(--muted);">Revenue Share</span><strong style="color:var(--amber);">30% monthly</strong></div>`:''}
           </div>
         </div>
       </div>`;
@@ -2099,23 +2193,24 @@ async function loadRewardsPage() {
          <div style="font-size:0.72rem;color:var(--muted);margin-top:4px;">You must register to receive monthly distributions</div>`
       : `<div style="color:var(--success);font-size:0.82rem;margin-top:8px;">✅ Registered as Genesis holder</div>`;
 
-    // Build token stats
+    // Build token stats — batch load all tokens at once (fast)
     let tokenRows = '';
-    for (const tid of ownedTokens.slice(0, 10)) {
+    if (ownedTokens.length > 0) {
       try {
-        const [statsData, identData] = await nftData(nft, tid);
-        const tierLabel = statsData.tier === 1 ? '🟡 Genesis' : '🔵 Early Access';
-        const level     = statsData.level;
-        const wins      = statsData.bountiesWon;
-        tokenRows += `
-          <tr>
-            <td style="font-family:var(--font-mono);color:var(--orange);">#${tid}</td>
-            <td>${tierLabel}</td>
-            <td style="font-family:var(--font-display);color:var(--amber);">Lv.${level}</td>
-            <td style="color:var(--success);">${wins} wins</td>
-            <td style="color:var(--orange);">${identData.username || '—'}</td>
-          </tr>`;
-      } catch(e) {}
+        const batchData = await nftDataBatchFast(ownedTokens.slice(0, 10));
+        for (const d of batchData) {
+          if (!d) continue;
+          const tierLabel = d.tier === 1 ? '🟡 Genesis' : '🔵 Early Access';
+          tokenRows += `
+            <tr>
+              <td style="font-family:var(--font-mono);color:var(--orange);">#${d.tid}</td>
+              <td>${tierLabel}</td>
+              <td style="font-family:var(--font-display);color:var(--amber);">Lv.${d.level}</td>
+              <td style="color:var(--success);">${d.bountiesWon} wins</td>
+              <td style="color:var(--orange);">${d.username || '—'}</td>
+            </tr>`;
+        }
+      } catch(e) { console.warn('token batch failed', e); }
     }
 
     // Scan for HolderPaid events (last 50k blocks in 2k chunks)
@@ -2515,7 +2610,7 @@ async function setNFTProfilePicture() {
     const hasNft = await nftContract.hasNFT(account);
     if (!hasNft) return;
     // Get tier instantly from contract, use known CID — no tokenURI fetch needed
-    const tier   = await nftContract.getTier(account).catch(() => 1);
+    const tier   = await nftContract.getTier(account).catch(() => 2);
     const imgUrl = nftImageFromTier(tier);
     document.querySelectorAll('.profile-avatar').forEach(av => {
       av.style.backgroundImage = `url(${imgUrl})`;
@@ -2588,7 +2683,7 @@ async function mktGetNFTImage(tokenId) {
 
 // Get image instantly from known tier (no RPC call) — use when tier is already known
 function nftImageFromTier(tier) {
-  return Number(tier) === 0 ? GENESIS_IMG : EARLY_ACCESS_IMG;
+  return Number(tier) === 1 ? GENESIS_IMG : EARLY_ACCESS_IMG;
 }
 
 async function loadMarketplace() {
@@ -2705,8 +2800,8 @@ function mktBuildCard(listing, nftData, idx, nftImage) {
   const username = nftData ? (nftData.username || 'Unnamed') : 'Unnamed';
   const platform = nftData ? (nftData.platform || '') : '';
   const xHandle  = nftData ? (nftData.xHandle  || '') : '';
-  const tierName = tier === 0 ? '⭐ Genesis' : '🔥 Early Access';
-  const tierClass= tier === 0 ? 'mkt-tier-genesis' : 'mkt-tier-early';
+  const tierName = tier === 1 ? '⭐ Genesis' : '🔥 Early Access';
+  const tierClass= tier === 1 ? 'mkt-tier-genesis' : 'mkt-tier-early';
   const daysAgo  = Math.floor((Date.now()/1000 - Number(listing.listedAt)) / 86400);
   const listedStr = daysAgo === 0 ? 'Today' : daysAgo === 1 ? '1d ago' : daysAgo + 'd ago';
 
@@ -2722,15 +2817,15 @@ function mktBuildCard(listing, nftData, idx, nftImage) {
       <div class="mkt-card-tier">${tierName}</div>
       <div class="mkt-card-avatar">
         ${nftImage
-          ? `<div style="width:70px;height:70px;border-radius:50%;overflow:hidden;border:2px solid ${tier===0?'#FF9500':'#E8350A'};box-shadow:0 0 16px ${tier===0?'rgba(255,149,0,0.3)':'rgba(232,53,10,0.3)'};">
+          ? `<div style="width:70px;height:70px;border-radius:50%;overflow:hidden;border:2px solid ${tier===1?'#FF9500':'#E8350A'};box-shadow:0 0 16px ${tier===1?'rgba(255,149,0,0.3)':'rgba(232,53,10,0.3)'};"">
                <img src="${nftImage}" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML='<svg width=70 height=70 viewBox=\'0 0 60 60\' fill=\'none\'><circle cx=30 cy=30 r=29 fill=\'#0d0d0d\' stroke=\'#E8350A\' stroke-width=\'1.5\'/><circle cx=30 cy=24 r=10 fill=\'#333\'/><path d=\'M14 48 Q30 40 46 48\' fill=\'#333\'/></svg>'"/>
              </div>`
           : `<svg width="60" height="60" viewBox="0 0 60 60" fill="none">
-               <circle cx="30" cy="30" r="29" fill="#0d0d0d" stroke="${tier===0?'#FF9500':'#E8350A'}" stroke-width="1.5"/>
+               <circle cx="30" cy="30" r="29" fill="#0d0d0d" stroke="${tier===1?'#FF9500':'#E8350A'}" stroke-width="1.5"/>
                <circle cx="30" cy="24" r="10" fill="#333"/>
                <path d="M14 48 Q30 40 46 48" fill="#333"/>
-               ${tier===0?'<circle cx="30" cy="24" r="5" fill="#FF9500" opacity="0.5"/>':''}
-               <text x="50%" y="58" dominant-baseline="middle" text-anchor="middle" font-size="9" fill="${tier===0?'#FF9500':'#E8350A'}" font-family="monospace" font-weight="bold">${tier===0?'GEN':'EA'}</text>
+               ${tier===1?'<circle cx="30" cy="24" r="5" fill="#FF9500" opacity="0.5"/>':''}
+               <text x="50%" y="58" dominant-baseline="middle" text-anchor="middle" font-size="9" fill="${tier===1?'#FF9500':'#E8350A'}" font-family="monospace" font-weight="bold">${tier===1?'GEN':'EA'}</text>
              </svg>`
         }
       </div>
@@ -2856,13 +2951,14 @@ async function mktLoadMyNFTs() {
     const equipped = await marketplaceContract.getActiveToken(account);
     mktEquippedId = Number(equipped);
 
-    // Build cards with on-chain data
-    const cards = await Promise.all(ownedTokens.map(async (tid) => {
-      let tokenInfo = null, listingData = null;
-      try { tokenInfo = await nftData(nftContract, tid); } catch(e) {}
-      try { listingData = await marketplaceContract.getListing(tid); } catch(e) {}
-      return mktBuildInventoryCard(tid, tokenInfo, listingData, mktEquippedId);
-    }));
+    // Batch load all NFT data + all listings simultaneously — very fast
+    const [batchData, allListings] = await Promise.all([
+      nftDataBatchFast(ownedTokens),
+      Promise.all(ownedTokens.map(tid => marketplaceContract.getListing(tid).catch(() => null))),
+    ]);
+    const cards = ownedTokens.map((tid, i) => {
+      return mktBuildInventoryCard(tid, batchData[i], allListings[i], mktEquippedId);
+    });
 
     grid.innerHTML = cards.join('');
 
@@ -2904,8 +3000,8 @@ function mktBuildInventoryCard(tokenId, nftData, listingData, equippedId) {
   const username = nftData ? (nftData.username || 'Unnamed') : 'Unnamed';
   const platform = nftData ? (nftData.platform || '') : '';
   const xHandle  = nftData ? (nftData.xHandle  || '') : '';
-  const tierName = tier === 0 ? '⭐ Genesis' : '🔥 Early Access';
-  const tierClass= tier === 0 ? 'mkt-tier-genesis' : 'mkt-tier-early';
+  const tierName = tier === 1 ? '⭐ Genesis' : '🔥 Early Access';
+  const tierClass= tier === 1 ? 'mkt-tier-genesis' : 'mkt-tier-early';
   const isEquipped = tokenId === equippedId;
   const isListed  = listingData && listingData.active;
   const listPrice = isListed ? parseFloat(ethers.formatEther(listingData.price)).toFixed(3) : null;
@@ -2916,11 +3012,11 @@ function mktBuildInventoryCard(tokenId, nftData, listingData, equippedId) {
       ${isEquipped?'<div class="mkt-inv-equip-tag">✓ EQUIPPED</div>':''}
       <div class="mkt-inv-avatar" id="mkt-inv-img-${tokenId}">
         <svg width="80" height="80" viewBox="0 0 80 80" fill="none">
-          <circle cx="40" cy="40" r="38" fill="#0d0d0d" stroke="${tier===0?'#FF9500':'#E8350A'}" stroke-width="2"/>
+          <circle cx="40" cy="40" r="38" fill="#0d0d0d" stroke="${tier===1?'#FF9500':'#E8350A'}" stroke-width="2"/>
           <circle cx="40" cy="32" r="13" fill="#333"/>
           <path d="M18 65 Q40 54 62 65" fill="#333"/>
-          ${tier===0?'<circle cx="40" cy="32" r="7" fill="#FF9500" opacity="0.4"/><circle cx="40" cy="32" r="3" fill="#FF9500" opacity="0.8"/>':''}
-          <text x="50%" y="76" dominant-baseline="middle" text-anchor="middle" font-size="10" fill="${tier===0?'#FF9500':'#E8350A'}" font-family="monospace" font-weight="bold">${tier===0?'GENESIS':'EARLY'}</text>
+          ${tier===1?'<circle cx="40" cy="32" r="7" fill="#FF9500" opacity="0.4"/><circle cx="40" cy="32" r="3" fill="#FF9500" opacity="0.8"/>':''}
+          <text x="50%" y="76" dominant-baseline="middle" text-anchor="middle" font-size="10" fill="${tier===1?'#FF9500':'#E8350A'}" font-family="monospace" font-weight="bold">${tier===1?'GENESIS':'EARLY'}</text>
         </svg>
       </div>
     </div>
