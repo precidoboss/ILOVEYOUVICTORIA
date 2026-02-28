@@ -17,7 +17,25 @@ const NFT_ADDRESS      = '0x5424306e8Ac64B11E8bf1fA834D4e298FB2889d3';
 const ESCROW_ADDRESS   = '0x6938022B15Dd63A92eBCf6a5CC4449baB9584670';
 const TREASURY_ADDRESS = '0xB7f1391eC7500076378666fEd574aD0884892776';
 const FUJI_CHAIN_ID    = 43113;
-const FUJI_RPC         = 'https://api.avax-test.network/ext/bc/C/rpc';
+const FUJI_RPCS = [
+  'https://api.avax-test.network/ext/bc/C/rpc',
+  'https://avalanche-fuji-c-chain-rpc.publicnode.com',
+  'https://rpc.ankr.com/avalanche_fuji',
+];
+const FUJI_RPC = FUJI_RPCS[0];
+
+// Returns a working JsonRpcProvider, trying fallbacks on SSL/network errors
+async function getFujiProvider() {
+  for (const rpc of FUJI_RPCS) {
+    try {
+      const p = new ethers.JsonRpcProvider(rpc);
+      await p.getBlockNumber(); // quick connectivity check
+      return p;
+    } catch(e) { console.warn('RPC failed, trying next:', rpc, e.message); }
+  }
+  // Last resort — return default even if it failed
+  return new ethers.JsonRpcProvider(FUJI_RPCS[0]);
+}
 const ADMIN_WALLET     = '0x46914d5dc59598801e435af2a08928da87c60df0';
 const MARKETPLACE_ADDRESS = '0xb3b2fA9aA6B915909FC95EF8E1A19e7065ab5A0E';
 const BLAZE_LOGO = 'https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_1_2026-02-24_07-10-44-removebg-preview.png';
@@ -333,21 +351,9 @@ async function saveProfileToSupabase() {
   } catch(e) { console.warn('Supabase save failed', e); }
 }
 
-// FREE TRIAL CHECK
-async function checkFreeTrial() {
-  if (!account || !db) return false;
-  try {
-    const { data } = await db.from('free_trials').select('*').eq('wallet', account.toLowerCase()).single();
-    return data ? true : false;
-  } catch(e) { return false; }
-}
-
-async function markTrialUsed() {
-  if (!account || !db) return;
-  try {
-    await db.from('free_trials').upsert({ wallet: account.toLowerCase(), used_at: new Date().toISOString() });
-  } catch(e) {}
-}
+// FREE TRIAL CHECK — table removed, no-op stubs
+async function checkFreeTrial() { return false; }
+async function markTrialUsed() {}
 
 // NFT MINT
 async function mintGenesis() {
@@ -474,31 +480,19 @@ async function creditReferral() {
       return;
     }
 
-    // Mark this wallet referral click as minted
+    // Mark this wallet referral click as minted — referral_clicks is source of truth
     const { error: clickErr } = await db.from('referral_clicks').upsert(
       { wallet: account.toLowerCase(), referred_by: ref, minted: true, created_at: new Date().toISOString() },
       { onConflict: 'wallet' }
     );
     if (clickErr) console.warn('referral_clicks upsert error:', clickErr);
-
-    // Increment referrer count
-    const { data: existing, error: fetchErr } = await db.from('referrals')
-      .select('count').eq('referrer', ref).maybeSingle();
-    if (fetchErr) console.warn('referrals fetch error:', fetchErr);
-    if (existing) {
-      const { error: upErr } = await db.from('referrals').update({ count: (existing.count||0)+1 }).eq('referrer', ref);
-      if (upErr) console.warn('referrals update error:', upErr);
-    } else {
-      const { error: inErr } = await db.from('referrals').insert({ referrer: ref, count: 1 });
-      if (inErr) console.warn('referrals insert error:', inErr);
-    }
     console.log('Referral credited to', ref);
   } catch(e) { console.warn('Referral credit failed', e); }
 }
 
 async function loadMintStats() {
   try {
-    const roProvider = window.ethereum ? new ethers.BrowserProvider(window.ethereum) : new ethers.JsonRpcProvider(FUJI_RPC);
+    const roProvider = window.ethereum ? new ethers.BrowserProvider(window.ethereum) : await getFujiProvider();
     const roNft = new ethers.Contract(NFT_ADDRESS, NFT_ABI, roProvider);
     const minted = await roNft.genesisMinted();
     const n = Number(minted);
@@ -630,7 +624,7 @@ async function loadNFTStats() {
 async function loadBounties() {
   if (!escrowContract) {
     try {
-      const ro = new ethers.JsonRpcProvider(FUJI_RPC);
+      const ro = await getFujiProvider();
       escrowContract = new ethers.Contract(ESCROW_ADDRESS, ESCROW_ABI, ro);
     } catch(e) { return; }
   }
@@ -1251,7 +1245,7 @@ async function openClipperProfile(wallet) {
   let data=null,tokenData=null;
   if(db){try{const r=await db.from('profiles').select('*').eq('wallet',wallet.toLowerCase()).maybeSingle();data=r.data;}catch(e){}}
   try {
-    const ro=new ethers.JsonRpcProvider(FUJI_RPC);
+    const ro=await getFujiProvider();
     const roNft=new ethers.Contract(NFT_ADDRESS,NFT_ABI,ro);
     const hasNft=await roNft.hasNFT(wallet);
     if(hasNft){const tid=await roNft.walletToToken(wallet);tokenData=await nftData(roNft, tid);}
@@ -1870,16 +1864,16 @@ async function loadReferrals() {
   // Load my referral count from DB
   if (account && db) {
     try {
-      const { data: myRef } = await db.from('referrals').select('*').eq('referrer', account.toLowerCase()).maybeSingle();
+      const { data: myClicks } = await db.from('referral_clicks').select('wallet').eq('referred_by', account.toLowerCase()).eq('minted', true);
       const countEl = document.getElementById('ref-count');
-      if (countEl) countEl.textContent = myRef?.count || 0;
+      if (countEl) countEl.textContent = myClicks?.length || 0;
     } catch(e) {}
   }
 
   // Scan ReferralPaid events on-chain for real AVAX earned figure
   if (account) {
     try {
-      const provider  = new ethers.JsonRpcProvider(FUJI_RPC);
+      const provider  = await getFujiProvider();
       const iface     = new ethers.Interface(['event ReferralPaid(address indexed referrer, address indexed minter, uint256 amount)']);
       const topic     = ethers.id('ReferralPaid(address,address,uint256)');
       const refTopic  = ethers.zeroPadValue(account.toLowerCase(), 32);
@@ -1904,42 +1898,32 @@ async function loadReferrals() {
     const pendingEl = document.getElementById('ref-pending');
     if (pendingEl) { pendingEl.textContent = 'Instant'; pendingEl.style.fontSize = '1.1rem'; }
   }
-  // Load leaderboard — try referrals table first, fallback to referral_clicks
+  // Load leaderboard from referral_clicks (count minted=true per referrer)
   try {
-    const { data, error } = await db.from('referrals').select('referrer,count').order('count',{ascending:false}).limit(10);
     const el = document.getElementById('ref-leaderboard');
     if (!el) return;
-    if (error || !data || data.length===0) {
-      // Fallback: count from referral_clicks where minted=true
-      try {
-        const { data: clicks } = await db.from('referral_clicks').select('referred_by').eq('minted', true);
-        if (!clicks || clicks.length === 0) { el.innerHTML='<div class="empty-state" style="padding:20px;"><p>No referrals yet — be the first!</p></div>'; return; }
-        const counts = {};
-        clicks.forEach(c => { counts[c.referred_by] = (counts[c.referred_by]||0)+1; });
-        const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,10);
-        el.innerHTML = sorted.map(([w,c],i)=>`
+    const { data: clicks, error } = await db.from('referral_clicks')
+      .select('referred_by')
+      .eq('minted', true);
+    if (error || !clicks || clicks.length === 0) {
+      el.innerHTML = '<div class="empty-state" style="padding:20px;"><p>No referrals yet — be the first!</p></div>';
+      return;
+    }
+    const counts = {};
+    clicks.forEach(c => { if (c.referred_by) counts[c.referred_by] = (counts[c.referred_by]||0)+1; });
+    const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,10);
+    el.innerHTML = sorted.map(([w,c],i)=>`
           <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
             <div style="font-family:var(--font-display);font-size:1.2rem;color:${i===0?'var(--amber)':i===1?'#C0C0C0':i===2?'#cd7f32':'var(--border)'};width:24px;text-align:center;">${i+1}</div>
             <div style="flex:1;font-family:var(--font-mono);font-size:0.8rem;">${w.slice(0,16)}…</div>
             <div style="font-family:var(--font-display);color:var(--orange);">${c} ref${c!==1?'s':''}</div>
             ${account&&w===account.toLowerCase()?'<span class="badge badge-green">YOU</span>':''}
           </div>`).join('');
-        // Update my count
-        if (account) {
-          const myCount = counts[account.toLowerCase()]||0;
-          const countEl = document.getElementById('ref-count');
-          if (countEl) countEl.textContent = myCount;
-        }
-      } catch(e2) { el.innerHTML='<div class="empty-state" style="padding:20px;"><p>No referrals yet — be the first!</p></div>'; }
-      return;
+    if (account) {
+      const myCount = counts[account.toLowerCase()]||0;
+      const countEl = document.getElementById('ref-count');
+      if (countEl) countEl.textContent = myCount;
     }
-    el.innerHTML = data.map((r,i)=>`
-      <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
-        <div style="font-family:var(--font-display);font-size:1.2rem;color:${i===0?'var(--amber)':i===1?'#C0C0C0':i===2?'#cd7f32':'var(--border)'};width:24px;text-align:center;">${i+1}</div>
-        <div style="flex:1;font-family:var(--font-mono);font-size:0.8rem;">${r.referrer?.slice(0,16)}…</div>
-        <div style="font-family:var(--font-display);color:var(--orange);">${r.count} ref${r.count!==1?'s':''}</div>
-        ${account&&r.referrer===account.toLowerCase()?'<span class="badge badge-green">YOU</span>':''}
-      </div>`).join('');
   } catch(e) { console.warn('referral leaderboard failed', e); }
 }
 
@@ -1983,7 +1967,7 @@ async function loadRewardsPage() {
   }
 
   try {
-    const provider = new ethers.JsonRpcProvider(FUJI_RPC);
+    const provider = await getFujiProvider();
     const treasury = new ethers.Contract(TREASURY_ADDRESS, TREASURY_ABI, provider);
     const nft      = new ethers.Contract(NFT_ADDRESS, NFT_ABI, provider);
 
@@ -2398,7 +2382,7 @@ const MKT_PAGE_SIZE   = 12;
 // Fetch NFT image from tokenURI — returns img URL or null
 async function mktGetNFTImage(tokenId) {
   try {
-    const roProvider = new ethers.JsonRpcProvider(FUJI_RPC);
+    const roProvider = await getFujiProvider();
     const roNft = new ethers.Contract(NFT_ADDRESS, NFT_ABI, roProvider);
     const uri = await roNft.tokenURI(tokenId);
     if (!uri) return null;
@@ -2601,7 +2585,7 @@ function mktBuildCard(listing, nftData, idx, nftImage) {
 // Scan Transfer events to build accurate list of tokens currently owned by wallet.
 // This correctly handles: bought NFTs, sold NFTs, gifted NFTs.
 async function mktGetOwnedTokenIds(wallet) {
-  const ro = new ethers.JsonRpcProvider(FUJI_RPC);
+  const ro = await getFujiProvider();
   const roNft = new ethers.Contract(NFT_ADDRESS, NFT_ABI, ro);
   const walletLower = wallet.toLowerCase();
 
@@ -2778,7 +2762,7 @@ async function mktLoadActivity() {
   const el = document.getElementById('mkt-activity-list');
   el.innerHTML = '<div class="mkt-loading"><div class="mkt-spinner"></div><span>Loading activity…</span></div>';
   try {
-    const roProvider = new ethers.JsonRpcProvider(FUJI_RPC);
+    const roProvider = await getFujiProvider();
     const roMarket = new ethers.Contract(MARKETPLACE_ADDRESS, MARKETPLACE_ABI, roProvider);
     const currentBlock = await roProvider.getBlockNumber();
     const fromBlock = Math.max(0, currentBlock - 2000); // Fuji max is 2048
