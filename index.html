@@ -74,12 +74,28 @@ const NFT_ABI = [
   "function updateProfile(tuple(string username,string xHandle,string platform,string channel,string blazeHandle,string arenaHandle,string ytHandle) _id, uint8 _role)",
   "function equipToken(uint256 tokenId)",
   "function unequipToken()",
+  "function genesisMintOpen() view returns (bool)",
+  "function earlyAccessOpen() view returns (bool)",
+  "function toggleGenesis(bool v)",
+  "function toggleEarlyAccess(bool v)",
   "function nftStats(uint256 tokenId) view returns (uint8 tier, uint8 role, uint8 level, uint32 bountiesWon, uint32 bountiesPosted, uint32 votesReceived, uint32 clipsSubmitted, uint16 winStreak, uint16 disputesAgainst, uint64 lastActivityAt, uint64 mintedAt, bool identityConfirmed, address originalMinter)",
   "function nftIdentity(uint256 tokenId) view returns (string username, string platform, string xHandle, string ytHandle, string blazeHandle, string arenaHandle, string channel)",
   "event Minted(address indexed to, uint256 indexed tokenId, uint8 tier, address referrer)",
   "event LevelChanged(uint256 indexed tokenId, uint8 newLevel)",
   "event IdentitySet(uint256 indexed tokenId, string username, address indexed wallet)",
-  "event ReferralPaid(address indexed referrer, address indexed minter, uint256 amount)"
+  "event ReferralPaid(address indexed referrer, address indexed minter, uint256 amount)",
+  "error Paused()",
+  "error MintClosed()",
+  "error SoldOut()",
+  "error BadPayment()",
+  "error NeedRole()",
+  "error NeedUsername()",
+  "error UsernameTaken()",
+  "error NotOwner()",
+  "error NotAuth()",
+  "error NothingEquipped()",
+  "error NoTreasury()",
+  "error BadReferrer()"
 ];
 
 const ESCROW_ABI = [
@@ -386,6 +402,13 @@ async function mintGenesis() {
     setTxStatus('tx-genesis', '⏳ Minting Genesis NFT...', 'pending');
     showTxClapper('Minting Genesis NFT…');
     const price = await nftContract.GENESIS_PRICE();
+
+    // Check if genesis minting is open before attempting
+    const genesisOpen = await nftContract.genesisMintOpen().catch(() => true);
+    if (!genesisOpen) {
+      throw new Error('Genesis minting is not open yet. The contract owner needs to call toggleGenesis(true).');
+    }
+
     const idParams = { username, xHandle: xhandle, platform, channel, blazeHandle, arenaHandle, ytHandle };
     // Dry-run first to get a clear revert reason if it would fail
     try {
@@ -440,6 +463,13 @@ async function mintEarlyAccess() {
     setTxStatus('tx-early', '⏳ Minting Early Access NFT...', 'pending');
     showTxClapper('Minting Early Access NFT…');
     const price = await nftContract.EARLY_ACCESS_PRICE();
+
+    // Check if early access minting is open
+    const earlyOpen = await nftContract.earlyAccessOpen().catch(() => true);
+    if (!earlyOpen) {
+      throw new Error('Early Access minting is not open yet. The contract owner needs to call toggleEarlyAccess(true).');
+    }
+
     const idParams = { username, xHandle: xhandle, platform, channel, blazeHandle, arenaHandle, ytHandle };
     // Dry-run first to surface revert reason clearly
     try {
@@ -494,15 +524,39 @@ async function loadMintStats() {
   try {
     const roProvider = window.ethereum ? new ethers.BrowserProvider(window.ethereum) : await getFujiProvider();
     const roNft = new ethers.Contract(NFT_ADDRESS, NFT_ABI, roProvider);
-    const minted = await roNft.genesisMinted();
+    const [minted, genesisOpen, earlyOpen] = await Promise.all([
+      roNft.genesisMinted().catch(()=>0n),
+      roNft.genesisMintOpen().catch(()=>false),
+      roNft.earlyAccessOpen().catch(()=>false),
+    ]);
     const n = Number(minted);
     const remaining = 500 - n;
-    const el = document.getElementById('genesis-minted');
-    const bar = document.getElementById('genesis-bar');
+    const el   = document.getElementById('genesis-minted');
+    const bar  = document.getElementById('genesis-bar');
     const stat = document.getElementById('stat-genesis');
     if (el)   el.textContent = n;
     if (bar)  bar.style.width = (n/500*100) + '%';
     if (stat) stat.textContent = remaining;
+
+    // Show open/closed badges on mint page
+    const gStatus = document.getElementById('genesis-mint-status');
+    const eStatus = document.getElementById('early-mint-status');
+    if (gStatus) {
+      gStatus.innerHTML = genesisOpen
+        ? '<span style="color:var(--success);font-weight:700;">🟢 Minting Open</span>'
+        : '<span style="color:var(--red);font-weight:700;">🔴 Minting Closed</span><div style="font-size:0.72rem;color:var(--muted);margin-top:4px;">Owner must call <code>toggleGenesis(true)</code> to open minting.</div>';
+    }
+    if (eStatus) {
+      eStatus.innerHTML = earlyOpen
+        ? '<span style="color:var(--success);font-weight:700;">🟢 Minting Open</span>'
+        : '<span style="color:var(--red);font-weight:700;">🔴 Minting Closed</span><div style="font-size:0.72rem;color:var(--muted);margin-top:4px;">Owner must call <code>toggleEarlyAccess(true)</code> to open minting.</div>';
+    }
+
+    // Disable mint buttons if closed
+    const genBtn = document.querySelector('[onclick="mintGenesis()"]');
+    const earlyBtn = document.querySelector('[onclick="mintEarlyAccess()"]');
+    if (genBtn)   { genBtn.disabled = !genesisOpen;   genBtn.style.opacity   = genesisOpen   ? '1' : '0.4'; }
+    if (earlyBtn) { earlyBtn.disabled = !earlyOpen;   earlyBtn.style.opacity = earlyOpen     ? '1' : '0.4'; }
   } catch(e) {}
 }
 
@@ -1564,33 +1618,45 @@ function friendlyError(e) {
   // First try to surface the actual on-chain revert reason
   const reason = e.reason || e.data?.message || e.error?.message || '';
   const raw = (reason || e.message || '').toLowerCase();
+  const errName = e.revert?.name || '';  // ethers v6 decoded custom error name
 
   if (raw.includes('user rejected') || raw.includes('user denied') || raw.includes('cancelled')) return '❌ Transaction cancelled.';
+
+  // Decoded custom errors from NFT contract
+  if (errName === 'MintClosed' || raw.includes('mintclosed')) return '❌ Minting is currently closed. Check back soon.';
+  if (errName === 'SoldOut'    || raw.includes('soldout'))    return '❌ Genesis NFTs are sold out!';
+  if (errName === 'Paused'     || raw.includes('paused'))     return '❌ Contract is paused. Try again later.';
+  if (errName === 'BadPayment' || raw.includes('badpayment')) return '❌ Wrong AVAX amount sent. Check the mint price.';
+  if (errName === 'NeedRole'   || raw.includes('needrole'))   return '❌ Please select a role (Clipper or Streamer).';
+  if (errName === 'NeedUsername' || raw.includes('needusername')) return '❌ Username is required.';
+  if (errName === 'UsernameTaken' || raw.includes('usernametaken')) return '❌ That username is already taken. Choose another.';
+  if (errName === 'BadReferrer' || raw.includes('badreferrer')) return '❌ Invalid referrer address.';
+  if (errName === 'NotOwner'   || raw.includes('notowner'))   return '❌ You don\'t own that NFT.';
+  if (errName === 'NotAuth'    || raw.includes('notauth'))    return '❌ Not authorized.';
+
+  // Already owns NFT
   if (raw.includes('already has nft') || raw.includes('already minted') || raw.includes('already owns')) return '❌ This wallet already has a ClipDAO NFT.';
-  if (raw.includes('genesis sold out') || raw.includes('max supply') || raw.includes('sold out')) return '❌ Genesis NFTs are sold out!';
+
   if (raw.includes('insufficient funds') || raw.includes('have 0 want') || raw.includes('insufficient balance')) {
     const match = raw.match(/want\s+([\d]+)/);
     if (match) {
       const avaxNeeded = (parseInt(match[1]) / 1e18).toFixed(3);
-      return `❌ Not enough AVAX. You need ${avaxNeeded} AVAX. Get free test AVAX at faucet.avax.network`;
+      return `❌ Not enough AVAX. You need ~${avaxNeeded} AVAX. Get free test AVAX at faucet.avax.network`;
     }
-    return '❌ Not enough AVAX in your wallet. Get free test AVAX at faucet.avax.network';
+    return '❌ Not enough AVAX. Get free test AVAX at faucet.avax.network';
   }
   if (raw.includes('nonce')) return '❌ Transaction error. Please refresh and try again.';
   if (raw.includes('bounty not open') || raw.includes('not active')) return '❌ This bounty is no longer open.';
   if (raw.includes('already voted')) return '❌ You already voted on this bounty.';
   if (raw.includes('own bounty') || raw.includes('streamer cannot')) return '❌ You cannot submit to your own bounty.';
-  if (raw.includes('paused')) return '❌ Contract is paused. Please try again later.';
-  if (raw.includes('username taken') || raw.includes('already taken')) return '❌ That username is already taken.';
 
-  // Gas estimation failure = transaction would revert — show the real reason
+  // Gas estimation / revert — show real reason
   if (raw.includes('gas') || raw.includes('cannot estimate') || raw.includes('execution reverted')) {
     const realReason = reason || e.message || '';
-    if (realReason && realReason.length > 10) return '❌ Transaction would fail: ' + realReason.slice(0, 200);
-    return '❌ Transaction would fail on-chain. Check contract state or try again.';
+    if (realReason && realReason.length > 10) return '❌ Transaction failed: ' + realReason.slice(0, 200);
+    return '❌ Transaction would fail on-chain. Contract may be paused or minting not open yet.';
   }
 
-  // Show the raw error — always better than hiding it
   const short = (reason || e.message || 'Unknown error').slice(0, 200);
   return '❌ ' + short;
 }
@@ -2301,13 +2367,50 @@ async function loadAdminPage() {
 
     <div style="margin-top:20px;">
       <h3 style="color:var(--red);margin-bottom:12px;">⚙️ Admin Controls</h3>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
         <button class="btn btn-ghost" onclick="adminForcePause()">⏸ Pause All Bounties</button>
         <button class="btn btn-ghost" onclick="adminExportData()">📊 Export Data</button>
         <button class="btn btn-primary" onclick="loadAdminPage()">🔄 Refresh</button>
       </div>
+      <div style="background:rgba(255,149,0,0.06);border:1px solid rgba(255,149,0,0.2);border-radius:8px;padding:14px;">
+        <div style="font-weight:700;color:var(--amber);margin-bottom:10px;">🔑 Mint Controls</div>
+        <div id="admin-mint-status" style="font-size:0.8rem;color:var(--muted);margin-bottom:10px;">Loading mint status…</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-primary btn-sm" onclick="adminToggleMint('genesis',true)">✅ Open Genesis Mint</button>
+          <button class="btn btn-ghost btn-sm" onclick="adminToggleMint('genesis',false)">🔒 Close Genesis Mint</button>
+          <button class="btn btn-primary btn-sm" onclick="adminToggleMint('early',true)">✅ Open Early Access Mint</button>
+          <button class="btn btn-ghost btn-sm" onclick="adminToggleMint('early',false)">🔒 Close Early Access Mint</button>
+        </div>
+      </div>
     </div>
   `;
+  // Load mint status into admin panel
+  try {
+    const p = await getFujiProvider();
+    const roNft = new ethers.Contract(NFT_ADDRESS, NFT_ABI, p);
+    const [gOpen, eOpen] = await Promise.all([roNft.genesisMintOpen(), roNft.earlyAccessOpen()]);
+    const statusEl = document.getElementById('admin-mint-status');
+    if (statusEl) statusEl.innerHTML =
+      `Genesis: <strong style="color:${gOpen?'var(--success)':'var(--red)'}">${gOpen?'🟢 Open':'🔴 Closed'}</strong> &nbsp;|&nbsp; ` +
+      `Early Access: <strong style="color:${eOpen?'var(--success)':'var(--red)'}">${eOpen?'🟢 Open':'🔴 Closed'}</strong>`;
+  } catch(e) {}
+}
+
+async function adminToggleMint(type, open) {
+  if (!signer) { toast('Connect wallet first', 'error'); return; }
+  try {
+    const contract = new ethers.Contract(NFT_ADDRESS, NFT_ABI, signer);
+    const tx = type === 'genesis'
+      ? await contract.toggleGenesis(open)
+      : await contract.toggleEarlyAccess(open);
+    toast(`Waiting for confirmation…`, 'pending');
+    await tx.wait();
+    toast(`${type === 'genesis' ? 'Genesis' : 'Early Access'} minting ${open ? 'opened' : 'closed'}!`, 'success');
+    loadAdminPage();
+    loadMintStats();
+  } catch(e) {
+    toast(friendlyError(e), 'error');
+  }
 }
 
 async function adminDismissFlag(flagId) {
@@ -2981,7 +3084,7 @@ function mktFilterCards(query) {
 }
 
 
-const exposed = { connectWallet,disconnectWallet,showPage,switchTab,openModal,closeModal,selectRole,onboardNext,finishOnboarding,mintGenesis,mintEarlyAccess,saveProfile,postBounty,submitClip,voteOnClip,pickWinner,resolveVote,filterBounties,openBountyDetail,setMobileActive,loadInventory,openSubDetail,openHostProfile,openClipperProfile,openStreamViewer,addPendingWinner,removePendingWinner,confirmMultiWinners,confirmSingleWinner,postComment,openEditBounty,copyReferralLink,shareReferralLink,loadReferrals,loadRewardsPage,registerAsGenesisHolder,flagContent,adminDismissFlag,adminActionFlag,adminBanUser,adminForcePause,adminExportData,loadAdminPage,toggleMobileDrawer,closeMobileDrawer,loadClipFeed,loadStreamerDashboard,loadMarketplace,mktListNFT,mktDelistNFT,mktBuyNFT,mktUpdatePrice,mktEquipToken,mktUnequipToken,mktShowListModal,mktShowUpdateModal,mktSwitchTab,mktEquipFromInventory };
+const exposed = { connectWallet,disconnectWallet,showPage,switchTab,openModal,closeModal,selectRole,onboardNext,finishOnboarding,mintGenesis,mintEarlyAccess,saveProfile,postBounty,submitClip,voteOnClip,pickWinner,resolveVote,filterBounties,openBountyDetail,setMobileActive,loadInventory,openSubDetail,openHostProfile,openClipperProfile,openStreamViewer,addPendingWinner,removePendingWinner,confirmMultiWinners,confirmSingleWinner,postComment,openEditBounty,copyReferralLink,shareReferralLink,loadReferrals,loadRewardsPage,registerAsGenesisHolder,flagContent,adminDismissFlag,adminActionFlag,adminBanUser,adminForcePause,adminExportData,adminToggleMint,loadAdminPage,toggleMobileDrawer,closeMobileDrawer,loadClipFeed,loadStreamerDashboard,loadMarketplace,mktListNFT,mktDelistNFT,mktBuyNFT,mktUpdatePrice,mktEquipToken,mktUnequipToken,mktShowListModal,mktShowUpdateModal,mktSwitchTab,mktEquipFromInventory };
 Object.assign(window, exposed);
 
 // INIT
@@ -3765,6 +3868,7 @@ function hideTxClapper() {
           <select id="gen-platform"><option value="blaze">Blaze</option><option value="arena">Arena</option><option value="twitch">Twitch</option><option value="youtube">YouTube</option></select>
         </div>
         <div class="form-group"><label>Role</label><select id="gen-role"><option value="1">Clipper</option><option value="2">Streamer</option></select></div>
+        <div id="genesis-mint-status" style="margin-bottom:8px;"></div>
         <div id="tx-genesis" class="tx-status"></div>
         <button class="btn btn-orange" onclick="mintGenesis()" style="width:100%;margin-top:6px;">Mint Genesis NFT</button>
       </div>
@@ -3788,6 +3892,7 @@ function hideTxClapper() {
           <select id="ea-platform"><option value="blaze">Blaze</option><option value="arena">Arena</option><option value="twitch">Twitch</option><option value="youtube">YouTube</option></select>
         </div>
         <div class="form-group"><label>Role</label><select id="ea-role"><option value="1">Clipper</option><option value="2">Streamer</option></select></div>
+        <div id="early-mint-status" style="margin-bottom:8px;"></div>
         <div id="tx-early" class="tx-status"></div>
         <button class="btn btn-primary" onclick="mintEarlyAccess()" style="width:100%;margin-top:6px;">Mint Early Access NFT</button>
       </div>
