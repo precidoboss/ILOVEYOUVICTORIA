@@ -78,6 +78,8 @@ const NFT_ABI = [
   "function earlyAccessOpen() view returns (bool)",
   "function toggleGenesis(bool v)",
   "function toggleEarlyAccess(bool v)",
+  "function setBountyContract(address a)",
+  "function bountyContract() view returns (address)",
   "function nftStats(uint256 tokenId) view returns (uint8 tier, uint8 role, uint8 level, uint32 bountiesWon, uint32 bountiesPosted, uint32 votesReceived, uint32 clipsSubmitted, uint16 winStreak, uint16 disputesAgainst, uint64 lastActivityAt, uint64 mintedAt, bool identityConfirmed, address originalMinter)",
   "function nftIdentity(uint256 tokenId) view returns (string username, string platform, string xHandle, string ytHandle, string blazeHandle, string arenaHandle, string channel)",
   "event Minted(address indexed to, uint256 indexed tokenId, uint8 tier, address referrer)",
@@ -1609,13 +1611,20 @@ async function postBounty() {
   try {
     const hasNft = await nftContract.hasNFT(account);
     if (!hasNft) { toast('You need a ClipDAO NFT to post bounties. Mint one first.', 'error'); showPage('mint'); return; }
-    // Verify escrow knows about the NFT contract — most common cause of NeedNFT revert
+    // Verify both contract links are set — these are the most common causes of silent reverts
     const roP = await getFujiProvider();
     const roEscrow = new ethers.Contract(ESCROW_ADDRESS, ESCROW_ABI, roP);
-    const escrowNFT = await roEscrow.nftContract().catch(()=>null);
-    if (!escrowNFT || escrowNFT.toLowerCase() !== NFT_ADDRESS.toLowerCase()) {
-      toast('⚙️ Setup required: Go to Admin → Contract Setup → "Link NFT → Escrow" first.', 'error');
-      return;
+    const roNft    = new ethers.Contract(NFT_ADDRESS, NFT_ABI, roP);
+    const [escrowNFT, nftBounty] = await Promise.all([
+      roEscrow.nftContract().catch(()=>null),
+      roNft.bountyContract().catch(()=>null),
+    ]);
+    const ZERO = '0x0000000000000000000000000000000000000000';
+    if (!escrowNFT || escrowNFT === ZERO || escrowNFT.toLowerCase() !== NFT_ADDRESS.toLowerCase()) {
+      toast('⚙️ Setup required: Admin → Contract Setup → "Link NFT → Escrow"', 'error'); return;
+    }
+    if (!nftBounty || nftBounty === ZERO || nftBounty.toLowerCase() !== ESCROW_ADDRESS.toLowerCase()) {
+      toast('⚙️ Setup required: Admin → Contract Setup → "Link Escrow → NFT (bountyContract)"', 'error'); return;
     }
   } catch(e) {}
   const streamTime       = getScheduleString();
@@ -2619,8 +2628,9 @@ async function loadAdminPage() {
           <button class="btn btn-primary btn-sm" onclick="adminSetTreasuryNFT()">🔗 Link NFT → Treasury</button>
           <button class="btn btn-ghost btn-sm" onclick="adminSetTreasuryEscrow()">🔗 Link Escrow → Treasury</button>
           <button class="btn btn-primary btn-sm" onclick="adminSetEscrowNFT()">🔗 Link NFT → Escrow</button>
+          <button class="btn btn-orange btn-sm" onclick="adminSetNFTBountyContract()">🔗 Link Escrow → NFT (bountyContract)</button>
         </div>
-        <div style="font-size:0.68rem;color:var(--muted);margin-top:8px;">⚠️ "Link NFT → Escrow" is required for postBounty, submitClip, and voting to work. Run all three once after deploy.</div>
+        <div style="font-size:0.68rem;color:var(--muted);margin-top:8px;">⚠️ All 4 links are required after every deploy. Missing any will break bounties, clips, voting, or distributions.</div>
       </div>
     </div>
   `;
@@ -2630,12 +2640,13 @@ async function loadAdminPage() {
     const roNft      = new ethers.Contract(NFT_ADDRESS, NFT_ABI, p);
     const roTreasury = new ethers.Contract(TREASURY_ADDRESS, TREASURY_ABI, p);
     const roEscrow   = new ethers.Contract(ESCROW_ADDRESS, ESCROW_ABI, p);
-    const [gOpen, eOpen, tNftSet, tEscrowSet, eNftSet] = await Promise.all([
+    const [gOpen, eOpen, tNftSet, tEscrowSet, eNftSet, nftBountySet] = await Promise.all([
       roNft.genesisMintOpen().catch(()=>false),
       roNft.earlyAccessOpen().catch(()=>false),
       roTreasury.nftContract().catch(()=>null),
       roTreasury.escrowContract().catch(()=>null),
       roEscrow.nftContract().catch(()=>null),
+      roNft.bountyContract().catch(()=>null),
     ]);
     const ZERO = '0x0000000000000000000000000000000000000000';
     const ok = a => a && a !== ZERO;
@@ -2645,10 +2656,12 @@ async function loadAdminPage() {
       `Early Access: <strong style="color:${eOpen?'var(--success)':'var(--red)'}">${eOpen?'🟢 Open':'🔴 Closed'}</strong>`;
     const contractEl = document.getElementById('admin-contract-status');
     const escrowNftMatch = eNftSet && eNftSet.toLowerCase() === NFT_ADDRESS.toLowerCase();
+    const bountyMatch = nftBountySet && nftBountySet.toLowerCase() === ESCROW_ADDRESS.toLowerCase();
     if (contractEl) contractEl.innerHTML = [
       `Treasury↔NFT: <strong style="color:${ok(tNftSet)?'var(--success)':'var(--red)'}">${ok(tNftSet)?'🟢':'🔴'}</strong>`,
       `Treasury↔Escrow: <strong style="color:${ok(tEscrowSet)?'var(--success)':'var(--red)'}">${ok(tEscrowSet)?'🟢':'🔴'}</strong>`,
-      `Escrow↔NFT: <strong style="color:${escrowNftMatch?'var(--success)':'var(--red)'}">${escrowNftMatch?'🟢 Correct':'🔴 Wrong/Not Set'}</strong>`,
+      `Escrow↔NFT: <strong style="color:${escrowNftMatch?'var(--success)':'var(--red)'}">${escrowNftMatch?'🟢':'🔴'}</strong>`,
+      `NFT bountyContract: <strong style="color:${bountyMatch?'var(--success)':'var(--red)'}">${bountyMatch?'🟢 Set':'🔴 NOT SET — breaks stats recording'}</strong>`,
     ].join(' &nbsp;|&nbsp; ');
   } catch(e) {}
 }
@@ -2700,6 +2713,18 @@ async function adminSetEscrowNFT() {
     toast('Linking NFT contract to Escrow…', 'pending');
     await tx.wait();
     toast('✅ NFT linked to Escrow! postBounty, submitClip and voting now work.', 'success');
+    loadAdminPage();
+  } catch(e) { toast(friendlyError(e), 'error'); }
+}
+
+async function adminSetNFTBountyContract() {
+  if (!signer) { toast('Connect wallet first', 'error'); return; }
+  try {
+    const nft = new ethers.Contract(NFT_ADDRESS, NFT_ABI, signer);
+    const tx = await nft.setBountyContract(ESCROW_ADDRESS);
+    toast('Setting bountyContract on NFT…', 'pending');
+    await tx.wait();
+    toast('✅ NFT bountyContract set to Escrow! Stats recording (wins, posts, votes) now works.', 'success');
     loadAdminPage();
   } catch(e) { toast(friendlyError(e), 'error'); }
 }
@@ -3395,7 +3420,7 @@ function mktFilterCards(query) {
 }
 
 
-const exposed = { connectWallet,disconnectWallet,showPage,switchTab,openModal,closeModal,selectRole,onboardNext,finishOnboarding,mintGenesis,mintEarlyAccess,saveProfile,postBounty,submitClip,voteOnClip,pickWinner,resolveVote,filterBounties,openBountyDetail,setMobileActive,loadInventory,openSubDetail,openHostProfile,openClipperProfile,openStreamViewer,addPendingWinner,removePendingWinner,confirmMultiWinners,confirmSingleWinner,postComment,openEditBounty,copyReferralLink,shareReferralLink,loadReferrals,loadRewardsPage,registerAsGenesisHolder,flagContent,adminDismissFlag,adminActionFlag,adminBanUser,adminForcePause,adminExportData,adminToggleMint,adminSetTreasuryNFT,adminSetTreasuryEscrow,adminSetEscrowNFT,loadAdminPage,toggleMobileDrawer,closeMobileDrawer,loadClipFeed,loadStreamerDashboard,loadMarketplace,mktListNFT,mktDelistNFT,mktBuyNFT,mktUpdatePrice,mktEquipToken,mktUnequipToken,mktShowListModal,mktShowUpdateModal,mktSwitchTab,mktEquipFromInventory,updateSchedPreview,checkRewardVsBalance };
+const exposed = { connectWallet,disconnectWallet,showPage,switchTab,openModal,closeModal,selectRole,onboardNext,finishOnboarding,mintGenesis,mintEarlyAccess,saveProfile,postBounty,submitClip,voteOnClip,pickWinner,resolveVote,filterBounties,openBountyDetail,setMobileActive,loadInventory,openSubDetail,openHostProfile,openClipperProfile,openStreamViewer,addPendingWinner,removePendingWinner,confirmMultiWinners,confirmSingleWinner,postComment,openEditBounty,copyReferralLink,shareReferralLink,loadReferrals,loadRewardsPage,registerAsGenesisHolder,flagContent,adminDismissFlag,adminActionFlag,adminBanUser,adminForcePause,adminExportData,adminToggleMint,adminSetTreasuryNFT,adminSetTreasuryEscrow,adminSetEscrowNFT,adminSetNFTBountyContract,loadAdminPage,toggleMobileDrawer,closeMobileDrawer,loadClipFeed,loadStreamerDashboard,loadMarketplace,mktListNFT,mktDelistNFT,mktBuyNFT,mktUpdatePrice,mktEquipToken,mktUnequipToken,mktShowListModal,mktShowUpdateModal,mktSwitchTab,mktEquipFromInventory,updateSchedPreview,checkRewardVsBalance };
 Object.assign(window, exposed);
 
 // INIT
