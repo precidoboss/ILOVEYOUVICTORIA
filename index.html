@@ -27,8 +27,8 @@ const AVAX_LOGO  = 'https://raw.githubusercontent.com/precidoboss/my-game-sprite
 
 <script>
 const NFT_ABI = [
-  "function mintGenesis(uint8 _role, string _username, string _xHandle, string _platform) payable",
-  "function mintEarlyAccess(uint8 _role, string _username, string _xHandle, string _platform) payable",
+  "function mintGenesis(uint8 _role, tuple(string username,string xHandle,string platform,string channel,string blazeHandle,string arenaHandle,string ytHandle) _id) payable",
+  "function mintEarlyAccess(uint8 _role, tuple(string username,string xHandle,string platform,string channel,string blazeHandle,string arenaHandle,string ytHandle) _id) payable",
   "function hasNFT(address wallet) view returns (bool)",
   "function getTier(address wallet) view returns (uint8)",
   "function votingPower(address wallet) view returns (uint256)",
@@ -381,7 +381,7 @@ async function mintGenesis() {
     showTxClapper('Minting Genesis NFT…');
     const price = await nftContract.GENESIS_PRICE();
     // V2 contract: mintGenesis(role, IdentityParams tuple)
-    const idParams = [username, xhandle, platform, channel, blazeHandle, arenaHandle, ytHandle];
+    const idParams = { username, xHandle: xhandle, platform, channel, blazeHandle, arenaHandle, ytHandle };
     const tx = await nftContract.mintGenesis(role, idParams, { value: price });
     setTxStatus('tx-genesis', '⏳ Transaction pending...', 'pending');
     showTxClapper('Confirming on Avalanche…');
@@ -430,7 +430,7 @@ async function mintEarlyAccess() {
     showTxClapper('Minting Early Access NFT…');
     const price = await nftContract.EARLY_ACCESS_PRICE();
     // V2 contract: mintEarlyAccess(role, IdentityParams tuple)
-    const idParams = [username, xhandle, platform, channel, blazeHandle, arenaHandle, ytHandle];
+    const idParams = { username, xHandle: xhandle, platform, channel, blazeHandle, arenaHandle, ytHandle };
     const tx = await nftContract.mintEarlyAccess(role, idParams, { value: price });
     setTxStatus('tx-early', '⏳ Transaction pending...', 'pending');
     showTxClapper('Confirming on Avalanche…');
@@ -513,7 +513,8 @@ async function saveProfile() {
   if (!username) { toast('Username required', 'error'); return; }
   try {
     setTxStatus('tx-profile', '⏳ Updating on-chain profile...', 'pending');
-    const tx = await nftContract.updateProfile(username, xhandle, platform);
+    const idParams = { username, xHandle: xhandle, platform, channel, blazeHandle: '', arenaHandle: '', ytHandle: ythandle };
+    const tx = await nftContract.updateProfile(idParams, parseInt(document.getElementById('edit-role')?.value)||1);
     await tx.wait();
     userProfile = { ...userProfile, username, x_handle: xhandle, platform, channel, yt_handle: ythandle };
     await saveProfileToSupabase();
