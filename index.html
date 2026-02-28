@@ -131,6 +131,10 @@ const TREASURY_ABI = [
   "function addGenesisHolder(address wallet)",
   "function distributeToGenesisHolders()",
   "function distributeWeighted()",
+  "function setNFTContract(address a)",
+  "function setEscrowContract(address a)",
+  "function nftContract() view returns (address)",
+  "function escrowContract() view returns (address)",
   "event Distributed(uint256 totalAmount, uint256 perHolder, uint256 holderCount)",
   "event DistributedWeighted(uint256 pot, uint256 totalWeight, uint256 count)",
   "event HolderPaid(address indexed holder, uint256 amount)",
@@ -154,7 +158,20 @@ const MARKETPLACE_ABI = [
   "event Listed(uint256 indexed tokenId, address indexed seller, uint256 price)",
   "event Sold(uint256 indexed tokenId, address indexed seller, address indexed buyer, uint256 price, uint256 fee)",
   "event Equipped(address indexed wallet, uint256 indexed tokenId)",
-  "event Delisted(uint256 indexed tokenId, address indexed seller)"
+  "event Delisted(uint256 indexed tokenId, address indexed seller)",
+  "error NotOwner()",
+  "error NotListed()",
+  "error AlreadyListed()",
+  "error NotTokenOwner()",
+  "error PriceTooLow()",
+  "error InsufficientPayment()",
+  "error TransferFailed()",
+  "error CannotBuyOwn()",
+  "error NoOffer()",
+  "error OfferExpired()",
+  "error NotOfferBuyer()",
+  "error DoNotOwnToken()",
+  "error ZeroAddress()"
 ];
 
 // STATE
@@ -1727,11 +1744,8 @@ async function loadInventory() {
       return;
     }
 
-    // Step 2: Load data + image in parallel (faster)
-    const [d, fetchedImg] = await Promise.all([
-      nftData(nftContract, activeTokenId),
-      mktGetNFTImage(activeTokenId).catch(function() { return null; })
-    ]);
+    // Step 2: Load NFT data — image comes instantly from known tier CID
+    const d      = await nftData(nftContract, activeTokenId);
     const tier       = Number(d.tier);
     const role       = Number(d.role);
     const level      = Number(d.level);
@@ -1746,7 +1760,8 @@ async function loadInventory() {
     const tierLabel  = tier===0?'⭐ Genesis':'🔥 Early Access';
     const tierBadge  = tier===0?'badge-amber':'badge-red';
 
-    let imgUrl = fetchedImg || 'https://ipfs.io/ipfs/bafkreifw3rrlcu3u33rz7qbnvouwkknvxpcs4pff3ro4knkjum4suz57ky';
+    // Use known CID immediately — fast, no extra RPC or fetch
+    const imgUrl = nftImageFromTier(tier);
 
     document.querySelectorAll('.profile-avatar').forEach(av => {
       av.style.backgroundImage = `url(${imgUrl})`;
@@ -2382,17 +2397,38 @@ async function loadAdminPage() {
           <button class="btn btn-ghost btn-sm" onclick="adminToggleMint('early',false)">🔒 Close Early Access Mint</button>
         </div>
       </div>
+      <div style="background:rgba(255,149,0,0.06);border:1px solid rgba(255,149,0,0.2);border-radius:8px;padding:14px;margin-top:12px;">
+        <div style="font-weight:700;color:var(--amber);margin-bottom:10px;">🔗 Contract Setup</div>
+        <div id="admin-contract-status" style="font-size:0.78rem;color:var(--muted);margin-bottom:10px;">Loading contract links…</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-primary btn-sm" onclick="adminSetTreasuryNFT()">🔗 Link NFT → Treasury</button>
+          <button class="btn btn-ghost btn-sm" onclick="adminSetTreasuryEscrow()">🔗 Link Escrow → Treasury</button>
+        </div>
+        <div style="font-size:0.68rem;color:var(--muted);margin-top:8px;">Run these once after deploy. Required for genesis holder registration and weighted distributions.</div>
+      </div>
     </div>
   `;
-  // Load mint status into admin panel
+  // Load mint + contract status
   try {
     const p = await getFujiProvider();
     const roNft = new ethers.Contract(NFT_ADDRESS, NFT_ABI, p);
-    const [gOpen, eOpen] = await Promise.all([roNft.genesisMintOpen(), roNft.earlyAccessOpen()]);
+    const roTreasury = new ethers.Contract(TREASURY_ADDRESS, TREASURY_ABI, p);
+    const [gOpen, eOpen, nftSet, escrowSet] = await Promise.all([
+      roNft.genesisMintOpen().catch(()=>false),
+      roNft.earlyAccessOpen().catch(()=>false),
+      roTreasury.nftContract().catch(()=>null),
+      roTreasury.escrowContract().catch(()=>null),
+    ]);
     const statusEl = document.getElementById('admin-mint-status');
     if (statusEl) statusEl.innerHTML =
       `Genesis: <strong style="color:${gOpen?'var(--success)':'var(--red)'}">${gOpen?'🟢 Open':'🔴 Closed'}</strong> &nbsp;|&nbsp; ` +
       `Early Access: <strong style="color:${eOpen?'var(--success)':'var(--red)'}">${eOpen?'🟢 Open':'🔴 Closed'}</strong>`;
+    const contractEl = document.getElementById('admin-contract-status');
+    const nftLinked = nftSet && nftSet !== '0x0000000000000000000000000000000000000000';
+    const escrowLinked = escrowSet && escrowSet !== '0x0000000000000000000000000000000000000000';
+    if (contractEl) contractEl.innerHTML =
+      `Treasury NFT Contract: <strong style="color:${nftLinked?'var(--success)':'var(--red)'}">${nftLinked?'🟢 Set':'🔴 Not Set'}</strong> &nbsp;|&nbsp; ` +
+      `Treasury Escrow: <strong style="color:${escrowLinked?'var(--success)':'var(--red)'}">${escrowLinked?'🟢 Set':'🔴 Not Set'}</strong>`;
   } catch(e) {}
 }
 
@@ -2403,14 +2439,36 @@ async function adminToggleMint(type, open) {
     const tx = type === 'genesis'
       ? await contract.toggleGenesis(open)
       : await contract.toggleEarlyAccess(open);
-    toast(`Waiting for confirmation…`, 'pending');
+    toast('Waiting for confirmation…', 'pending');
     await tx.wait();
     toast(`${type === 'genesis' ? 'Genesis' : 'Early Access'} minting ${open ? 'opened' : 'closed'}!`, 'success');
     loadAdminPage();
     loadMintStats();
-  } catch(e) {
-    toast(friendlyError(e), 'error');
-  }
+  } catch(e) { toast(friendlyError(e), 'error'); }
+}
+
+async function adminSetTreasuryNFT() {
+  if (!signer) { toast('Connect wallet first', 'error'); return; }
+  try {
+    const treasury = new ethers.Contract(TREASURY_ADDRESS, TREASURY_ABI, signer);
+    const tx = await treasury.setNFTContract(NFT_ADDRESS);
+    toast('Linking NFT contract to Treasury…', 'pending');
+    await tx.wait();
+    toast('✅ NFT contract linked to Treasury! Genesis holders can now register.', 'success');
+    loadAdminPage();
+  } catch(e) { toast(friendlyError(e), 'error'); }
+}
+
+async function adminSetTreasuryEscrow() {
+  if (!signer) { toast('Connect wallet first', 'error'); return; }
+  try {
+    const treasury = new ethers.Contract(TREASURY_ADDRESS, TREASURY_ABI, signer);
+    const tx = await treasury.setEscrowContract(ESCROW_ADDRESS);
+    toast('Linking Escrow to Treasury…', 'pending');
+    await tx.wait();
+    toast('✅ Escrow linked to Treasury!', 'success');
+    loadAdminPage();
+  } catch(e) { toast(friendlyError(e), 'error'); }
 }
 
 async function adminDismissFlag(flagId) {
@@ -2456,14 +2514,15 @@ async function setNFTProfilePicture() {
   try {
     const hasNft = await nftContract.hasNFT(account);
     if (!hasNft) return;
-    const imgUrl = 'https://ipfs.io/ipfs/bafkreifw3rrlcu3u33rz7qbnvouwkknvxpcs4pff3ro4knkjum4suz57ky';
+    // Get tier instantly from contract, use known CID — no tokenURI fetch needed
+    const tier   = await nftContract.getTier(account).catch(() => 1);
+    const imgUrl = nftImageFromTier(tier);
     document.querySelectorAll('.profile-avatar').forEach(av => {
       av.style.backgroundImage = `url(${imgUrl})`;
       av.style.backgroundSize = 'cover';
       av.style.backgroundPosition = 'center';
       av.textContent = '';
     });
-    // Also set nav avatar if present
     const navAvatar = document.getElementById('nav-avatar');
     if (navAvatar) { navAvatar.style.backgroundImage = `url(${imgUrl})`; navAvatar.style.backgroundSize = 'cover'; navAvatar.style.backgroundPosition = 'center'; navAvatar.textContent = ''; }
   } catch(e) {}
@@ -2482,25 +2541,54 @@ let mktTotalListings  = 0;
 let mktPage           = 0;
 const MKT_PAGE_SIZE   = 12;
 
-// Fetch NFT image from tokenURI — returns img URL or null
+// Known CIDs from contract — use as instant fallback (no RPC call needed)
+const GENESIS_IMG      = 'https://ipfs.io/ipfs/bafkreia2i6pb4yygkyhlj3gtpnwbj3t6coo6vqgvnc2w4qnvatulsy77lu';
+const EARLY_ACCESS_IMG = 'https://ipfs.io/ipfs/bafybeia2rto5ph6zlrhtmhbbdpnuhaztycxq2ycezo3l2vxfjhx6mw2cmu';
+
+// Image cache: tokenId -> { img, tier }
+const _imgCache = {};
+
+// Fast image fetch — decodes inline base64 tokenURI, no extra fetch needed
 async function mktGetNFTImage(tokenId) {
+  const id = Number(tokenId);
+  if (_imgCache[id]) return _imgCache[id];
   try {
     const roProvider = await getFujiProvider();
     const roNft = new ethers.Contract(NFT_ADDRESS, NFT_ABI, roProvider);
-    const uri = await roNft.tokenURI(tokenId);
+    const uri = await roNft.tokenURI(id);
     if (!uri) return null;
-    // Handle IPFS URIs
-    const httpUri = uri.startsWith('ipfs://')
-      ? 'https://ipfs.io/ipfs/' + uri.slice(7)
-      : uri;
-    // Fetch metadata JSON
-    const res = await fetch(httpUri);
-    if (!res.ok) return null;
-    const meta = await res.json();
-    let img = meta.image || meta.image_url || null;
+
+    let img = null;
+
+    if (uri.startsWith('data:application/json;base64,')) {
+      // Inline base64 JSON — decode directly, no fetch needed
+      const json = JSON.parse(atob(uri.slice('data:application/json;base64,'.length)));
+      img = json.image || json.image_url || null;
+    } else if (uri.startsWith('data:application/json,')) {
+      const json = JSON.parse(decodeURIComponent(uri.slice('data:application/json,'.length)));
+      img = json.image || json.image_url || null;
+    } else if (uri.startsWith('ipfs://')) {
+      // Fetch from IPFS gateway
+      const res = await fetch('https://ipfs.io/ipfs/' + uri.slice(7));
+      if (res.ok) { const meta = await res.json(); img = meta.image || meta.image_url || null; }
+    } else if (uri.startsWith('http')) {
+      const res = await fetch(uri);
+      if (res.ok) { const meta = await res.json(); img = meta.image || meta.image_url || null; }
+    }
+
+    // Convert ipfs:// image URIs to HTTPS gateway
     if (img && img.startsWith('ipfs://')) img = 'https://ipfs.io/ipfs/' + img.slice(7);
+
+    _imgCache[id] = img;
     return img;
-  } catch(e) { return null; }
+  } catch(e) {
+    return null;
+  }
+}
+
+// Get image instantly from known tier (no RPC call) — use when tier is already known
+function nftImageFromTier(tier) {
+  return Number(tier) === 0 ? GENESIS_IMG : EARLY_ACCESS_IMG;
 }
 
 async function loadMarketplace() {
@@ -2572,9 +2660,9 @@ async function mktLoadBrowse(page = 0) {
 
     // Enrich with NFT data + images in parallel
     const cards = await Promise.all(result.map(async (l, i) => {
-      let nftData = null, nftImage = null;
-      try { nftData = await nftData(nftContract, l.tokenId); } catch(e) {}
-      try { nftImage = await mktGetNFTImage(Number(l.tokenId)); } catch(e) {}
+      let tokenInfo = null, nftImage = null;
+      try { tokenInfo = await nftData(nftContract, l.tokenId); } catch(e) {}
+      nftImage = tokenInfo ? nftImageFromTier(tokenInfo.tier) : GENESIS_IMG;
       return mktBuildCard(l, tokenInfo, i, nftImage);
     }));
 
@@ -3084,7 +3172,7 @@ function mktFilterCards(query) {
 }
 
 
-const exposed = { connectWallet,disconnectWallet,showPage,switchTab,openModal,closeModal,selectRole,onboardNext,finishOnboarding,mintGenesis,mintEarlyAccess,saveProfile,postBounty,submitClip,voteOnClip,pickWinner,resolveVote,filterBounties,openBountyDetail,setMobileActive,loadInventory,openSubDetail,openHostProfile,openClipperProfile,openStreamViewer,addPendingWinner,removePendingWinner,confirmMultiWinners,confirmSingleWinner,postComment,openEditBounty,copyReferralLink,shareReferralLink,loadReferrals,loadRewardsPage,registerAsGenesisHolder,flagContent,adminDismissFlag,adminActionFlag,adminBanUser,adminForcePause,adminExportData,adminToggleMint,loadAdminPage,toggleMobileDrawer,closeMobileDrawer,loadClipFeed,loadStreamerDashboard,loadMarketplace,mktListNFT,mktDelistNFT,mktBuyNFT,mktUpdatePrice,mktEquipToken,mktUnequipToken,mktShowListModal,mktShowUpdateModal,mktSwitchTab,mktEquipFromInventory };
+const exposed = { connectWallet,disconnectWallet,showPage,switchTab,openModal,closeModal,selectRole,onboardNext,finishOnboarding,mintGenesis,mintEarlyAccess,saveProfile,postBounty,submitClip,voteOnClip,pickWinner,resolveVote,filterBounties,openBountyDetail,setMobileActive,loadInventory,openSubDetail,openHostProfile,openClipperProfile,openStreamViewer,addPendingWinner,removePendingWinner,confirmMultiWinners,confirmSingleWinner,postComment,openEditBounty,copyReferralLink,shareReferralLink,loadReferrals,loadRewardsPage,registerAsGenesisHolder,flagContent,adminDismissFlag,adminActionFlag,adminBanUser,adminForcePause,adminExportData,adminToggleMint,adminSetTreasuryNFT,adminSetTreasuryEscrow,loadAdminPage,toggleMobileDrawer,closeMobileDrawer,loadClipFeed,loadStreamerDashboard,loadMarketplace,mktListNFT,mktDelistNFT,mktBuyNFT,mktUpdatePrice,mktEquipToken,mktUnequipToken,mktShowListModal,mktShowUpdateModal,mktSwitchTab,mktEquipFromInventory };
 Object.assign(window, exposed);
 
 // INIT
