@@ -380,8 +380,13 @@ async function mintGenesis() {
     setTxStatus('tx-genesis', '⏳ Minting Genesis NFT...', 'pending');
     showTxClapper('Minting Genesis NFT…');
     const price = await nftContract.GENESIS_PRICE();
-    // V2 contract: mintGenesis(role, IdentityParams tuple)
     const idParams = { username, xHandle: xhandle, platform, channel, blazeHandle, arenaHandle, ytHandle };
+    // Dry-run first to get a clear revert reason if it would fail
+    try {
+      await nftContract.mintGenesis.staticCall(role, idParams, { value: price });
+    } catch(simErr) {
+      throw new Error(simErr.reason || simErr.message || 'Transaction would revert');
+    }
     const tx = await nftContract.mintGenesis(role, idParams, { value: price });
     setTxStatus('tx-genesis', '⏳ Transaction pending...', 'pending');
     showTxClapper('Confirming on Avalanche…');
@@ -429,8 +434,13 @@ async function mintEarlyAccess() {
     setTxStatus('tx-early', '⏳ Minting Early Access NFT...', 'pending');
     showTxClapper('Minting Early Access NFT…');
     const price = await nftContract.EARLY_ACCESS_PRICE();
-    // V2 contract: mintEarlyAccess(role, IdentityParams tuple)
     const idParams = { username, xHandle: xhandle, platform, channel, blazeHandle, arenaHandle, ytHandle };
+    // Dry-run first to surface revert reason clearly
+    try {
+      await nftContract.mintEarlyAccess.staticCall(role, idParams, { value: price });
+    } catch(simErr) {
+      throw new Error(simErr.reason || simErr.message || 'Transaction would revert');
+    }
     const tx = await nftContract.mintEarlyAccess(role, idParams, { value: price });
     setTxStatus('tx-early', '⏳ Transaction pending...', 'pending');
     showTxClapper('Confirming on Avalanche…');
@@ -1557,7 +1567,13 @@ document.addEventListener('click', e => {
 
 // FRIENDLY ERROR MESSAGES
 function friendlyError(e) {
-  const raw = (e.reason || e.message || '').toLowerCase();
+  // First try to surface the actual on-chain revert reason
+  const reason = e.reason || e.data?.message || e.error?.message || '';
+  const raw = (reason || e.message || '').toLowerCase();
+
+  if (raw.includes('user rejected') || raw.includes('user denied') || raw.includes('cancelled')) return '❌ Transaction cancelled.';
+  if (raw.includes('already has nft') || raw.includes('already minted') || raw.includes('already owns')) return '❌ This wallet already has a ClipDAO NFT.';
+  if (raw.includes('genesis sold out') || raw.includes('max supply') || raw.includes('sold out')) return '❌ Genesis NFTs are sold out!';
   if (raw.includes('insufficient funds') || raw.includes('have 0 want') || raw.includes('insufficient balance')) {
     const match = raw.match(/want\s+([\d]+)/);
     if (match) {
@@ -1566,17 +1582,22 @@ function friendlyError(e) {
     }
     return '❌ Not enough AVAX in your wallet. Get free test AVAX at faucet.avax.network';
   }
-  if (raw.includes('user rejected') || raw.includes('user denied')) return '❌ Transaction cancelled.';
   if (raw.includes('nonce')) return '❌ Transaction error. Please refresh and try again.';
-  if (raw.includes('already has nft') || raw.includes('already minted')) return '❌ This wallet already has a ClipDAO NFT.';
-  if (raw.includes('genesis sold out') || raw.includes('max supply')) return '❌ Genesis NFTs are sold out!';
   if (raw.includes('bounty not open') || raw.includes('not active')) return '❌ This bounty is no longer open.';
   if (raw.includes('already voted')) return '❌ You already voted on this bounty.';
   if (raw.includes('own bounty') || raw.includes('streamer cannot')) return '❌ You cannot submit to your own bounty.';
-  if (raw.includes('gas')) return '❌ Gas estimation failed. Check your AVAX balance at faucet.avax.network';
-  if (raw.includes('missing or invalid parameters')) return '❌ Transaction failed. You may not have enough AVAX. Get test AVAX at faucet.avax.network';
-  // Truncate long raw errors
-  const short = (e.reason || e.message || 'Unknown error').slice(0, 120);
+  if (raw.includes('paused')) return '❌ Contract is paused. Please try again later.';
+  if (raw.includes('username taken') || raw.includes('already taken')) return '❌ That username is already taken.';
+
+  // Gas estimation failure = transaction would revert — show the real reason
+  if (raw.includes('gas') || raw.includes('cannot estimate') || raw.includes('execution reverted')) {
+    const realReason = reason || e.message || '';
+    if (realReason && realReason.length > 10) return '❌ Transaction would fail: ' + realReason.slice(0, 200);
+    return '❌ Transaction would fail on-chain. Check contract state or try again.';
+  }
+
+  // Show the raw error — always better than hiding it
+  const short = (reason || e.message || 'Unknown error').slice(0, 200);
   return '❌ ' + short;
 }
 
