@@ -110,6 +110,8 @@ const ESCROW_ABI = [
   "function getOpenBounties() view returns (uint256[])",
   "function totalBounties() view returns (uint256)",
   "function hasVoted(uint256, address) view returns (bool)",
+  "function setNFTContract(address a)",
+  "function nftContract() view returns (address)",
   "event BountyPosted(uint256 indexed bountyId, address indexed streamer, uint256 reward, uint8 mode)",
   "event ClipSubmitted(uint256 indexed bountyId, uint256 submissionId, address indexed clipper, string link)",
   "event Voted(uint256 indexed bountyId, uint256 indexed submissionId, address indexed voter, uint256 weight)",
@@ -376,7 +378,7 @@ async function nftDataBatchFast(tokenIds) {
 async function loadUserData() {
   try {
     if (db) {
-      const { data } = await db.from('profiles').select('*').eq('wallet', account.toLowerCase()).single();
+      const { data } = await db.from('profiles').select('*').eq('wallet', account.toLowerCase()).maybeSingle();
       if (data) { userProfile = data; updateProfileUI(); await checkAndShowDashboard(); return; }
     }
     const hasNft = await nftContract.hasNFT(account);
@@ -575,7 +577,7 @@ async function creditReferral() {
 
     // Check if already credited — prevent double counting
     const { data: alreadyCredited } = await db.from('referral_clicks')
-      .select('minted').eq('wallet', account.toLowerCase()).maybeSingle();
+      .select('minted,referred_by').eq('wallet', account.toLowerCase()).maybeSingle();
     if (alreadyCredited && alreadyCredited.minted) {
       console.log('Referral already credited for this wallet, skipping.');
       return;
@@ -1509,22 +1511,10 @@ async function postBounty() {
   const note       = document.getElementById('post-note').value.trim();
   if (!title || !desc || !reward) { toast('Fill in title, description and reward', 'error'); return; }
   if (parseFloat(reward) < 0.1) { toast('Minimum bounty reward is 0.1 AVAX', 'error'); return; }
-  // Check NFT + identity confirmation
+  // Quick local NFT check before hitting the contract
   try {
     const hasNft = await nftContract.hasNFT(account);
-    if (!hasNft) {
-      toast('You need a ClipDAO NFT to post bounties. Mint one first.', 'error'); showPage('mint'); return;
-    }
-    // Check identity is confirmed (required by contract)
-    const tokenId = await nftContract.walletToToken(account);
-    if (tokenId && Number(tokenId) > 0) {
-      const confirmed = await nftContract.isIdentityConfirmed(Number(tokenId));
-      if (!confirmed) {
-        toast('❌ Your NFT identity must be confirmed before posting bounties. Go to Profile → Confirm Identity.', 'error');
-        showPage('dashboard');
-        return;
-      }
-    }
+    if (!hasNft) { toast('You need a ClipDAO NFT to post bounties. Mint one first.', 'error'); showPage('mint'); return; }
   } catch(e) {}
   const streamTime       = document.getElementById('post-stream-time').value.trim();
   const allowedPlatforms = document.getElementById('post-allowed-platforms').value;
@@ -1736,7 +1726,7 @@ function friendlyError(e) {
   if (errName === 'IdentityNotConfirmed' || raw.includes('identitynotconfirmed') || raw.includes('identity not confirmed'))
     return '❌ Your NFT identity isn\'t confirmed yet. Go to Profile → confirm your identity on-chain first.';
   if (errName === 'NeedNFT' || raw.includes('neednft'))
-    return '❌ You need a ClipDAO NFT to do this. Mint one first.';
+    return '❌ The escrow contract doesn\'t recognize your NFT. Go to Admin → Contract Setup → click "Link NFT → Escrow".';
   if (errName === 'NothingEquipped' || raw.includes('nothingequipped'))
     return '❌ No NFT is currently equipped. Equip an NFT first from your inventory or marketplace.';
   if (errName === 'DoNotOwnToken' || raw.includes('donotowntoken'))
@@ -1969,10 +1959,12 @@ async function loadInventory() {
 
 // Quick equip from inventory tab — then reload inventory
 async function mktEquipFromInventory(tokenId) {
-  if (!marketplaceContract) { toast('Connect wallet','error'); return; }
+  if (!nftContract) { toast('Connect wallet','error'); return; }
   try {
     showTxClapper('Equipping NFT #' + tokenId + '…');
-    const tx = await marketplaceContract.equipToken(tokenId);
+    // Call NFT contract directly — marketplace.equipToken delegates back to NFT
+    // with msg.sender=marketplace, which breaks the owns() check
+    const tx = await nftContract.equipToken(tokenId);
     await tx.wait();
     hideTxClapper();
     mktEquippedId = tokenId;
@@ -2036,14 +2028,7 @@ async function loadReferrals() {
       }
     } catch(e) {}
   }
-  // Load my referral count from DB
-  if (account && db) {
-    try {
-      const { data: myClicks } = await db.from('referral_clicks').select('wallet').eq('referred_by', account.toLowerCase()).eq('minted', true);
-      const countEl = document.getElementById('ref-count');
-      if (countEl) countEl.textContent = myClicks?.length || 0;
-    } catch(e) {}
-  }
+  // My referral count is set by the on-chain leaderboard scan below (ref-count element updated there)
 
   // Scan ReferralPaid events on-chain for real AVAX earned figure
   if (account) {
@@ -2073,31 +2058,63 @@ async function loadReferrals() {
     const pendingEl = document.getElementById('ref-pending');
     if (pendingEl) { pendingEl.textContent = 'Instant'; pendingEl.style.fontSize = '1.1rem'; }
   }
-  // Load leaderboard from referral_clicks (count minted=true per referrer)
+
+  // Load leaderboard from on-chain ReferralPaid events (source of truth — always accurate)
   try {
     const el = document.getElementById('ref-leaderboard');
     if (!el) return;
-    const { data: clicks, error } = await db.from('referral_clicks')
-      .select('referred_by')
-      .eq('minted', true);
-    if (error || !clicks || clicks.length === 0) {
-      el.innerHTML = '<div class="empty-state" style="padding:20px;"><p>No referrals yet — be the first!</p></div>';
-      return;
+    el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:0.8rem;">⛓ Reading referral data from chain…</div>';
+
+    const provider = await getFujiProvider();
+    const iface    = new ethers.Interface(NFT_ABI);
+    const topic    = ethers.id('ReferralPaid(address,address,uint256)');
+    const curBlock = await provider.getBlockNumber();
+    const startBlock = Math.max(0, curBlock - 100000);
+    const chunkSize  = 2000;
+
+    // referrerAddr -> { count, totalAvax }
+    const referrerMap = {};
+
+    // Fire all log chunks in parallel
+    const chunks = [];
+    for (let s = startBlock; s < curBlock; s += chunkSize) {
+      chunks.push({ s, e: Math.min(s + chunkSize - 1, curBlock) });
     }
-    const counts = {};
-    clicks.forEach(c => { if (c.referred_by) counts[c.referred_by] = (counts[c.referred_by]||0)+1; });
-    const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,10);
-    el.innerHTML = sorted.map(([w,c],i)=>`
-          <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
-            <div style="font-family:var(--font-display);font-size:1.2rem;color:${i===0?'var(--amber)':i===1?'#C0C0C0':i===2?'#cd7f32':'var(--border)'};width:24px;text-align:center;">${i+1}</div>
-            <div style="flex:1;font-family:var(--font-mono);font-size:0.8rem;">${w.slice(0,16)}…</div>
-            <div style="font-family:var(--font-display);color:var(--orange);">${c} ref${c!==1?'s':''}</div>
-            ${account&&w===account.toLowerCase()?'<span class="badge badge-green">YOU</span>':''}
-          </div>`).join('');
+    await Promise.all(chunks.map(async ({ s, e }) => {
+      try {
+        const logs = await provider.getLogs({ address: NFT_ADDRESS, topics: [topic], fromBlock: s, toBlock: e });
+        for (const log of logs) {
+          try {
+            const p = iface.parseLog(log);
+            const ref = p.args[0].toLowerCase(); // referrer
+            if (!referrerMap[ref]) referrerMap[ref] = { count: 0, avax: 0n };
+            referrerMap[ref].count++;
+            referrerMap[ref].avax += BigInt(p.args[2].toString());
+          } catch(e2) {}
+        }
+      } catch(e3) {}
+    }));
+
+    const sorted = Object.entries(referrerMap).sort((a,b) => b[1].count - a[1].count).slice(0, 10);
+
+    if (sorted.length === 0) {
+      el.innerHTML = '<div class="empty-state" style="padding:20px;"><p>No referrals yet — be the first!</p></div>';
+    } else {
+      el.innerHTML = sorted.map(([w, d], i) => `
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
+          <div style="font-family:var(--font-display);font-size:1.2rem;color:${i===0?'var(--amber)':i===1?'#C0C0C0':i===2?'#cd7f32':'var(--border)'};width:24px;text-align:center;">${i+1}</div>
+          <div style="flex:1;font-family:var(--font-mono);font-size:0.8rem;">${w.slice(0,16)}…</div>
+          <div style="font-family:var(--font-display);color:var(--orange);">${d.count} ref${d.count!==1?'s':''}</div>
+          <div style="font-size:0.72rem;color:var(--muted);">${parseFloat(ethers.formatEther(d.avax)).toFixed(3)} AVAX</div>
+          ${account&&w===account.toLowerCase()?'<span class="badge badge-green">YOU</span>':''}
+        </div>`).join('');
+    }
+
+    // Update my count from chain data too
     if (account) {
-      const myCount = counts[account.toLowerCase()]||0;
+      const myData  = referrerMap[account.toLowerCase()];
       const countEl = document.getElementById('ref-count');
-      if (countEl) countEl.textContent = myCount;
+      if (countEl) countEl.textContent = myData?.count || 0;
     }
   } catch(e) { console.warn('referral leaderboard failed', e); }
 }
@@ -2498,32 +2515,38 @@ async function loadAdminPage() {
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn btn-primary btn-sm" onclick="adminSetTreasuryNFT()">🔗 Link NFT → Treasury</button>
           <button class="btn btn-ghost btn-sm" onclick="adminSetTreasuryEscrow()">🔗 Link Escrow → Treasury</button>
+          <button class="btn btn-primary btn-sm" onclick="adminSetEscrowNFT()">🔗 Link NFT → Escrow</button>
         </div>
-        <div style="font-size:0.68rem;color:var(--muted);margin-top:8px;">Run these once after deploy. Required for genesis holder registration and weighted distributions.</div>
+        <div style="font-size:0.68rem;color:var(--muted);margin-top:8px;">⚠️ "Link NFT → Escrow" is required for postBounty, submitClip, and voting to work. Run all three once after deploy.</div>
       </div>
     </div>
   `;
   // Load mint + contract status
   try {
     const p = await getFujiProvider();
-    const roNft = new ethers.Contract(NFT_ADDRESS, NFT_ABI, p);
+    const roNft      = new ethers.Contract(NFT_ADDRESS, NFT_ABI, p);
     const roTreasury = new ethers.Contract(TREASURY_ADDRESS, TREASURY_ABI, p);
-    const [gOpen, eOpen, nftSet, escrowSet] = await Promise.all([
+    const roEscrow   = new ethers.Contract(ESCROW_ADDRESS, ESCROW_ABI, p);
+    const [gOpen, eOpen, tNftSet, tEscrowSet, eNftSet] = await Promise.all([
       roNft.genesisMintOpen().catch(()=>false),
       roNft.earlyAccessOpen().catch(()=>false),
       roTreasury.nftContract().catch(()=>null),
       roTreasury.escrowContract().catch(()=>null),
+      roEscrow.nftContract().catch(()=>null),
     ]);
+    const ZERO = '0x0000000000000000000000000000000000000000';
+    const ok = a => a && a !== ZERO;
     const statusEl = document.getElementById('admin-mint-status');
     if (statusEl) statusEl.innerHTML =
       `Genesis: <strong style="color:${gOpen?'var(--success)':'var(--red)'}">${gOpen?'🟢 Open':'🔴 Closed'}</strong> &nbsp;|&nbsp; ` +
       `Early Access: <strong style="color:${eOpen?'var(--success)':'var(--red)'}">${eOpen?'🟢 Open':'🔴 Closed'}</strong>`;
     const contractEl = document.getElementById('admin-contract-status');
-    const nftLinked = nftSet && nftSet !== '0x0000000000000000000000000000000000000000';
-    const escrowLinked = escrowSet && escrowSet !== '0x0000000000000000000000000000000000000000';
-    if (contractEl) contractEl.innerHTML =
-      `Treasury NFT Contract: <strong style="color:${nftLinked?'var(--success)':'var(--red)'}">${nftLinked?'🟢 Set':'🔴 Not Set'}</strong> &nbsp;|&nbsp; ` +
-      `Treasury Escrow: <strong style="color:${escrowLinked?'var(--success)':'var(--red)'}">${escrowLinked?'🟢 Set':'🔴 Not Set'}</strong>`;
+    const escrowNftMatch = eNftSet && eNftSet.toLowerCase() === NFT_ADDRESS.toLowerCase();
+    if (contractEl) contractEl.innerHTML = [
+      `Treasury↔NFT: <strong style="color:${ok(tNftSet)?'var(--success)':'var(--red)'}">${ok(tNftSet)?'🟢':'🔴'}</strong>`,
+      `Treasury↔Escrow: <strong style="color:${ok(tEscrowSet)?'var(--success)':'var(--red)'}">${ok(tEscrowSet)?'🟢':'🔴'}</strong>`,
+      `Escrow↔NFT: <strong style="color:${escrowNftMatch?'var(--success)':'var(--red)'}">${escrowNftMatch?'🟢 Correct':'🔴 Wrong/Not Set'}</strong>`,
+    ].join(' &nbsp;|&nbsp; ');
   } catch(e) {}
 }
 
@@ -2562,6 +2585,18 @@ async function adminSetTreasuryEscrow() {
     toast('Linking Escrow to Treasury…', 'pending');
     await tx.wait();
     toast('✅ Escrow linked to Treasury!', 'success');
+    loadAdminPage();
+  } catch(e) { toast(friendlyError(e), 'error'); }
+}
+
+async function adminSetEscrowNFT() {
+  if (!signer) { toast('Connect wallet first', 'error'); return; }
+  try {
+    const escrow = new ethers.Contract(ESCROW_ADDRESS, ESCROW_ABI, signer);
+    const tx = await escrow.setNFTContract(NFT_ADDRESS);
+    toast('Linking NFT contract to Escrow…', 'pending');
+    await tx.wait();
+    toast('✅ NFT linked to Escrow! postBounty, submitClip and voting now work.', 'success');
     loadAdminPage();
   } catch(e) { toast(friendlyError(e), 'error'); }
 }
@@ -2868,67 +2903,57 @@ function mktBuildCard(listing, nftData, idx, nftImage) {
 }
 
 // ---- MY NFTs ----
-// Scan Transfer events to build accurate list of tokens currently owned by wallet.
-// This correctly handles: bought NFTs, sold NFTs, gifted NFTs.
+// Get owned token IDs — uses getOwnedTokens() view (single RPC call, instant)
+// Falls back to Transfer event scan only if the view call fails
 async function mktGetOwnedTokenIds(wallet) {
-  const ro = await getFujiProvider();
-  const roNft = new ethers.Contract(NFT_ADDRESS, NFT_ABI, ro);
-  const walletLower = wallet.toLowerCase();
+  const ro = await _getRONft();
+  try {
+    // Single view call — returns all owned tokenIds instantly
+    const owned = await ro.getOwnedTokens(wallet);
+    return owned.map(id => Number(id));
+  } catch(e) {
+    console.warn('getOwnedTokens failed, falling back to event scan:', e.message);
+    // Fallback: Transfer event scan (slower but works if view fails)
+    return mktGetOwnedTokenIdsScan(wallet);
+  }
+}
 
-  // ERC721 Transfer event topic
+// Fallback: Transfer event scan (only used if getOwnedTokens view fails)
+async function mktGetOwnedTokenIdsScan(wallet) {
+  const ro = await getFujiProvider();
+  const walletLower = wallet.toLowerCase();
   const transferTopic = ethers.id('Transfer(address,address,uint256)');
   const currentBlock = await ro.getBlockNumber();
-
-  // Scan in 2000-block chunks from genesis up to now
-  // We'll do up to 25 chunks (covers ~50k blocks = well past any testnet deployment)
   const chunkSize = 2000;
   const maxChunks = 25;
   const startBlock = Math.max(0, currentBlock - (chunkSize * maxChunks));
-
-  const received = new Set(); // tokenIds transferred TO wallet
-  const sent     = new Set(); // tokenIds transferred FROM wallet
-
+  const received = new Set();
+  const sent = new Set();
+  // Fire all chunks in parallel instead of sequentially
+  const chunks = [];
   for (let from = startBlock; from < currentBlock; from += chunkSize) {
-    const to = Math.min(from + chunkSize - 1, currentBlock);
-    try {
-      // Tokens received by wallet
-      const inLogs = await ro.getLogs({
-        address: NFT_ADDRESS,
-        topics: [transferTopic, null, ethers.zeroPadValue(walletLower, 32)],
-        fromBlock: from,
-        toBlock: to
-      });
-      inLogs.forEach(log => {
-        const tokenId = Number(ethers.toBigInt(log.topics[3]));
-        received.add(tokenId);
-      });
-      // Tokens sent from wallet
-      const outLogs = await ro.getLogs({
-        address: NFT_ADDRESS,
-        topics: [transferTopic, ethers.zeroPadValue(walletLower, 32), null],
-        fromBlock: from,
-        toBlock: to
-      });
-      outLogs.forEach(log => {
-        const tokenId = Number(ethers.toBigInt(log.topics[3]));
-        sent.add(tokenId);
-      });
-    } catch(e) { /* skip failed chunk */ }
+    chunks.push({ from, to: Math.min(from + chunkSize - 1, currentBlock) });
   }
-
-  // Owned = received minus sent
+  await Promise.all(chunks.map(async ({ from, to }) => {
+    try {
+      const [inLogs, outLogs] = await Promise.all([
+        ro.getLogs({ address: NFT_ADDRESS, topics: [transferTopic, null, ethers.zeroPadValue(walletLower, 32)], fromBlock: from, toBlock: to }),
+        ro.getLogs({ address: NFT_ADDRESS, topics: [transferTopic, ethers.zeroPadValue(walletLower, 32), null], fromBlock: from, toBlock: to }),
+      ]);
+      inLogs.forEach(log => received.add(Number(ethers.toBigInt(log.topics[3]))));
+      outLogs.forEach(log => sent.add(Number(ethers.toBigInt(log.topics[3]))));
+    } catch(e) {}
+  }));
   const candidates = [...received].filter(id => !sent.has(id));
-
-  // Verify current ownership on-chain (source of truth)
   const owned = [];
+  const roNft = new ethers.Contract(NFT_ADDRESS, NFT_ABI, ro);
   await Promise.all(candidates.map(async (tid) => {
     try {
       const owner = await roNft.ownerOf(tid);
       if (owner.toLowerCase() === walletLower) owned.push(tid);
     } catch(e) {}
   }));
-
-  return owned.sort((a,b) => a - b);
+  return owned.sort((a, b) => a - b);
 }
 
 async function mktLoadMyNFTs() {
@@ -3183,14 +3208,14 @@ async function mktUpdatePrice(tokenId, newPrice) {
 async function mktEquipToken(tokenId) {
   try {
     showTxClapper('Equipping NFT #' + tokenId + '…');
-    const tx = await marketplaceContract.equipToken(tokenId);
+    // Call NFT contract directly — marketplace proxy breaks msg.sender chain
+    const tx = await nftContract.equipToken(tokenId);
     await tx.wait();
     hideTxClapper();
     mktEquippedId = tokenId;
     toast('⚡ NFT #' + tokenId + ' equipped as your active identity!', 'success');
     await mktLoadEquipped();
     mktSwitchTab('my-nfts');
-    // Update profile picture everywhere
     await setNFTProfilePicture();
   } catch(e) {
     hideTxClapper();
@@ -3201,7 +3226,9 @@ async function mktEquipToken(tokenId) {
 async function mktUnequipToken() {
   try {
     showTxClapper('Unequipping…');
-    const tx = await marketplaceContract.unequipToken();
+    // Call NFT contract directly — marketplace.unequipToken() uses msg.sender=marketplace
+    // which means it checks hasEquipped[marketplace] not hasEquipped[user]
+    const tx = await nftContract.unequipToken();
     await tx.wait();
     hideTxClapper();
     mktEquippedId = 0;
@@ -3268,7 +3295,7 @@ function mktFilterCards(query) {
 }
 
 
-const exposed = { connectWallet,disconnectWallet,showPage,switchTab,openModal,closeModal,selectRole,onboardNext,finishOnboarding,mintGenesis,mintEarlyAccess,saveProfile,postBounty,submitClip,voteOnClip,pickWinner,resolveVote,filterBounties,openBountyDetail,setMobileActive,loadInventory,openSubDetail,openHostProfile,openClipperProfile,openStreamViewer,addPendingWinner,removePendingWinner,confirmMultiWinners,confirmSingleWinner,postComment,openEditBounty,copyReferralLink,shareReferralLink,loadReferrals,loadRewardsPage,registerAsGenesisHolder,flagContent,adminDismissFlag,adminActionFlag,adminBanUser,adminForcePause,adminExportData,adminToggleMint,adminSetTreasuryNFT,adminSetTreasuryEscrow,loadAdminPage,toggleMobileDrawer,closeMobileDrawer,loadClipFeed,loadStreamerDashboard,loadMarketplace,mktListNFT,mktDelistNFT,mktBuyNFT,mktUpdatePrice,mktEquipToken,mktUnequipToken,mktShowListModal,mktShowUpdateModal,mktSwitchTab,mktEquipFromInventory };
+const exposed = { connectWallet,disconnectWallet,showPage,switchTab,openModal,closeModal,selectRole,onboardNext,finishOnboarding,mintGenesis,mintEarlyAccess,saveProfile,postBounty,submitClip,voteOnClip,pickWinner,resolveVote,filterBounties,openBountyDetail,setMobileActive,loadInventory,openSubDetail,openHostProfile,openClipperProfile,openStreamViewer,addPendingWinner,removePendingWinner,confirmMultiWinners,confirmSingleWinner,postComment,openEditBounty,copyReferralLink,shareReferralLink,loadReferrals,loadRewardsPage,registerAsGenesisHolder,flagContent,adminDismissFlag,adminActionFlag,adminBanUser,adminForcePause,adminExportData,adminToggleMint,adminSetTreasuryNFT,adminSetTreasuryEscrow,adminSetEscrowNFT,loadAdminPage,toggleMobileDrawer,closeMobileDrawer,loadClipFeed,loadStreamerDashboard,loadMarketplace,mktListNFT,mktDelistNFT,mktBuyNFT,mktUpdatePrice,mktEquipToken,mktUnequipToken,mktShowListModal,mktShowUpdateModal,mktSwitchTab,mktEquipFromInventory };
 Object.assign(window, exposed);
 
 // INIT
