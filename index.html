@@ -590,8 +590,10 @@ async function creditReferral() {
       { wallet: account.toLowerCase(), referred_by: ref, minted: true, created_at: new Date().toISOString() },
       { onConflict: 'wallet' }
     );
-    if (clickErr) console.warn('referral_clicks upsert error:', clickErr);
-    console.log('Referral credited to', ref);
+    if (clickErr) {
+      // Supabase upsert may fail if RLS policy restricts anon inserts — that's OK.
+      // ReferralPaid on-chain is the source of truth; this is just a UI tracking record.
+    }
   } catch(e) { console.warn('Referral credit failed', e); }
 }
 
@@ -720,33 +722,6 @@ async function loadDashboard() {
   if (account && account.toLowerCase() === ADMIN_WALLET) {
     document.getElementById('nav-admin-link').style.display = 'flex';
   }
-  // Check identity confirmation status — show warning banner if not confirmed
-  try {
-    const tokenId = await nftContract.walletToToken(account).catch(() => 0n);
-    if (tokenId && Number(tokenId) > 0) {
-      const confirmed = await nftContract.isIdentityConfirmed(Number(tokenId));
-      if (!confirmed) {
-        // Show banner if not already there
-        const existing = document.getElementById('identity-warning-banner');
-        if (!existing) {
-          const banner = document.createElement('div');
-          banner.id = 'identity-warning-banner';
-          banner.style.cssText = 'background:rgba(255,149,0,0.12);border:1px solid rgba(255,149,0,0.4);border-radius:10px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px;';
-          banner.innerHTML = `
-            <div style="font-size:1.4rem;flex-shrink:0;">⚠️</div>
-            <div style="flex:1;">
-              <div style="font-weight:700;color:var(--amber);margin-bottom:3px;">Identity Not Confirmed</div>
-              <div style="font-size:0.8rem;color:var(--muted);">Your NFT identity must be confirmed on-chain before you can post bounties, submit clips, or vote.</div>
-            </div>
-            <button class="btn btn-orange btn-sm" onclick="showPage('profile')" style="flex-shrink:0;">Confirm Now →</button>
-          `;
-          const pageEl = document.getElementById('page-dashboard');
-          const header = pageEl?.querySelector('.page-header');
-          if (header) header.after(banner);
-        }
-      }
-    }
-  } catch(e) {}
 }
 
 async function loadRecentActivity() {
@@ -889,6 +864,36 @@ function platformBadge(platform) {
   return '';
 }
 
+// Cache of wallet -> NFT img URL so we don't re-fetch on every render
+const _walletAvatarCache = {};
+
+// Inject the equipped NFT image into any element by id or dom node
+async function loadWalletNFTAvatar(wallet, elIdOrNode, size) {
+  if (!wallet || !nftContract) return;
+  const w = wallet.toLowerCase();
+  try {
+    let imgUrl = _walletAvatarCache[w];
+    if (!imgUrl) {
+      const activeId = await nftContract.getActiveToken(w).catch(() => null);
+      const tid = activeId && Number(activeId) > 0 ? Number(activeId) : null;
+      if (tid) {
+        const stats = await nftContract.nftStats(tid).catch(() => null);
+        const tier = stats ? Number(stats.tier) : 2;
+        imgUrl = nftImageFromTier(tier);
+      } else {
+        // no NFT — use gradient placeholder
+        imgUrl = null;
+      }
+      _walletAvatarCache[w] = imgUrl || 'none';
+    }
+    if (imgUrl === 'none') return;
+    const el = typeof elIdOrNode === 'string' ? document.getElementById(elIdOrNode) : elIdOrNode;
+    if (!el) return;
+    const s = size || '100%';
+    el.innerHTML = `<img src="${imgUrl}" style="width:${s};height:${s};object-fit:cover;border-radius:50%;display:block;" onerror="this.style.display='none'"/>`;
+  } catch(e) {}
+}
+
 function bountyCardHTML(b) {
   const now      = Math.floor(Date.now() / 1000);
   const isOpen   = b.status===0 && b.deadline>now;
@@ -898,6 +903,9 @@ function bountyCardHTML(b) {
   const statusBadge = isOpen
     ? '<span class="badge badge-green">OPEN</span>'
     : '<span class="badge badge-muted">CLOSED</span>';
+  const avatarId = `bcard-av-${b.id}`;
+  // Lazy-load NFT avatar after render
+  setTimeout(() => loadWalletNFTAvatar(b.streamer, avatarId), 50);
   return `<div class="bounty-card" onclick="openBountyDetail(${b.id})">
     <div class="bounty-card-top">
       <div style="flex:1;min-width:0;">
@@ -912,7 +920,10 @@ function bountyCardHTML(b) {
     <div class="bounty-meta">
       <div class="bounty-meta-item">⏱ ${timeLeft}</div>
       <div class="bounty-meta-item">🏆 ${b.winnerCount} winner${b.winnerCount>1?'s':''}</div>
-      <div class="bounty-meta-item mono">${b.streamer.slice(0,8)}...</div>
+      <div class="bounty-meta-item" style="display:flex;align-items:center;gap:5px;">
+        <div id="${avatarId}" style="width:18px;height:18px;border-radius:50%;background:linear-gradient(135deg,var(--red),var(--orange));flex-shrink:0;overflow:hidden;"></div>
+        <span class="mono">${b.streamer.slice(0,8)}…</span>
+      </div>
     </div>
   </div>`;
 }
@@ -1042,7 +1053,7 @@ async function openBountyDetail(bountyId) {
         })();
         return `<div class="sub-row ${isWinner?'sub-row-winner':''} ${isPending?'sub-row-pending':''}" onclick="openSubDetail(${bountyId},${i})">
           <div class="sub-row-left">
-            <div class="sub-index">${i+1}</div>
+            <div class="sub-index" id="bd-sub-av-${bountyId}-${i}" style="overflow:hidden;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--red),var(--orange));font-size:0.75rem;font-weight:700;flex-shrink:0;">${i+1}</div>
             <div class="sub-info">
               <div class="sub-badges">
                 ${isWinner?'<span class="badge badge-amber">🏆 Winner</span>':''}
@@ -1238,7 +1249,7 @@ async function openBountyDetail(bountyId) {
 
     <!-- STREAMER + INFO GRID -->
     <div class="streamer-card" onclick="openHostProfile('${b.streamer}')">
-      <div class="streamer-avatar">${hostInitial}</div>
+      <div class="streamer-avatar" id="bd-host-av-${bountyId}" style="overflow:hidden;">${hostInitial}</div>
       <div style="flex:1;min-width:0;">
         <div style="font-weight:700;">${escHtml(hostName)}</div>
         <div style="font-size:0.74rem;color:var(--muted);">${platform} streamer${hostX?' · @'+escHtml(hostX):''}${streamTime?' · 🕐 '+escHtml(streamTime)+' UTC':''}</div>
@@ -1301,6 +1312,12 @@ async function openBountyDetail(bountyId) {
       </div>`:'<div style="font-size:0.8rem;color:var(--muted);text-align:center;margin-top:8px;">Connect wallet to comment</div>'}
     </div>
     `;
+
+    // Inject NFT avatars post-render (non-blocking)
+    setTimeout(() => {
+      loadWalletNFTAvatar(b.streamer, `bd-host-av-${bountyId}`);
+      subs.forEach((s, i) => loadWalletNFTAvatar(s.clipper, `bd-sub-av-${bountyId}-${i}`));
+    }, 60);
 
   } catch(e) {
     document.getElementById('modal-bounty-content').innerHTML = '<div class="empty-state"><p style="color:var(--red);">Failed to load bounty. Please try again.</p></div>';
@@ -2157,7 +2174,11 @@ async function loadReferrals() {
         try {
           const logs = await provider.getLogs({ address: NFT_ADDRESS, topics: [topic, refTopic], fromBlock: s, toBlock: e });
           for (const log of logs) {
-            try { const p = iface.parseLog(log); if (p) totalEarned += BigInt(p.args[2].toString()); } catch(e2) {}
+            try {
+              // ReferralPaid(indexed referrer, indexed minter, uint256 amount)
+              // topics[0]=sig, topics[1]=referrer, topics[2]=minter, data=amount
+              if (log.data && log.data !== '0x') totalEarned += BigInt(log.data);
+            } catch(e2) {}
           }
         } catch(e3) {}
       }
@@ -2181,31 +2202,38 @@ async function loadReferrals() {
     const iface    = new ethers.Interface(NFT_ABI);
     const topic    = ethers.id('ReferralPaid(address,address,uint256)');
     const curBlock = await provider.getBlockNumber();
-    const startBlock = Math.max(0, curBlock - 100000);
+    const startBlock = Math.max(0, curBlock - 200000);
     const chunkSize  = 2000;
 
     // referrerAddr -> { count, totalAvax }
     const referrerMap = {};
 
-    // Fire all log chunks in parallel
+    // Build chunks — batched 10 at a time so Fuji RPC isn't overwhelmed
     const chunks = [];
     for (let s = startBlock; s < curBlock; s += chunkSize) {
       chunks.push({ s, e: Math.min(s + chunkSize - 1, curBlock) });
     }
-    await Promise.all(chunks.map(async ({ s, e }) => {
-      try {
-        const logs = await provider.getLogs({ address: NFT_ADDRESS, topics: [topic], fromBlock: s, toBlock: e });
-        for (const log of logs) {
-          try {
-            const p = iface.parseLog(log);
-            const ref = p.args[0].toLowerCase(); // referrer
-            if (!referrerMap[ref]) referrerMap[ref] = { count: 0, avax: 0n };
-            referrerMap[ref].count++;
-            referrerMap[ref].avax += BigInt(p.args[2].toString());
-          } catch(e2) {}
-        }
-      } catch(e3) {}
-    }));
+    // Process in batches of 10 parallel requests
+    for (let i = 0; i < chunks.length; i += 10) {
+      await Promise.all(chunks.slice(i, i + 10).map(async ({ s, e }) => {
+        try {
+          const logs = await provider.getLogs({ address: NFT_ADDRESS, topics: [topic], fromBlock: s, toBlock: e });
+          for (const log of logs) {
+            try {
+              // ReferralPaid(indexed referrer, indexed minter, amount)
+              // topics[0]=sig, topics[1]=referrer(indexed), topics[2]=minter(indexed), data=amount
+              if (log.topics.length < 3) continue;
+              const ref = ('0x' + log.topics[1].slice(26)).toLowerCase();
+              const avaxAmt = log.data && log.data !== '0x' ? BigInt(log.data) : 0n;
+              if (!ethers.isAddress(ref)) continue;
+              if (!referrerMap[ref]) referrerMap[ref] = { count: 0, avax: 0n };
+              referrerMap[ref].count++;
+              referrerMap[ref].avax += avaxAmt;
+            } catch(e2) {}
+          }
+        } catch(e3) {}
+      }));
+    }
 
     const sorted = Object.entries(referrerMap).sort((a,b) => b[1].count - a[1].count).slice(0, 10);
 
@@ -2238,7 +2266,7 @@ async function storeReferral() {
   if (ref === account.toLowerCase()) return;
   localStorage.setItem('clipdao_ref', ref);
   try {
-    await db.from('referral_clicks').upsert({ wallet: account.toLowerCase(), referred_by: ref, created_at: new Date().toISOString() }, { onConflict: 'wallet' });
+    await db.from('referral_clicks').upsert({ wallet: account.toLowerCase(), referred_by: ref, minted: false, created_at: new Date().toISOString() }, { onConflict: 'wallet' });
   } catch(e) {}
 }
 
@@ -2294,16 +2322,34 @@ async function loadRewardsPage() {
       treasury.isGenesisHolder(account).catch(()=>false)
     ]);
 
-    // Get owned tokens to show stats
+    // Get owned tokens + verify which are currently Genesis (must still hold)
     let ownedTokens = [];
     try { ownedTokens = await nft.getOwnedTokens(account); } catch(e) {}
+    ownedTokens = ownedTokens.map(id => Number(id));
 
-    // Calculate estimated share
-    const balNum      = parseFloat(ethers.formatEther(balance));
-    const holderNum   = parseInt(holderCount.toString()) || 1;
-    const shareNum    = parseInt(shareBps.toString()) / 10000;
-    const pot         = balNum * shareNum;
-    const perHolder   = pot / holderNum;
+    // Batch load NFT data to find current Genesis tokens
+    let genesisTokens = [];
+    let batchData = [];
+    if (ownedTokens.length > 0) {
+      try {
+        batchData = await nftDataBatchFast(ownedTokens);
+        genesisTokens = batchData.filter(d => d && Number(d.tier) === 1);
+      } catch(e) {}
+    }
+
+    // Calculate estimated share based on what they CURRENTLY hold
+    // Weight = level of each Genesis token; if they sold all, share = 0
+    const balNum    = parseFloat(ethers.formatEther(balance));
+    const holderNum = parseInt(holderCount.toString()) || 1;
+    const shareNum  = parseInt(shareBps.toString()) / 10000;
+    const pot       = balNum * shareNum;
+
+    // My weighted share calculation — based on my best Genesis level vs all holders (simplified: equal share)
+    const myGenesisCount = genesisTokens.length;
+    const myBestLevel    = genesisTokens.reduce((max, d) => Math.max(max, Number(d.level) || 1), 0);
+    // If no Genesis held, show 0
+    const myShare = myGenesisCount > 0 ? pot / holderNum : 0;
+    const holdsGenesis = myGenesisCount > 0;
 
     // Next distribution countdown
     const nextSecs  = parseInt(nextIn.toString());
@@ -2316,30 +2362,34 @@ async function loadRewardsPage() {
       ? new Date(parseInt(lastDist.toString()) * 1000).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'})
       : 'Never';
 
-    // Is this wallet registered as a Genesis holder?
-    const registerBtn = !isHolder
-      ? `<button class="btn btn-primary btn-sm" onclick="registerAsGenesisHolder()" style="margin-top:10px;">Register as Genesis Holder</button>
-         <div style="font-size:0.72rem;color:var(--muted);margin-top:4px;">You must register to receive monthly distributions</div>`
-      : `<div style="color:var(--success);font-size:0.82rem;margin-top:8px;">✅ Registered as Genesis holder</div>`;
+    // Is this wallet registered as a Genesis holder AND still holds Genesis?
+    const registerBtn = !holdsGenesis
+      ? `<div style="color:var(--muted);font-size:0.82rem;margin-top:8px;">⚠️ You don't currently hold a Genesis NFT — no share earned until you acquire one.</div>`
+      : !isHolder
+        ? `<button class="btn btn-primary btn-sm" onclick="registerAsGenesisHolder()" style="margin-top:10px;">Register as Genesis Holder</button>
+           <div style="font-size:0.72rem;color:var(--muted);margin-top:4px;">You hold a Genesis NFT — register to receive monthly distributions</div>`
+        : `<div style="color:var(--success);font-size:0.82rem;margin-top:8px;">✅ Registered · ${myGenesisCount} Genesis NFT${myGenesisCount>1?'s':''} held · Lv.${myBestLevel} best</div>`;
 
-    // Build token stats — batch load all tokens at once (fast)
+    // Build token stats — use already-loaded batchData (no extra RPC needed)
     let tokenRows = '';
-    if (ownedTokens.length > 0) {
-      try {
-        const batchData = await nftDataBatchFast(ownedTokens.slice(0, 10));
-        for (const d of batchData) {
-          if (!d) continue;
-          const tierLabel = d.tier === 1 ? '🟡 Genesis' : '🔵 Early Access';
-          tokenRows += `
-            <tr>
-              <td style="font-family:var(--font-mono);color:var(--orange);">#${d.tid}</td>
-              <td>${tierLabel}</td>
-              <td style="font-family:var(--font-display);color:var(--amber);">Lv.${d.level}</td>
-              <td style="color:var(--success);">${d.bountiesWon} wins</td>
-              <td style="color:var(--orange);">${d.username || '—'}</td>
-            </tr>`;
-        }
-      } catch(e) { console.warn('token batch failed', e); }
+    if (batchData.length > 0) {
+      for (const d of batchData) {
+        if (!d) continue;
+        const isGenesis = Number(d.tier) === 1;
+        const tierLabel = isGenesis ? '🟡 Genesis' : '🔵 Early Access';
+        const lvl = Number(d.level) || 1;
+        // Estimated share for this specific Genesis token (others: no share)
+        const tokenShare = isGenesis ? (pot / holderNum).toFixed(4) : '—';
+        const shareStyle = isGenesis ? 'color:var(--success);font-weight:700;' : 'color:var(--muted);font-size:0.75rem;';
+        tokenRows += `
+          <tr>
+            <td style="font-family:var(--font-mono);color:var(--orange);">#${d.tid}</td>
+            <td>${tierLabel}</td>
+            <td style="font-family:var(--font-display);color:var(--amber);">Lv.${lvl}</td>
+            <td style="${shareStyle}">${tokenShare}${isGenesis ? ' AVAX' : ''}</td>
+            <td style="color:var(--muted);font-size:0.78rem;">${d.username || '—'}</td>
+          </tr>`;
+      }
     }
 
     // Scan for HolderPaid events (last 50k blocks in 2k chunks)
@@ -2402,8 +2452,8 @@ async function loadRewardsPage() {
           <div style="font-size:0.68rem;color:var(--muted);text-transform:uppercase;margin-top:2px;">Next Distribution Pool (30%)</div>
         </div>
         <div class="card" style="text-align:center;border-left:3px solid var(--success);">
-          <div style="font-family:var(--font-display);font-size:1.6rem;color:var(--success);">${perHolder.toFixed(4)}</div>
-          <div style="font-size:0.68rem;color:var(--muted);text-transform:uppercase;margin-top:2px;">Est. Your Share (AVAX)</div>
+          <div style="font-family:var(--font-display);font-size:1.6rem;color:${holdsGenesis ? 'var(--success)' : 'var(--muted)'};">${holdsGenesis ? myShare.toFixed(4) : '0.0000'}</div>
+          <div style="font-size:0.68rem;color:var(--muted);text-transform:uppercase;margin-top:2px;">Est. Your Share (AVAX)${!holdsGenesis ? ' — No Genesis held' : ''}</div>
         </div>
         <div class="card" style="text-align:center;border-left:3px solid var(--red);">
           <div style="font-family:var(--font-display);font-size:1.6rem;color:var(--red);">${totalReceived.toFixed(4)}</div>
@@ -2433,13 +2483,13 @@ async function loadRewardsPage() {
               <th style="text-align:left;padding:6px 4px;">Token</th>
               <th style="text-align:left;padding:6px 4px;">Tier</th>
               <th style="text-align:left;padding:6px 4px;">Level</th>
-              <th style="text-align:left;padding:6px 4px;">Activity</th>
+              <th style="text-align:left;padding:6px 4px;">Est. Share</th>
               <th style="text-align:left;padding:6px 4px;">Username</th>
             </tr></thead>
             <tbody>${tokenRows}</tbody>
           </table>
         </div>
-        <div style="font-size:0.7rem;color:var(--muted);margin-top:8px;">💡 Weighted distribution: higher level Genesis NFTs earn a larger share of the pool.</div>
+        <div style="font-size:0.7rem;color:var(--muted);margin-top:8px;">💡 <strong>Hold to earn:</strong> Share resets to 0 if you sell or transfer your Genesis NFT. Only wallets currently holding Genesis receive distributions. Weighted by level — higher level = bigger share.</div>
       </div>` : ''}
 
       <!-- PAYMENT HISTORY -->
@@ -2772,17 +2822,34 @@ async function setNFTProfilePicture() {
   try {
     const hasNft = await nftContract.hasNFT(account);
     if (!hasNft) return;
-    // Get tier instantly from contract, use known CID — no tokenURI fetch needed
-    const tier   = await nftContract.getTier(account).catch(() => 2);
+    // Get active (equipped) token tier — not just walletToToken
+    const activeId = await nftContract.getActiveToken(account).catch(() => 0n);
+    const tier = activeId && Number(activeId) > 0
+      ? Number((await nftContract.nftStats(Number(activeId))).tier)
+      : await nftContract.getTier(account).catch(() => 2);
     const imgUrl = nftImageFromTier(tier);
+
+    // Update all .profile-avatar elements (letter-avatars)
     document.querySelectorAll('.profile-avatar').forEach(av => {
       av.style.backgroundImage = `url(${imgUrl})`;
       av.style.backgroundSize = 'cover';
       av.style.backgroundPosition = 'center';
       av.textContent = '';
     });
+    // Update the new profile card NFT avatar
+    const pfpEl = document.getElementById('profile-nft-avatar');
+    if (pfpEl) {
+      pfpEl.innerHTML = `<img src="${imgUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" onerror="this.style.display='none'"/>`;
+    }
     const navAvatar = document.getElementById('nav-avatar');
-    if (navAvatar) { navAvatar.style.backgroundImage = `url(${imgUrl})`; navAvatar.style.backgroundSize = 'cover'; navAvatar.style.backgroundPosition = 'center'; navAvatar.textContent = ''; }
+    if (navAvatar) {
+      navAvatar.style.backgroundImage = `url(${imgUrl})`;
+      navAvatar.style.backgroundSize = 'cover';
+      navAvatar.style.backgroundPosition = 'center';
+      navAvatar.textContent = '';
+    }
+    // Cache img url for use in bounty cards etc
+    window._myNftImg = imgUrl;
   } catch(e) {}
 }
 
@@ -3420,7 +3487,7 @@ function mktFilterCards(query) {
 }
 
 
-const exposed = { connectWallet,disconnectWallet,showPage,switchTab,openModal,closeModal,selectRole,onboardNext,finishOnboarding,mintGenesis,mintEarlyAccess,saveProfile,postBounty,submitClip,voteOnClip,pickWinner,resolveVote,filterBounties,openBountyDetail,setMobileActive,loadInventory,openSubDetail,openHostProfile,openClipperProfile,openStreamViewer,addPendingWinner,removePendingWinner,confirmMultiWinners,confirmSingleWinner,postComment,openEditBounty,copyReferralLink,shareReferralLink,loadReferrals,loadRewardsPage,registerAsGenesisHolder,flagContent,adminDismissFlag,adminActionFlag,adminBanUser,adminForcePause,adminExportData,adminToggleMint,adminSetTreasuryNFT,adminSetTreasuryEscrow,adminSetEscrowNFT,adminSetNFTBountyContract,loadAdminPage,toggleMobileDrawer,closeMobileDrawer,loadClipFeed,loadStreamerDashboard,loadMarketplace,mktListNFT,mktDelistNFT,mktBuyNFT,mktUpdatePrice,mktEquipToken,mktUnequipToken,mktShowListModal,mktShowUpdateModal,mktSwitchTab,mktEquipFromInventory,updateSchedPreview,checkRewardVsBalance };
+const exposed = { connectWallet,disconnectWallet,showPage,switchTab,openModal,closeModal,selectRole,onboardNext,finishOnboarding,mintGenesis,mintEarlyAccess,saveProfile,postBounty,submitClip,voteOnClip,pickWinner,resolveVote,filterBounties,openBountyDetail,setMobileActive,loadInventory,openSubDetail,openHostProfile,openClipperProfile,openStreamViewer,addPendingWinner,removePendingWinner,confirmMultiWinners,confirmSingleWinner,postComment,openEditBounty,copyReferralLink,shareReferralLink,loadReferrals,loadRewardsPage,registerAsGenesisHolder,flagContent,adminDismissFlag,adminActionFlag,adminBanUser,adminForcePause,adminExportData,adminToggleMint,adminSetTreasuryNFT,adminSetTreasuryEscrow,adminSetEscrowNFT,adminSetNFTBountyContract,loadAdminPage,toggleMobileDrawer,closeMobileDrawer,loadClipFeed,loadStreamerDashboard,loadMarketplace,mktListNFT,mktDelistNFT,mktBuyNFT,mktUpdatePrice,mktEquipToken,mktUnequipToken,mktShowListModal,mktShowUpdateModal,mktSwitchTab,mktEquipFromInventory,updateSchedPreview,checkRewardVsBalance,loadWalletNFTAvatar };
 Object.assign(window, exposed);
 
 // INIT
@@ -4409,7 +4476,12 @@ function hideTxClapper() {
 <!-- ==================== PAGE: BOUNTY DETAIL ==================== -->
 <div id="page-bounty-detail" class="page">
   <div class="container" style="max-width:700px;padding-top:24px;padding-bottom:80px;">
-    <button class="btn btn-ghost btn-sm" onclick="goBackFromBounty()" id="back-to-bounties-btn" style="margin-bottom:18px;">← Back</button>
+    <!-- Header image banner -->
+    <div style="border-radius:14px;overflow:hidden;margin-bottom:18px;max-height:140px;position:relative;">
+      <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/ChatGPT%20Image%20Feb%2028%2C%202026%2C%2001_17_18%20PM.png" alt="Bounty" style="width:100%;height:140px;object-fit:cover;object-position:center;display:block;" onerror="this.parentElement.style.display='none'"/>
+      <div style="position:absolute;inset:0;background:linear-gradient(to right,rgba(0,0,0,0.55) 0%,transparent 50%);pointer-events:none;"></div>
+      <button class="btn btn-ghost btn-sm" onclick="goBackFromBounty()" id="back-to-bounties-btn" style="position:absolute;top:12px;left:14px;background:rgba(0,0,0,0.6);border-color:rgba(255,255,255,0.2);color:#fff;backdrop-filter:blur(4px);">← Back</button>
+    </div>
     <div id="modal-bounty-content"></div>
   </div>
 </div>
