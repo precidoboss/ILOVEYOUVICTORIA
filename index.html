@@ -17,6 +17,7 @@ const NFT_ADDRESS      = '0x5424306e8Ac64B11E8bf1fA834D4e298FB2889d3';
 const ESCROW_ADDRESS   = '0x6938022B15Dd63A92eBCf6a5CC4449baB9584670';
 const TREASURY_ADDRESS = '0xB7f1391eC7500076378666fEd574aD0884892776';
 const FUJI_CHAIN_ID    = 43113;
+const HIREME_ADDRESS   = '0xB6E110be2197e11AB62F1817cc5Fc1BCa7F8847a';
 const FUJI_RPCS = [
   'https://api.avax-test.network/ext/bc/C/rpc',
   'https://avalanche-fuji-c-chain-rpc.publicnode.com',
@@ -41,6 +42,7 @@ const MARKETPLACE_ADDRESS = '0xb3b2fA9aA6B915909FC95EF8E1A19e7065ab5A0E';
 const BLAZE_LOGO = 'https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_1_2026-02-24_07-10-44-removebg-preview.png';
 const ARENA_LOGO = 'https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_2_2026-02-24_07-10-44-removebg-preview.png';
 const AVAX_LOGO  = 'https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_3_2026-02-24_07-10-44-removebg-preview.png';
+const MASCOT_IMG = 'https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/ChatGPT_Image_Mar_1__2026__02_50_54_PM-removebg-preview.png';
 </script>
 
 <script>
@@ -197,9 +199,50 @@ const MARKETPLACE_ABI = [
   "error ZeroAddress()"
 ];
 
+const HIREME_ABI = [
+  // POW gallery
+  "function addPOWLink(string url)",
+  "function removePOWLink(uint256 index)",
+  "function getPOW(address clipper) view returns (tuple(string url, uint64 addedAt)[])",
+  // Offers
+  "function makeOffer(address clipper, uint256 clipCount, string note)",
+  "function counterOffer(uint256 id, uint256 newAvax, uint256 newClips, string newNote)",
+  "function acceptOffer(uint256 id) payable",
+  "function fundDeal(uint256 id) payable",
+  "function rejectOffer(uint256 id)",
+  "function submitClip(uint256 id, string link)",
+  "function approveClip(uint256 clipIdx, uint256 id)",
+  // Mutual cancel (both must agree)
+  "function requestCancel(uint256 id)",
+  "function agreeCancelDeal(uint256 id)",
+  "function rejectCancelRequest(uint256 id)",
+  // Views
+  "function getOffer(uint256 id) view returns (tuple(uint256 id, address clipper, address streamer, uint256 avaxAmount, uint256 clipCount, string note, uint8 status, uint8 lastSide, uint256 approvedClips, uint256 createdAt, uint256 acceptedAt, address cancelRequester))",
+  "function getOfferClips(uint256 id) view returns (tuple(string link, uint64 submittedAt, bool approved)[])",
+  "function getClipperOffers(address clipper) view returns (uint256[])",
+  "function getStreamerOffers(address streamer) view returns (uint256[])",
+  "function totalOffers() view returns (uint256)",
+  "function setNFTContract(address a)",
+  "function nftContract() view returns (address)",
+  // Events
+  "event POWAdded(address indexed clipper, string url, uint256 index)",
+  "event POWRemoved(address indexed clipper, uint256 index)",
+  "event OfferCreated(uint256 indexed offerId, address indexed clipper, address indexed streamer, uint256 avax, uint256 clips)",
+  "event OfferCountered(uint256 indexed offerId, address indexed by, uint256 newAvax, uint256 newClips)",
+  "event OfferAccepted(uint256 indexed offerId, address indexed by)",
+  "event OfferRejected(uint256 indexed offerId, address indexed by)",
+  "event DealActivated(uint256 indexed offerId)",
+  "event HireMeClipSubmitted(uint256 indexed offerId, uint256 clipIdx, address clipper, string link)",
+  "event HireMeClipApproved(uint256 indexed offerId, uint256 clipIdx, address streamer)",
+  "event DealCompleted(uint256 indexed offerId, address clipper, uint256 payout)",
+  "event CancelRequested(uint256 indexed offerId, address indexed by)",
+  "event CancelRejected(uint256 indexed offerId, address indexed by)",
+  "event DealCancelled(uint256 indexed offerId, address indexed by, uint256 refund)"
+];
+
 // STATE
 let provider, signer, account;
-let nftContract, escrowContract, treasuryContract, marketplaceContract;
+let nftContract, escrowContract, treasuryContract, marketplaceContract, hireMeContract;
 let db;
 let userProfile   = null;
 let selectedRole  = null;
@@ -294,6 +337,8 @@ function initContracts() {
   escrowContract    = new ethers.Contract(ESCROW_ADDRESS, ESCROW_ABI, signer);
   treasuryContract  = new ethers.Contract(TREASURY_ADDRESS, TREASURY_ABI, signer);
   marketplaceContract = new ethers.Contract(MARKETPLACE_ADDRESS, MARKETPLACE_ABI, signer);
+  if (HIREME_ADDRESS !== '0x0000000000000000000000000000000000000000')
+    hireMeContract = new ethers.Contract(HIREME_ADDRESS, HIREME_ABI, signer);
 }
 
 function updateNavWallet() {
@@ -1813,13 +1858,14 @@ function switchTab(tabId) {
   document.querySelectorAll('.dash-tab').forEach(t => t.style.display = 'none');
   document.getElementById(tabId).style.display = 'block';
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  const map = { 'tab-overview':'nav-overview','tab-bounties-dash':'nav-bounties-dash','tab-submissions':'nav-submissions','tab-post':'nav-post','tab-profile':'nav-profile','tab-inventory':'nav-inventory','tab-streamer':'nav-streamer' };
+  const map = { 'tab-overview':'nav-overview','tab-bounties-dash':'nav-bounties-dash','tab-submissions':'nav-submissions','tab-post':'nav-post','tab-profile':'nav-profile','tab-inventory':'nav-inventory','tab-streamer':'nav-streamer','tab-hireme':'nav-hireme' };
   document.getElementById(map[tabId])?.classList.add('active');
   if (tabId==='tab-bounties-dash') loadBounties();
   if (tabId==='tab-submissions')   loadMySubmissions();
   if (tabId==='tab-inventory')     loadInventory();
   if (tabId==='tab-streamer')      loadStreamerDashboard();
   if (tabId==='tab-post')          preloadBountyForm();
+  if (tabId==='tab-hireme')        loadHireMePage();
   window.scrollTo(0, 0);
 }
 
@@ -2679,6 +2725,7 @@ async function loadAdminPage() {
           <button class="btn btn-ghost btn-sm" onclick="adminSetTreasuryEscrow()">🔗 Link Escrow → Treasury</button>
           <button class="btn btn-primary btn-sm" onclick="adminSetEscrowNFT()">🔗 Link NFT → Escrow</button>
           <button class="btn btn-orange btn-sm" onclick="adminSetNFTBountyContract()">🔗 Link Escrow → NFT (bountyContract)</button>
+          <button class="btn btn-ghost btn-sm" onclick="adminSetHireMeNFT()">🔗 Link NFT → HireMe</button>
         </div>
         <div style="font-size:0.68rem;color:var(--muted);margin-top:8px;">⚠️ All 4 links are required after every deploy. Missing any will break bounties, clips, voting, or distributions.</div>
       </div>
@@ -2851,6 +2898,751 @@ async function setNFTProfilePicture() {
     // Cache img url for use in bounty cards etc
     window._myNftImg = imgUrl;
   } catch(e) {}
+}
+
+// ================================================================
+//  HIRE ME — Polished UX, Mutual Cancel, Supabase DMs
+// ================================================================
+const HM_STATUS  = { 0:'PENDING', 1:'ACTIVE', 2:'COMPLETED', 3:'REJECTED', 4:'CANCELLED' };
+const HM_STATUS_COLOR = { 0:'var(--amber)', 1:'var(--success)', 2:'var(--muted)', 3:'var(--red)', 4:'var(--muted)' };
+
+// ── HELPERS ──────────────────────────────────────────────────────
+function _hmPlatformIcon(url='') {
+  if (!url) return '🔗';
+  if (url.includes('youtube.com') || url.includes('youtu.be')) return '▶';
+  if (url.includes('x.com') || url.includes('twitter.com')) return '𝕏';
+  return '🔗';
+}
+function _hmAvatarEl(id, initial) {
+  return `<div id="${id}" style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--red),var(--orange));flex-shrink:0;overflow:hidden;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.9rem;color:white;">${initial||'?'}</div>`;
+}
+function _hmReadableStatus(status, cancelRequester, myAddr) {
+  if (status===1 && cancelRequester && cancelRequester !== '0x0000000000000000000000000000000000000000') {
+    const iRequested = cancelRequester.toLowerCase() === myAddr?.toLowerCase();
+    return iRequested ? '⚠️ You requested cancel — waiting for other party' : '⚠️ Other party wants to cancel — your decision';
+  }
+  const labels = {0:'Negotiating…', 1:'Active ✅', 2:'Completed ✓', 3:'Rejected', 4:'Cancelled'};
+  return labels[status] || '—';
+}
+
+// ── MAIN LOADER ──────────────────────────────────────────────────
+async function loadHireMePage() {
+  const el = document.getElementById('hireme-content');
+  if (!el) return;
+  if (!account) { el.innerHTML='<div class="empty-state"><p>Connect wallet to use Hire Me.</p></div>'; return; }
+  if (!hireMeContract) {
+    el.innerHTML=`<div class="empty-state" style="padding:40px 20px;">
+      <div style="font-size:3rem;margin-bottom:16px;">🤝</div>
+      <p style="font-weight:700;margin-bottom:8px;">Hire Me not yet live</p>
+      <p style="color:var(--muted);font-size:0.83rem;">Deploy ClipDAOHireMe.sol then update HIREME_ADDRESS in the source.</p>
+    </div>`;
+    return;
+  }
+  el.innerHTML='<div class="empty-state"><div class="spinner"></div><p>Loading…</p></div>';
+
+  const roP    = await getFujiProvider();
+  const roHM   = new ethers.Contract(HIREME_ADDRESS, HIREME_ABI, roP);
+  const isStr  = userProfile?.role === 'streamer';
+
+  let myPOW=[], clipperIds=[], streamerIds=[];
+  try { myPOW = await roHM.getPOW(account); } catch(e) {}
+  try { clipperIds  = (await roHM.getClipperOffers(account)).map(Number);  } catch(e) {}
+  try { streamerIds = (await roHM.getStreamerOffers(account)).map(Number); } catch(e) {}
+  const allIds = [...new Set([...clipperIds, ...streamerIds])];
+  const offerDetails = (await Promise.all(allIds.map(id => roHM.getOffer(id).catch(()=>null)))).filter(Boolean);
+
+  // Discover all clippers who have POW (event scan)
+  let allClippers = [];
+  try {
+    const cur = await roP.getBlockNumber();
+    const from = Math.max(0, cur-150000);
+    const topic = ethers.id('POWAdded(address,string,uint256)');
+    const seen = new Set([account.toLowerCase()]);
+    for (let s=from; s<cur; s+=5000) {
+      const logs = await roP.getLogs({address:HIREME_ADDRESS,topics:[topic],fromBlock:s,toBlock:Math.min(s+4999,cur)}).catch(()=>[]);
+      for (const log of logs) {
+        const addr = ('0x'+log.topics[1].slice(26)).toLowerCase();
+        if (!seen.has(addr)) { seen.add(addr); allClippers.push(addr); }
+      }
+    }
+  } catch(e) {}
+
+  const active    = offerDetails.filter(o=>Number(o.status)===1);
+  const pending   = offerDetails.filter(o=>Number(o.status)===0);
+  const completed = offerDetails.filter(o=>Number(o.status)===2||Number(o.status)===3||Number(o.status)===4);
+
+  el.innerHTML = _hmBuildPage(isStr, myPOW, pending, active, completed, allClippers);
+
+  // Post-render avatar injection
+  setTimeout(() => {
+    offerDetails.forEach(o=>{
+      const other = o.clipper.toLowerCase()===account.toLowerCase() ? o.streamer : o.clipper;
+      loadWalletNFTAvatar(other, `hm-av-${Number(o.id)}`);
+    });
+    allClippers.forEach((addr,i)=>loadWalletNFTAvatar(addr,`hm-c-av-${i}`));
+  }, 80);
+}
+
+// ── PAGE BUILDER ─────────────────────────────────────────────────
+function _hmBuildPage(isStr, myPOW, pending, active, completed, clippers) {
+  return `
+  <style>
+  .hm-section { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:20px; margin-bottom:14px; }
+  .hm-section-title { font-weight:800; font-size:0.9rem; color:var(--orange); margin-bottom:14px; display:flex; align-items:center; gap:8px; }
+  .hm-deal { display:flex;align-items:center;gap:12px;padding:14px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,0.02);margin-bottom:8px;cursor:pointer;transition:all 0.15s; }
+  .hm-deal:hover { border-color:rgba(255,107,26,0.5);background:rgba(255,107,26,0.04); transform:translateY(-1px); }
+  .hm-deal.active-deal { border-color:rgba(34,197,94,0.35);background:rgba(34,197,94,0.03); }
+  .hm-deal.pending-deal { border-color:rgba(255,149,0,0.3); }
+  .hm-deal.cancel-pending { border-color:rgba(239,68,68,0.4);background:rgba(239,68,68,0.04); }
+  .hm-pow-item { display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;border:1px solid var(--border);background:rgba(255,255,255,0.02);margin-bottom:6px;transition:border-color 0.15s; }
+  .hm-pow-item:hover { border-color:rgba(255,107,26,0.3); }
+  .hm-pow-icon { width:28px;height:28px;border-radius:6px;background:rgba(255,107,26,0.12);display:flex;align-items:center;justify-content:center;font-size:0.85rem;flex-shrink:0; }
+  .hm-pow-url { flex:1;font-family:var(--font-mono);font-size:0.74rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+  .hm-pow-url a { color:var(--orange);text-decoration:none; }
+  .hm-pow-url a:hover { text-decoration:underline; }
+  .hm-stat { text-align:center;padding:14px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px; }
+  .hm-stat-val { font-family:var(--font-display);font-size:1.6rem;line-height:1; }
+  .hm-stat-lbl { font-size:0.62rem;color:var(--muted);text-transform:uppercase;margin-top:4px; }
+  .hm-progress { height:4px;background:rgba(255,255,255,0.07);border-radius:2px;overflow:hidden;margin-top:5px; }
+  .hm-progress-fill { height:100%;background:linear-gradient(90deg,var(--red),var(--amber));border-radius:2px;transition:width 0.4s; }
+  .hm-clipper-card { display:flex;align-items:center;gap:12px;padding:12px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,0.02);margin-bottom:8px;cursor:pointer;transition:all 0.15s; }
+  .hm-clipper-card:hover { border-color:rgba(255,107,26,0.4);background:rgba(255,107,26,0.03);transform:translateY(-1px); }
+  .hm-input-row { display:flex;gap:8px;margin-top:12px; }
+  .hm-badge { display:inline-flex;align-items:center;padding:3px 9px;border-radius:20px;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px; }
+  .hm-badge-active { background:rgba(34,197,94,0.15);color:#22c55e;border:1px solid rgba(34,197,94,0.3); }
+  .hm-badge-pending { background:rgba(255,149,0,0.15);color:var(--amber);border:1px solid rgba(255,149,0,0.3); }
+  .hm-badge-cancel { background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3); }
+  .hm-badge-done { background:rgba(100,100,100,0.1);color:var(--muted);border:1px solid var(--border); }
+  .hm-dm-bubble { max-width:72%;padding:10px 14px;border-radius:14px;font-size:0.84rem;line-height:1.5;word-break:break-word; }
+  .hm-dm-bubble.mine { background:rgba(232,53,10,0.2);border:1px solid rgba(232,53,10,0.3);border-bottom-right-radius:4px;align-self:flex-end; }
+  .hm-dm-bubble.theirs { background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-bottom-left-radius:4px;align-self:flex-start; }
+  .hm-dm-time { font-size:0.6rem;color:var(--muted);margin-top:3px; }
+  </style>
+
+  ${_hmPOWSection(myPOW)}
+  ${active.length>0 ? _hmDealsSection('🟢 Active Deals', active, 'active') : ''}
+  ${pending.length>0 ? _hmDealsSection('⏳ Negotiations', pending, 'pending') : ''}
+  ${isStr ? _hmDiscovery(clippers) : ''}
+  ${completed.length>0 ? _hmDealsSection('📁 Past Deals', completed, 'done') : ''}
+  `;
+}
+
+// ── POW SECTION ──────────────────────────────────────────────────
+function _hmPOWSection(pow) {
+  const items = pow.length > 0
+    ? pow.map((p,i) => {
+        const icon = _hmPlatformIcon(p.url);
+        const short = p.url.length>55 ? p.url.slice(0,55)+'…' : p.url;
+        const date  = new Date(Number(p.addedAt)*1000).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+        return `<div class="hm-pow-item">
+          <div class="hm-pow-icon">${icon}</div>
+          <div class="hm-pow-url"><a href="${escHtml(p.url)}" target="_blank" rel="noopener">${escHtml(short)}</a></div>
+          <span style="font-size:0.65rem;color:var(--muted);flex-shrink:0;">${date}</span>
+          <button onclick="hmRemovePOW(${i})" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);color:#ef4444;border-radius:6px;cursor:pointer;font-size:0.72rem;padding:3px 8px;flex-shrink:0;" title="Remove">✕</button>
+        </div>`;
+      }).join('')
+    : `<div style="text-align:center;padding:20px 0;color:var(--muted);">
+        <div style="font-size:2rem;margin-bottom:8px;">🎬</div>
+        <div style="font-size:0.84rem;">No clips yet — add your best X &amp; YouTube clips below to attract streamers.</div>
+       </div>`;
+
+  const addForm = pow.length < 20 ? `
+    <div class="hm-input-row">
+      <input type="url" id="hm-pow-input" placeholder="Paste X (x.com) or YouTube link…" style="flex:1;font-size:0.83rem;border-radius:9px;"/>
+      <button class="btn btn-primary" onclick="hmAddPOW()" style="flex-shrink:0;">+ Add Clip</button>
+    </div>` : `<div style="font-size:0.72rem;color:var(--muted);margin-top:10px;text-align:center;">Gallery full (20/20) — remove a link to add more.</div>`;
+
+  return `<div class="hm-section">
+    <div class="hm-section-title">🎬 My Proof of Work <span style="font-size:0.68rem;color:var(--muted);font-weight:400;margin-left:auto;">${pow.length}/20</span></div>
+    <p style="font-size:0.8rem;color:var(--muted);margin-bottom:14px;line-height:1.6;">Your public portfolio — streamers browse these before making offers. Only X and YouTube links are accepted.</p>
+    ${items}
+    ${addForm}
+  </div>`;
+}
+
+// ── DEALS LIST ────────────────────────────────────────────────────
+function _hmDealsSection(title, offers, type) {
+  const rows = offers.map(o => {
+    const isClipper  = o.clipper.toLowerCase() === account.toLowerCase();
+    const other      = isClipper ? o.streamer : o.clipper;
+    const otherRole  = isClipper ? 'Streamer' : 'Clipper';
+    const avax       = parseFloat(ethers.formatEther(o.avaxAmount||0n));
+    const clips      = Number(o.clipCount);
+    const approved   = Number(o.approvedClips);
+    const status     = Number(o.status);
+    const hasCancelReq = o.cancelRequester && o.cancelRequester !== '0x0000000000000000000000000000000000000000';
+    const iRequested = hasCancelReq && o.cancelRequester.toLowerCase() === account.toLowerCase();
+
+    let badge = '';
+    if (type==='active')  badge = hasCancelReq ? '<span class="hm-badge hm-badge-cancel">Cancel Pending</span>' : '<span class="hm-badge hm-badge-active">Active</span>';
+    if (type==='pending') badge = '<span class="hm-badge hm-badge-pending">Negotiating</span>';
+    if (type==='done')    badge = `<span class="hm-badge hm-badge-done">${HM_STATUS[status]||'Done'}</span>`;
+
+    const cls = type==='active' ? (hasCancelReq ? 'hm-deal cancel-pending' : 'hm-deal active-deal') : (type==='pending' ? 'hm-deal pending-deal' : 'hm-deal');
+    const initial = (other.slice(2,4)||'?').toUpperCase();
+    const short = other.slice(0,6)+'…'+other.slice(-4);
+
+    let subline = '';
+    if (type==='active')  subline = `${approved}/${clips} clips approved · ${avax.toFixed(4)} AVAX locked`;
+    if (type==='pending') subline = avax>0 ? `${clips} clips · ${avax.toFixed(4)} AVAX offered` : `${clips} clips · awaiting price`;
+    if (type==='done')    subline = `${clips} clips · ${avax.toFixed(4)} AVAX`;
+
+    if (hasCancelReq) subline += iRequested ? ' — waiting for other party' : ' — RESPOND REQUIRED';
+
+    const prog = type==='active' && clips>0 ? `<div class="hm-progress"><div class="hm-progress-fill" style="width:${Math.round(approved/clips*100)}%"></div></div>` : '';
+
+    return `<div class="${cls}" onclick="hmOpenOffer(${Number(o.id)})">
+      ${_hmAvatarEl(`hm-av-${Number(o.id)}`, initial)}
+      <div style="flex:1;min-width:0;">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2px;">
+          <span style="font-weight:700;font-size:0.88rem;">${short}</span>
+          <span style="font-size:0.65rem;color:var(--muted);">${otherRole}</span>
+        </div>
+        <div style="font-size:0.74rem;color:var(--muted);">${subline}</div>
+        ${prog}
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">
+        ${badge}
+        <span style="font-size:0.65rem;color:var(--muted);">Deal #${Number(o.id)}</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  return `<div class="hm-section">
+    <div class="hm-section-title">${title} <span style="font-size:0.68rem;color:var(--muted);font-weight:400;margin-left:auto;">${offers.length}</span></div>
+    ${rows}
+  </div>`;
+}
+
+// ── CLIPPER DISCOVERY (streamers only) ──────────────────────────
+function _hmDiscovery(clippers) {
+  if (clippers.length===0) return `<div class="hm-section"><div class="hm-section-title">🔍 Browse Clippers</div>
+    <div style="text-align:center;padding:20px 0;color:var(--muted);font-size:0.84rem;">No clippers with portfolios yet. Check back soon!</div></div>`;
+
+  const cards = clippers.slice(0,30).map((addr,i)=>{
+    const short = addr.slice(0,6)+'…'+addr.slice(-4);
+    const init  = (addr.slice(2,4)||'?').toUpperCase();
+    return `<div class="hm-clipper-card" onclick="hmViewClipper('${addr}')">
+      ${_hmAvatarEl(`hm-c-av-${i}`, init)}
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:700;font-size:0.85rem;font-family:var(--font-mono);">${short}</div>
+        <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;">Has portfolio clips</div>
+      </div>
+      <span style="font-size:0.75rem;color:var(--orange);">View &amp; Hire →</span>
+    </div>`;
+  }).join('');
+
+  return `<div class="hm-section">
+    <div class="hm-section-title">🔍 Browse Clippers <span style="font-size:0.68rem;color:var(--muted);font-weight:400;margin-left:auto;">${clippers.length} available</span></div>
+    ${cards}
+  </div>`;
+}
+
+// ── ADD / REMOVE POW ─────────────────────────────────────────────
+async function hmAddPOW() {
+  if (!hireMeContract) { toast('HireMe contract not deployed yet', 'error'); return; }
+  const url = document.getElementById('hm-pow-input')?.value.trim();
+  if (!url || !url.startsWith('http')) { toast('Enter a valid URL starting with http', 'error'); return; }
+  const ok = url.includes('x.com') || url.includes('twitter.com') || url.includes('youtube.com') || url.includes('youtu.be');
+  if (!ok) { toast('Only X (x.com) or YouTube links accepted', 'error'); return; }
+  try {
+    toast('Adding to your portfolio…', 'pending');
+    const tx = await hireMeContract.addPOWLink(url);
+    await tx.wait();
+    toast('✅ Clip added to your portfolio!', 'success');
+    loadHireMePage();
+  } catch(e) { toast(friendlyError(e), 'error'); }
+}
+async function hmRemovePOW(index) {
+  if (!hireMeContract || !confirm('Remove this clip from your portfolio?')) return;
+  try {
+    toast('Removing…', 'pending');
+    const tx = await hireMeContract.removePOWLink(index);
+    await tx.wait();
+    toast('Clip removed', 'success');
+    loadHireMePage();
+  } catch(e) { toast(friendlyError(e), 'error'); }
+}
+
+// ── VIEW CLIPPER + MAKE OFFER MODAL ──────────────────────────────
+async function hmViewClipper(clipperAddr) {
+  if (!hireMeContract) return;
+  const roP  = await getFujiProvider();
+  const roHM = new ethers.Contract(HIREME_ADDRESS, HIREME_ABI, roP);
+  let pow=[];
+  try { pow = await roHM.getPOW(clipperAddr); } catch(e) {}
+  let prof=null;
+  if (db) try { const r=await db.from('profiles').select('*').eq('wallet',clipperAddr.toLowerCase()).maybeSingle(); prof=r.data; } catch(e){}
+  const name  = prof?.username || clipperAddr.slice(0,10)+'…';
+  const init  = name[0].toUpperCase();
+  const isSelf = clipperAddr.toLowerCase()===account?.toLowerCase();
+
+  const powHTML = pow.length>0 ? pow.map(p=>`
+    <div class="hm-pow-item">
+      <div class="hm-pow-icon">${_hmPlatformIcon(p.url)}</div>
+      <div class="hm-pow-url"><a href="${escHtml(p.url)}" target="_blank" rel="noopener">${escHtml(p.url.length>52?p.url.slice(0,52)+'…':p.url)}</a></div>
+      <span style="font-size:0.65rem;color:var(--muted);">${new Date(Number(p.addedAt)*1000).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span>
+    </div>`).join('')
+    : '<div style="color:var(--muted);font-size:0.84rem;padding:12px 0;">No portfolio links yet.</div>';
+
+  const offerForm = !isSelf ? `
+    <div style="margin-top:24px;border-top:1px solid var(--border);padding-top:20px;">
+      <div style="font-weight:800;font-size:0.92rem;margin-bottom:14px;color:var(--orange);">💼 Make an Offer</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Clips required</label>
+          <input type="number" id="hm-oc" min="1" max="50" value="5" style="font-size:0.9rem;"/>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Your offer (AVAX)</label>
+          <input type="number" id="hm-oa" step="0.001" min="0.001" placeholder="e.g. 0.5"/>
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:16px;">
+        <label>Requirements / context</label>
+        <textarea id="hm-on" rows="3" placeholder="Stream dates, clip style, quality standards…" style="resize:vertical;"></textarea>
+      </div>
+      <div style="font-size:0.72rem;color:var(--muted);margin-bottom:12px;">⚠️ AVAX is only locked when both sides accept. 2.5% platform fee deducted from final payout.</div>
+      <button class="btn btn-primary" style="width:100%;font-size:0.9rem;padding:12px;" onclick="hmMakeOffer('${clipperAddr}')">📨 Send Offer to ${escHtml(name)}</button>
+    </div>` : '<div style="margin-top:14px;font-size:0.82rem;color:var(--muted);">This is your own profile.</div>';
+
+  const modal = _hmModal('hm-clipper-modal', `
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;">
+      ${_hmAvatarEl('hm-modal-cav', init)}
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:800;font-size:1.1rem;">${escHtml(name)}</div>
+        <div style="font-family:var(--font-mono);font-size:0.72rem;color:var(--muted);">${clipperAddr}</div>
+      </div>
+    </div>
+    <div style="font-weight:700;color:var(--orange);margin-bottom:12px;font-size:0.9rem;">🎬 Portfolio (${pow.length} clips)</div>
+    ${powHTML}
+    ${offerForm}
+  `);
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e=>{ if(e.target===modal) modal.remove(); });
+  loadWalletNFTAvatar(clipperAddr, 'hm-modal-cav');
+}
+
+function _hmModal(id, innerHTML, maxW='500px') {
+  const el = document.createElement('div');
+  el.id = id;
+  el.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:2000;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(3px);';
+  el.innerHTML = `<div style="background:var(--card);border:1px solid rgba(255,107,26,0.2);border-radius:18px;padding:26px;max-width:${maxW};width:100%;max-height:88vh;overflow-y:auto;position:relative;">
+    <button onclick="document.getElementById('${id}').remove()" style="position:absolute;top:16px;right:16px;background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--muted);border-radius:8px;cursor:pointer;font-size:0.85rem;padding:5px 10px;transition:all 0.15s;" onmouseenter="this.style.color='white'" onmouseleave="this.style.color='var(--muted)'">✕</button>
+    ${innerHTML}
+  </div>`;
+  return el;
+}
+
+// ── MAKE OFFER ────────────────────────────────────────────────────
+async function hmMakeOffer(clipperAddr) {
+  if (!hireMeContract) { toast('HireMe contract not deployed', 'error'); return; }
+  const clips = parseInt(document.getElementById('hm-oc')?.value)||0;
+  const avax  = parseFloat(document.getElementById('hm-oa')?.value)||0;
+  const note  = document.getElementById('hm-on')?.value.trim()||'';
+  if (clips<1||clips>50) { toast('Clips must be 1–50', 'error'); return; }
+  if (avax<=0) { toast('Enter an AVAX offer amount', 'error'); return; }
+  try {
+    toast('Creating offer…', 'pending');
+    const tx1 = await hireMeContract.makeOffer(clipperAddr, clips, note);
+    await tx1.wait();
+    // Immediately set the AVAX amount via counterOffer
+    const roP = await getFujiProvider();
+    const roHM = new ethers.Contract(HIREME_ADDRESS, HIREME_ABI, roP);
+    const ids = await roHM.getStreamerOffers(account);
+    const lastId = Number(ids[ids.length-1]);
+    const tx2 = await hireMeContract.counterOffer(lastId, ethers.parseEther(avax.toString()), clips, note);
+    await tx2.wait();
+    document.getElementById('hm-clipper-modal')?.remove();
+    toast('✅ Offer sent! Clipper will be notified.', 'success');
+    // Log to Supabase DM channel
+    if (db) {
+      await db.from('hm_messages').insert({
+        offer_id: lastId,
+        sender: account.toLowerCase(),
+        recipient: clipperAddr.toLowerCase(),
+        message: `📨 New offer: ${clips} clips for ${avax} AVAX. Note: ${note||'None'}`,
+        msg_type: 'offer',
+        created_at: new Date().toISOString()
+      }).catch(()=>{});
+    }
+    loadHireMePage();
+  } catch(e) { toast(friendlyError(e), 'error'); }
+}
+
+// ── OPEN OFFER DETAIL MODAL ───────────────────────────────────────
+async function hmOpenOffer(offerId) {
+  if (!hireMeContract) return;
+  const roP  = await getFujiProvider();
+  const roHM = new ethers.Contract(HIREME_ADDRESS, HIREME_ABI, roP);
+  let o, clips=[];
+  try { o = await roHM.getOffer(offerId); clips = await roHM.getOfferClips(offerId); } catch(e) { toast('Failed to load deal', 'error'); return; }
+
+  const status      = Number(o.status);
+  const isClipper   = o.clipper.toLowerCase()===account.toLowerCase();
+  const isStreamer  = o.streamer.toLowerCase()===account.toLowerCase();
+  const other       = isClipper ? o.streamer : o.clipper;
+  const avax        = parseFloat(ethers.formatEther(o.avaxAmount||0n));
+  const clipCount   = Number(o.clipCount);
+  const approved    = Number(o.approvedClips);
+  const lastSide    = Number(o.lastSide);
+  const myTurn      = status===0 && ((isClipper&&lastSide===0)||(isStreamer&&lastSide===1));
+  const hasCancelReq = o.cancelRequester && o.cancelRequester!=='0x0000000000000000000000000000000000000000';
+  const iRequested  = hasCancelReq && o.cancelRequester.toLowerCase()===account.toLowerCase();
+  const initOther   = (other.slice(2,4)||'?').toUpperCase();
+  const shortOther  = other.slice(0,6)+'…'+other.slice(-4);
+
+  // Load DMs from Supabase
+  let dmsHTML = '';
+  if (db) {
+    try {
+      const {data:msgs} = await db.from('hm_messages').select('*')
+        .eq('offer_id', offerId).order('created_at',{ascending:true}).limit(50);
+      if (msgs?.length>0) {
+        dmsHTML = msgs.map(m=>{
+          const mine = m.sender?.toLowerCase()===account?.toLowerCase();
+          const time = new Date(m.created_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+          return `<div style="display:flex;flex-direction:column;align-items:${mine?'flex-end':'flex-start'};margin-bottom:8px;">
+            <div class="hm-dm-bubble ${mine?'mine':'theirs'}">${escHtml(m.message)}</div>
+            <div class="hm-dm-time">${time}</div>
+          </div>`;
+        }).join('');
+      } else {
+        dmsHTML = '<div style="text-align:center;color:var(--muted);font-size:0.8rem;padding:12px 0;">No messages yet — start the conversation!</div>';
+      }
+    } catch(e) {}
+  }
+
+  // Clip rows
+  const clipRows = clips.map((c,i)=>{
+    const icon = _hmPlatformIcon(c.link);
+    const short = c.link.length>45 ? c.link.slice(0,45)+'…' : c.link;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+      <div style="width:22px;height:22px;border-radius:50%;background:${c.approved?'rgba(34,197,94,0.2)':'rgba(255,255,255,0.07)'};border:1px solid ${c.approved?'rgba(34,197,94,0.5)':'rgba(255,255,255,0.1)'};display:flex;align-items:center;justify-content:center;font-size:0.65rem;flex-shrink:0;color:${c.approved?'#22c55e':'var(--muted)'};">${c.approved?'✓':i+1}</div>
+      <div style="font-size:0.85rem;flex-shrink:0;">${icon}</div>
+      <a href="${escHtml(c.link)}" target="_blank" rel="noopener" style="color:var(--orange);font-family:var(--font-mono);font-size:0.73rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(short)}</a>
+      ${c.approved
+        ? '<span style="font-size:0.65rem;color:#22c55e;flex-shrink:0;font-weight:700;">✅ Approved</span>'
+        : isStreamer&&status===1
+          ? `<button onclick="hmApproveClip(${offerId},${i})" class="btn btn-primary btn-sm" style="flex-shrink:0;font-size:0.65rem;padding:4px 10px;">Approve</button>`
+          : '<span style="font-size:0.65rem;color:var(--muted);flex-shrink:0;">Pending</span>'}
+    </div>`;
+  }).join('');
+
+  // Action panel
+  let actionHTML = '';
+  if (status===0) {
+    if (myTurn) {
+      actionHTML = `
+        <div style="background:rgba(255,149,0,0.06);border:1px solid rgba(255,149,0,0.2);border-radius:12px;padding:16px;margin-bottom:16px;">
+          <div style="font-weight:800;color:var(--amber);margin-bottom:14px;">⚡ Your turn to respond</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div class="form-group" style="margin-bottom:0;"><label style="font-size:0.72rem;">Clips</label>
+              <input type="number" id="hm-cnt" value="${clipCount}" min="1" max="50"/></div>
+            <div class="form-group" style="margin-bottom:0;"><label style="font-size:0.72rem;">AVAX</label>
+              <input type="number" id="hm-avx" value="${avax.toFixed(4)}" step="0.001" min="0.001"/></div>
+          </div>
+          <div class="form-group" style="margin-bottom:14px;"><label style="font-size:0.72rem;">Note</label>
+            <textarea id="hm-nte" rows="2" style="resize:vertical;">${escHtml(o.note||'')}</textarea></div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-ghost" style="flex:1;" onclick="hmCounterOffer(${offerId})">↕ Counter</button>
+            <button class="btn btn-primary" style="flex:1;" onclick="hmAcceptOffer(${offerId})">${isStreamer?`✅ Accept &amp; Lock ${avax.toFixed(4)} AVAX`:'✅ Accept Terms'}</button>
+            <button class="btn btn-ghost" style="color:var(--red);padding:0 14px;" onclick="hmRejectOffer(${offerId})">Reject</button>
+          </div>
+        </div>`;
+    } else {
+      // Can also pre-accept if terms look good
+      actionHTML = `
+        <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
+          <div style="color:var(--muted);font-size:0.84rem;margin-bottom:12px;">⏳ Waiting for ${isClipper?'streamer':'clipper'} to respond…</div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-primary btn-sm" style="flex:1;" onclick="hmAcceptOffer(${offerId})">${isStreamer?`Accept &amp; Lock ${avax.toFixed(4)} AVAX`:'Accept Terms'}</button>
+            <button class="btn btn-ghost btn-sm" style="color:var(--red);" onclick="hmRejectOffer(${offerId})">Reject</button>
+          </div>
+        </div>`;
+    }
+  } else if (status===1) {
+    // Active deal — submit or approve
+    if (isClipper) {
+      const remaining = clipCount - clips.length;
+      if (remaining>0) {
+        actionHTML = `
+          <div style="background:rgba(34,197,94,0.05);border:1px solid rgba(34,197,94,0.2);border-radius:12px;padding:16px;margin-bottom:16px;">
+            <div style="font-weight:700;color:var(--success);margin-bottom:12px;">📤 Submit clip ${clips.length+1} of ${clipCount}</div>
+            <div class="form-group" style="margin-bottom:12px;">
+              <input type="url" id="hm-clip-url-${offerId}" placeholder="https://x.com/… or https://youtube.com/…"/>
+            </div>
+            <button class="btn btn-primary" style="width:100%;" onclick="hmSubmitClip(${offerId})">Submit Clip</button>
+          </div>`;
+      } else {
+        actionHTML = `<div style="text-align:center;padding:14px;background:rgba(34,197,94,0.05);border:1px solid rgba(34,197,94,0.2);border-radius:12px;color:var(--success);font-weight:700;margin-bottom:16px;">✅ All ${clipCount} clips submitted — waiting for streamer approval</div>`;
+      }
+    }
+    // Mutual cancel section
+    if (hasCancelReq) {
+      if (iRequested) {
+        actionHTML += `<div style="background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.3);border-radius:12px;padding:14px;margin-bottom:16px;">
+          <div style="font-weight:700;color:#ef4444;margin-bottom:6px;">⚠️ You requested cancellation</div>
+          <div style="font-size:0.8rem;color:var(--muted);">Waiting for ${isClipper?'streamer':'clipper'} to accept or reject. They must agree for the deal to cancel.</div>
+        </div>`;
+      } else {
+        actionHTML += `<div style="background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.3);border-radius:12px;padding:14px;margin-bottom:16px;">
+          <div style="font-weight:700;color:#ef4444;margin-bottom:8px;">⚠️ Other party wants to cancel</div>
+          <div style="font-size:0.8rem;color:var(--muted);margin-bottom:12px;">If you agree, streamer gets AVAX back minus 2% penalty. If you refuse, the deal continues.</div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-ghost" style="flex:1;color:#ef4444;border-color:rgba(239,68,68,0.4);" onclick="hmAgreeCancel(${offerId})">Agree to Cancel</button>
+            <button class="btn btn-primary" style="flex:1;" onclick="hmRejectCancel(${offerId})">Refuse — Keep Going</button>
+          </div>
+        </div>`;
+      }
+    } else {
+      actionHTML += `<button onclick="hmRequestCancel(${offerId})" style="width:100%;background:none;border:1px solid rgba(239,68,68,0.25);color:rgba(239,68,68,0.7);border-radius:9px;padding:10px;cursor:pointer;font-size:0.78rem;margin-bottom:16px;transition:all 0.15s;" onmouseenter="this.style.borderColor='rgba(239,68,68,0.6)';this.style.color='#ef4444'" onmouseleave="this.style.borderColor='rgba(239,68,68,0.25)';this.style.color='rgba(239,68,68,0.7)'">Request Cancellation (needs other party approval)</button>`;
+    }
+  } else if (status===2) {
+    actionHTML = `<div style="text-align:center;padding:20px;background:rgba(34,197,94,0.05);border:1px solid rgba(34,197,94,0.2);border-radius:12px;margin-bottom:16px;">
+      <div style="font-size:1.8rem;margin-bottom:6px;">🎉</div>
+      <div style="font-weight:800;color:var(--success);margin-bottom:4px;">Deal Completed!</div>
+      <div style="font-size:0.8rem;color:var(--muted);">${avax.toFixed(4)} AVAX paid to clipper · 2.5% platform fee deducted</div>
+    </div>`;
+  }
+
+  const modal = _hmModal('hm-offer-modal', `
+    <!-- Header -->
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:22px;padding-bottom:18px;border-bottom:1px solid var(--border);">
+      ${_hmAvatarEl('hm-oa-modal-av', initOther)}
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:800;font-size:1.05rem;">${shortOther}</div>
+        <div style="font-size:0.72rem;color:var(--muted);">${isClipper?'Streamer (hired you)':'Clipper (you hired)'}</div>
+      </div>
+      <div style="text-align:right;">
+        <span class="hm-badge ${status===1?'hm-badge-active':status===0?'hm-badge-pending':'hm-badge-done'}">${HM_STATUS[status]||'?'}</span>
+        <div style="font-size:0.65rem;color:var(--muted);margin-top:4px;">Deal #${offerId}</div>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px;">
+      <div class="hm-stat"><div class="hm-stat-val" style="color:var(--orange);">${avax.toFixed(3)}</div><div class="hm-stat-lbl">AVAX</div></div>
+      <div class="hm-stat"><div class="hm-stat-val" style="color:var(--amber);">${clipCount}</div><div class="hm-stat-lbl">Clips Required</div></div>
+      <div class="hm-stat"><div class="hm-stat-val" style="color:var(--success);">${approved}</div><div class="hm-stat-lbl">Approved</div></div>
+    </div>
+    ${status>=1&&clipCount>0?`<div class="hm-progress" style="margin-bottom:20px;height:6px;border-radius:3px;"><div class="hm-progress-fill" style="width:${Math.round(approved/clipCount*100)}%"></div></div>`:''}
+    ${o.note?`<div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:20px;font-size:0.83rem;color:var(--muted);line-height:1.6;">${escHtml(o.note)}</div>`:''}
+
+    ${actionHTML}
+
+    <!-- Clips list -->
+    ${status>=1&&clips.length>0?`<div style="margin-bottom:20px;">
+      <div style="font-weight:700;font-size:0.88rem;margin-bottom:10px;">📎 Submitted Clips</div>
+      ${clipRows}
+    </div>`:''}
+
+    <!-- DM Thread -->
+    <div>
+      <div style="font-weight:700;font-size:0.88rem;margin-bottom:10px;">💬 Messages</div>
+      <div id="hm-dm-thread" style="display:flex;flex-direction:column;gap:2px;max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px;background:rgba(0,0,0,0.2);">${dmsHTML}</div>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="hm-dm-input-${offerId}" placeholder="Type a message…" style="flex:1;font-size:0.83rem;border-radius:9px;" onkeydown="if(event.key==='Enter')hmSendDM(${offerId},'${other}')"/>
+        <button class="btn btn-primary btn-sm" onclick="hmSendDM(${offerId},'${other}')" style="flex-shrink:0;">Send</button>
+      </div>
+    </div>
+  `, '540px');
+
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e=>{ if(e.target===modal) modal.remove(); });
+  loadWalletNFTAvatar(other, 'hm-oa-modal-av');
+  // Scroll DM thread to bottom
+  setTimeout(()=>{const t=document.getElementById('hm-dm-thread');if(t)t.scrollTop=t.scrollHeight;},100);
+}
+
+// ── DM ────────────────────────────────────────────────────────────
+async function hmSendDM(offerId, recipientAddr) {
+  if (!db||!account) { toast('Connect wallet & Supabase to send messages','error'); return; }
+  const input = document.getElementById(`hm-dm-input-${offerId}`);
+  const msg   = input?.value.trim();
+  if (!msg) return;
+  try {
+    await db.from('hm_messages').insert({
+      offer_id: offerId,
+      sender: account.toLowerCase(),
+      recipient: recipientAddr.toLowerCase(),
+      message: msg,
+      msg_type: 'text',
+      created_at: new Date().toISOString()
+    });
+    input.value = '';
+    // Reload DMs
+    const {data:msgs} = await db.from('hm_messages').select('*').eq('offer_id',offerId).order('created_at',{ascending:true}).limit(50);
+    const thread = document.getElementById('hm-dm-thread');
+    if (thread&&msgs) {
+      thread.innerHTML = msgs.map(m=>{
+        const mine = m.sender?.toLowerCase()===account?.toLowerCase();
+        const time = new Date(m.created_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+        return `<div style="display:flex;flex-direction:column;align-items:${mine?'flex-end':'flex-start'};margin-bottom:8px;">
+          <div class="hm-dm-bubble ${mine?'mine':'theirs'}">${escHtml(m.message)}</div>
+          <div class="hm-dm-time">${time}</div>
+        </div>`;
+      }).join('');
+      thread.scrollTop = thread.scrollHeight;
+    }
+  } catch(e) { toast('Message failed to send','error'); }
+}
+
+// ── COUNTER ───────────────────────────────────────────────────────
+async function hmCounterOffer(offerId) {
+  const clips = parseInt(document.getElementById('hm-cnt')?.value)||0;
+  const avax  = parseFloat(document.getElementById('hm-avx')?.value)||0;
+  const note  = document.getElementById('hm-nte')?.value.trim()||'';
+  if (clips<1||clips>50||avax<=0) { toast('Check clips (1-50) and AVAX > 0','error'); return; }
+  try {
+    toast('Sending counter-offer…','pending');
+    const tx = await hireMeContract.counterOffer(offerId, ethers.parseEther(avax.toString()), clips, note);
+    await tx.wait();
+    if (db) {
+      const roP=await getFujiProvider(); const roHM=new ethers.Contract(HIREME_ADDRESS,HIREME_ABI,roP);
+      const o=await roHM.getOffer(offerId);
+      const recipient = account.toLowerCase()===o.clipper.toLowerCase() ? o.streamer : o.clipper;
+      await db.from('hm_messages').insert({offer_id:offerId,sender:account.toLowerCase(),recipient:recipient.toLowerCase(),message:`↕ Counter-offer: ${clips} clips for ${avax} AVAX. Note: ${note||'None'}`,msg_type:'counter',created_at:new Date().toISOString()}).catch(()=>{});
+    }
+    document.getElementById('hm-offer-modal')?.remove();
+    toast('Counter-offer sent!','success');
+    loadHireMePage();
+  } catch(e) { toast(friendlyError(e),'error'); }
+}
+
+// ── ACCEPT ────────────────────────────────────────────────────────
+async function hmAcceptOffer(offerId) {
+  const roP=await getFujiProvider(); const roHM=new ethers.Contract(HIREME_ADDRESS,HIREME_ABI,roP);
+  const o = await roHM.getOffer(offerId).catch(()=>null);
+  if (!o) { toast('Failed to load offer','error'); return; }
+  const isStr = o.streamer.toLowerCase()===account.toLowerCase();
+  const avax  = o.avaxAmount;
+  if (isStr&&(!avax||avax===0n)) { toast('No AVAX amount agreed yet','error'); return; }
+  if (isStr&&!confirm(`Lock ${ethers.formatEther(avax)} AVAX into escrow? This activates the deal — AVAX is only released when all clips are approved.`)) return;
+  try {
+    toast(isStr?'Locking AVAX & accepting…':'Accepting terms…','pending');
+    const tx = await hireMeContract.acceptOffer(offerId, {value: isStr ? avax : 0n});
+    await tx.wait();
+    if (db) {
+      const recipient = isStr ? o.clipper : o.streamer;
+      await db.from('hm_messages').insert({offer_id:offerId,sender:account.toLowerCase(),recipient:recipient.toLowerCase(),message:isStr?`✅ Streamer accepted & locked ${ethers.formatEther(avax)} AVAX. Deal is now active!`:'✅ Clipper accepted terms. Streamer please lock AVAX to activate deal.',msg_type:'accept',created_at:new Date().toISOString()}).catch(()=>{});
+    }
+    document.getElementById('hm-offer-modal')?.remove();
+    toast(isStr?'✅ Deal activated! AVAX locked. Clipper can now submit clips.':'✅ Terms accepted! Streamer needs to lock AVAX.','success');
+    loadHireMePage();
+  } catch(e) { toast(friendlyError(e),'error'); }
+}
+
+// ── REJECT ────────────────────────────────────────────────────────
+async function hmRejectOffer(offerId) {
+  if (!confirm('Reject this offer? This ends the negotiation.')) return;
+  try {
+    toast('Rejecting…','pending');
+    const tx = await hireMeContract.rejectOffer(offerId);
+    await tx.wait();
+    document.getElementById('hm-offer-modal')?.remove();
+    toast('Offer rejected.','success');
+    loadHireMePage();
+  } catch(e) { toast(friendlyError(e),'error'); }
+}
+
+// ── SUBMIT CLIP ────────────────────────────────────────────────────
+async function hmSubmitClip(offerId) {
+  const link = document.getElementById(`hm-clip-url-${offerId}`)?.value.trim();
+  if (!link||!link.startsWith('http')) { toast('Enter a valid clip URL','error'); return; }
+  const ok = link.includes('x.com')||link.includes('twitter.com')||link.includes('youtube.com')||link.includes('youtu.be');
+  if (!ok) { toast('Only X or YouTube links accepted','error'); return; }
+  try {
+    toast('Submitting clip…','pending');
+    const tx = await hireMeContract.submitClip(offerId, link);
+    await tx.wait();
+    if (db) {
+      const roP=await getFujiProvider(); const roHM=new ethers.Contract(HIREME_ADDRESS,HIREME_ABI,roP);
+      const o=await roHM.getOffer(offerId);
+      await db.from('hm_messages').insert({offer_id:offerId,sender:account.toLowerCase(),recipient:o.streamer.toLowerCase(),message:`📎 New clip submitted: ${link}`,msg_type:'clip',created_at:new Date().toISOString()}).catch(()=>{});
+    }
+    document.getElementById('hm-offer-modal')?.remove();
+    toast('✅ Clip submitted! Streamer will review it.','success');
+    loadHireMePage();
+  } catch(e) { toast(friendlyError(e),'error'); }
+}
+
+// ── APPROVE CLIP ──────────────────────────────────────────────────
+async function hmApproveClip(offerId, clipIdx) {
+  try {
+    toast('Approving clip…','pending');
+    const tx = await hireMeContract.approveClip(clipIdx, offerId);
+    await tx.wait();
+    const roP=await getFujiProvider(); const roHM=new ethers.Contract(HIREME_ADDRESS,HIREME_ABI,roP);
+    const o = await roHM.getOffer(offerId);
+    const complete = Number(o.status)===2;
+    if (db) {
+      await db.from('hm_messages').insert({offer_id:offerId,sender:account.toLowerCase(),recipient:o.clipper.toLowerCase(),message:complete?`🎉 All clips approved! Payout of ${ethers.formatEther(o.avaxAmount)} AVAX sent to your wallet.`:`✅ Clip #${clipIdx+1} approved! ${Number(o.approvedClips)}/${Number(o.clipCount)} done.`,msg_type:'approve',created_at:new Date().toISOString()}).catch(()=>{});
+    }
+    document.getElementById('hm-offer-modal')?.remove();
+    toast(complete?'🎉 All clips approved — clipper paid out automatically!':'✅ Clip approved!','success');
+    loadHireMePage();
+  } catch(e) { toast(friendlyError(e),'error'); }
+}
+
+// ── MUTUAL CANCEL ─────────────────────────────────────────────────
+async function hmRequestCancel(offerId) {
+  if (!confirm('Request cancellation? The other party must AGREE for the deal to actually cancel. If they refuse, the deal continues.\n\nThe streamer gets their AVAX back minus a 2% penalty if agreed.')) return;
+  try {
+    toast('Submitting cancel request…','pending');
+    const tx = await hireMeContract.requestCancel(offerId);
+    await tx.wait();
+    if (db) {
+      const roP=await getFujiProvider(); const roHM=new ethers.Contract(HIREME_ADDRESS,HIREME_ABI,roP);
+      const o=await roHM.getOffer(offerId);
+      const recipient = account.toLowerCase()===o.clipper.toLowerCase() ? o.streamer : o.clipper;
+      await db.from('hm_messages').insert({offer_id:offerId,sender:account.toLowerCase(),recipient:recipient.toLowerCase(),message:'⚠️ Cancel requested. The other party must agree for the deal to cancel. They can also refuse and the deal continues.',msg_type:'cancel_request',created_at:new Date().toISOString()}).catch(()=>{});
+    }
+    document.getElementById('hm-offer-modal')?.remove();
+    toast('Cancel requested. Other party must agree before deal cancels.','success');
+    loadHireMePage();
+  } catch(e) { toast(friendlyError(e),'error'); }
+}
+async function hmAgreeCancel(offerId) {
+  if (!confirm('Agree to cancel? Streamer gets their AVAX back minus 2% penalty. This cannot be undone.')) return;
+  try {
+    toast('Agreeing to cancel…','pending');
+    const tx = await hireMeContract.agreeCancelDeal(offerId);
+    await tx.wait();
+    document.getElementById('hm-offer-modal')?.remove();
+    toast('Deal cancelled. AVAX refunded minus 2% penalty.','success');
+    loadHireMePage();
+  } catch(e) { toast(friendlyError(e),'error'); }
+}
+async function hmRejectCancel(offerId) {
+  try {
+    toast('Rejecting cancel request…','pending');
+    const tx = await hireMeContract.rejectCancelRequest(offerId);
+    await tx.wait();
+    if (db) {
+      const roP=await getFujiProvider(); const roHM=new ethers.Contract(HIREME_ADDRESS,HIREME_ABI,roP);
+      const o=await roHM.getOffer(offerId);
+      const recipient = account.toLowerCase()===o.clipper.toLowerCase() ? o.streamer : o.clipper;
+      await db.from('hm_messages').insert({offer_id:offerId,sender:account.toLowerCase(),recipient:recipient.toLowerCase(),message:'❌ Cancel request rejected — deal continues. Get those clips in!',msg_type:'cancel_rejected',created_at:new Date().toISOString()}).catch(()=>{});
+    }
+    document.getElementById('hm-offer-modal')?.remove();
+    toast('Cancel request rejected — deal continues!','success');
+    loadHireMePage();
+  } catch(e) { toast(friendlyError(e),'error'); }
+}
+
+// ── ADMIN: Link NFT → HireMe ──────────────────────────────────────
+async function adminSetHireMeNFT() {
+  if (!signer) { toast('Connect wallet first','error'); return; }
+  if (HIREME_ADDRESS==='0x0000000000000000000000000000000000000000') { toast('Update HIREME_ADDRESS in source first','error'); return; }
+  try {
+    const hm = new ethers.Contract(HIREME_ADDRESS, HIREME_ABI, signer);
+    toast('Linking NFT → HireMe…','pending');
+    const tx = await hm.setNFTContract(NFT_ADDRESS);
+    await tx.wait();
+    toast('✅ NFT linked to HireMe contract!','success');
+    loadAdminPage();
+  } catch(e) { toast(friendlyError(e),'error'); }
 }
 
 // EXPOSE TO WINDOW
@@ -3487,7 +4279,7 @@ function mktFilterCards(query) {
 }
 
 
-const exposed = { connectWallet,disconnectWallet,showPage,switchTab,openModal,closeModal,selectRole,onboardNext,finishOnboarding,mintGenesis,mintEarlyAccess,saveProfile,postBounty,submitClip,voteOnClip,pickWinner,resolveVote,filterBounties,openBountyDetail,setMobileActive,loadInventory,openSubDetail,openHostProfile,openClipperProfile,openStreamViewer,addPendingWinner,removePendingWinner,confirmMultiWinners,confirmSingleWinner,postComment,openEditBounty,copyReferralLink,shareReferralLink,loadReferrals,loadRewardsPage,registerAsGenesisHolder,flagContent,adminDismissFlag,adminActionFlag,adminBanUser,adminForcePause,adminExportData,adminToggleMint,adminSetTreasuryNFT,adminSetTreasuryEscrow,adminSetEscrowNFT,adminSetNFTBountyContract,loadAdminPage,toggleMobileDrawer,closeMobileDrawer,loadClipFeed,loadStreamerDashboard,loadMarketplace,mktListNFT,mktDelistNFT,mktBuyNFT,mktUpdatePrice,mktEquipToken,mktUnequipToken,mktShowListModal,mktShowUpdateModal,mktSwitchTab,mktEquipFromInventory,updateSchedPreview,checkRewardVsBalance,loadWalletNFTAvatar };
+const exposed = { connectWallet,disconnectWallet,showPage,switchTab,openModal,closeModal,selectRole,onboardNext,finishOnboarding,mintGenesis,mintEarlyAccess,saveProfile,postBounty,submitClip,voteOnClip,pickWinner,resolveVote,filterBounties,openBountyDetail,setMobileActive,loadInventory,openSubDetail,openHostProfile,openClipperProfile,openStreamViewer,addPendingWinner,removePendingWinner,confirmMultiWinners,confirmSingleWinner,postComment,openEditBounty,copyReferralLink,shareReferralLink,loadReferrals,loadRewardsPage,registerAsGenesisHolder,flagContent,adminDismissFlag,adminActionFlag,adminBanUser,adminForcePause,adminExportData,adminToggleMint,adminSetTreasuryNFT,adminSetTreasuryEscrow,adminSetEscrowNFT,adminSetNFTBountyContract,adminSetHireMeNFT,loadAdminPage,toggleMobileDrawer,closeMobileDrawer,loadClipFeed,loadStreamerDashboard,loadMarketplace,mktListNFT,mktDelistNFT,mktBuyNFT,mktUpdatePrice,mktEquipToken,mktUnequipToken,mktShowListModal,mktShowUpdateModal,mktSwitchTab,mktEquipFromInventory,updateSchedPreview,checkRewardVsBalance,loadWalletNFTAvatar,loadHireMePage,hmAddPOW,hmRemovePOW,hmViewClipper,hmMakeOffer,hmOpenOffer,hmCounterOffer,hmAcceptOffer,hmRejectOffer,hmSubmitClip,hmApproveClip,hmRequestCancel,hmAgreeCancel,hmRejectCancel,hmSendDM };
 Object.assign(window, exposed);
 
 // INIT
@@ -4049,6 +4841,7 @@ function hideTxClapper() {
         <div class="nav-item" onclick="switchTab('tab-bounties-dash')" id="nav-bounties-dash"><span class="icon">🎯</span> Bounty Board</div>
         <div class="nav-item" onclick="switchTab('tab-submissions')" id="nav-submissions"><span class="icon">📎</span> My Submissions</div>
         <div class="nav-item" onclick="switchTab('tab-post')" id="nav-post"><span class="icon">➕</span> Post Bounty</div>
+        <div class="nav-item" onclick="switchTab('tab-hireme')" id="nav-hireme"><span class="icon">🤝</span> Hire Me</div>
         <div class="nav-item" onclick="switchTab('tab-streamer')" id="nav-streamer"><span class="icon">📡</span> Streamer Hub</div>
         <div class="nav-item" onclick="switchTab('tab-feed')" id="nav-feed"><span class="icon">🎬</span> Clip Feed</div>
         <div class="sidebar-label">Account</div>
@@ -4067,7 +4860,16 @@ function hideTxClapper() {
     <main class="main-content">
       <!-- OVERVIEW -->
       <div id="tab-overview" class="dash-tab">
-        <div class="page-header"><h2>Overview</h2><p id="dash-welcome">Welcome back</p></div>
+        <!-- Overview banner image -->
+        <div style="border-radius:14px;overflow:hidden;margin-bottom:20px;max-height:150px;position:relative;">
+          <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/ChatGPT%20Image%20Mar%201%2C%202026%2C%2002_46_16%20PM.png" alt="Overview" style="width:100%;height:150px;object-fit:cover;object-position:center;display:block;" onerror="this.parentElement.style.display='none'"/>
+          <div style="position:absolute;inset:0;background:linear-gradient(to right,rgba(0,0,0,0.65) 0%,transparent 55%);pointer-events:none;"></div>
+          <div style="position:absolute;bottom:16px;left:20px;">
+            <div style="font-family:var(--font-display);font-size:2rem;color:white;line-height:1;">Overview</div>
+            <div id="dash-welcome" style="font-size:0.8rem;color:rgba(255,255,255,0.7);">Welcome back</div>
+          </div>
+          <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/ChatGPT_Image_Mar_1__2026__02_50_54_PM-removebg-preview.png" style="position:absolute;right:0;bottom:0;height:140px;object-fit:contain;pointer-events:none;" onerror="this.style.display='none'"/>
+        </div>
         <div class="overview-stats-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:24px;">
           <div class="card"><div style="color:var(--muted);font-size:0.72rem;text-transform:uppercase;margin-bottom:5px;">NFT Tier</div><div id="overview-tier" style="font-family:var(--font-display);font-size:1.4rem;color:var(--orange);">—</div></div>
           <div class="card"><div style="color:var(--muted);font-size:0.72rem;text-transform:uppercase;margin-bottom:5px;">Reputation</div><div id="overview-rep" style="font-family:var(--font-display);font-size:1.4rem;color:var(--red);">0</div></div>
@@ -4213,6 +5015,15 @@ function hideTxClapper() {
         <div id="clip-feed-list"><div class="empty-state"><div class="spinner"></div><p>Loading clips...</p></div></div>
       </div>
 
+      <!-- HIRE ME -->
+      <div id="tab-hireme" class="dash-tab" style="display:none">
+        <div class="page-header">
+          <h2>🤝 Hire Me</h2>
+          <p>Clippers showcase their work · Streamers hire direct</p>
+        </div>
+        <div id="hireme-content"><div class="empty-state"><div class="spinner"></div><p>Loading…</p></div></div>
+      </div>
+
       <!-- PROFILE -->
       <div id="tab-profile" class="dash-tab" style="display:none">
         <div class="page-header"><h2>My Profile</h2></div>
@@ -4337,6 +5148,7 @@ function hideTxClapper() {
 <div id="mobile-drawer" style="display:none;position:fixed;bottom:62px;left:0;right:0;background:#0f0f0f;border-top:1px solid #2a2a2a;border-radius:14px 14px 0 0;z-index:145;padding:16px 12px 8px;box-shadow:0 -8px 32px rgba(0,0,0,0.7);">
   <div style="width:40px;height:4px;background:#333;border-radius:2px;margin:0 auto 16px;"></div>
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+    <button class="mobile-drawer-btn" onclick="switchTab('tab-hireme');closeMobileDrawer()"><span style="font-size:1.3rem;">🤝</span><span>Hire Me</span></button>
     <button class="mobile-drawer-btn" onclick="switchTab('tab-profile');setMobileActive('mob-profile');closeMobileDrawer()"><span style="font-size:1.3rem;">👤</span><span>Profile</span></button>
     <button class="mobile-drawer-btn" onclick="switchTab('tab-inventory');closeMobileDrawer()"><span style="font-size:1.3rem;">🖼️</span><span>My NFT</span></button>
     <button class="mobile-drawer-btn" onclick="switchTab('tab-submissions');closeMobileDrawer()"><span style="font-size:1.3rem;">📎</span><span>Submissions</span></button>
@@ -4653,11 +5465,20 @@ function hideTxClapper() {
 
 <!-- ==================== PAGE: REFERRALS ==================== -->
 <div id="page-referrals" class="page">
-  <div class="container" style="padding-top:40px;padding-bottom:80px;max-width:680px;">
+  <div class="container" style="padding-top:0;padding-bottom:80px;max-width:680px;">
+    <!-- Referrals hero banner -->
+    <div style="border-radius:0 0 18px 18px;overflow:hidden;margin-bottom:32px;max-height:160px;position:relative;">
+      <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/ChatGPT%20Image%20Mar%201%2C%202026%2C%2002_47_56%20PM.png" alt="Referrals" style="width:100%;height:160px;object-fit:cover;object-position:center;display:block;" onerror="this.parentElement.style.background='linear-gradient(135deg,#0d0800,#000)';this.style.display='none'"/>
+      <div style="position:absolute;inset:0;background:linear-gradient(to right,rgba(0,0,0,0.75) 0%,transparent 60%);pointer-events:none;"></div>
+      <div style="position:absolute;bottom:18px;left:22px;">
+        <div style="font-family:var(--font-mono);font-size:0.7rem;color:var(--orange);letter-spacing:2px;text-transform:uppercase;margin-bottom:4px;">💸 Referrals</div>
+        <div style="font-family:var(--font-display);font-size:2rem;line-height:1;color:white;">Invite &amp; Earn</div>
+        <div style="font-size:0.78rem;color:rgba(255,255,255,0.65);margin-top:4px;">5% of mint price, paid instantly on-chain</div>
+      </div>
+      <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/ChatGPT_Image_Mar_1__2026__02_50_54_PM-removebg-preview.png" style="position:absolute;right:0;bottom:0;height:150px;object-fit:contain;pointer-events:none;" onerror="this.style.display='none'"/>
+    </div>
     <div style="margin-bottom:32px;">
-      <div style="font-family:var(--font-mono);font-size:0.7rem;color:var(--orange);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;">💸 Referrals</div>
-      <h2 style="margin-bottom:6px;">Invite & Earn</h2>
-      <p style="color:var(--muted);">Refer someone who mints a ClipDAO NFT and earn 5% of their mint price — paid to your wallet every week.</p>
+      <p style="color:var(--muted);">Refer someone who mints a ClipDAO NFT and earn 5% of their mint price — paid to your wallet instantly on-chain.</p>
     </div>
     <div class="card" style="margin-bottom:16px;border-left:3px solid var(--orange);">
       <div style="font-weight:700;margin-bottom:10px;color:var(--orange);">Your Invite Link</div>
@@ -4746,10 +5567,18 @@ function hideTxClapper() {
 
 <!-- ==================== PAGE: DOCS ==================== -->
 <div id="page-docs" class="page">
-  <div class="container" style="padding-top:40px;padding-bottom:80px;max-width:820px;">
+  <div class="container" style="padding-top:0;padding-bottom:80px;max-width:820px;">
+    <!-- Docs hero banner -->
+    <div style="border-radius:0 0 18px 18px;overflow:hidden;margin-bottom:36px;max-height:180px;position:relative;">
+      <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/ChatGPT%20Image%20Mar%201%2C%202026%2C%2002_45_15%20PM.png" alt="Docs" style="width:100%;height:180px;object-fit:cover;object-position:center top;display:block;" onerror="this.parentElement.style.background='linear-gradient(135deg,#1a0a00,#000)';this.style.display='none'"/>
+      <div style="position:absolute;inset:0;background:linear-gradient(to right,rgba(0,0,0,0.75) 0%,rgba(0,0,0,0.3) 60%,transparent 100%);pointer-events:none;"></div>
+      <div style="position:absolute;bottom:20px;left:24px;">
+        <div style="font-family:var(--font-mono);font-size:0.7rem;color:var(--orange);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;">📖 Documentation</div>
+        <div style="font-family:var(--font-display);font-size:2.4rem;line-height:1;color:white;">How <em style="color:var(--red);font-style:normal;">ClipDAO</em> Works</div>
+      </div>
+      <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/ChatGPT_Image_Mar_1__2026__02_50_54_PM-removebg-preview.png" style="position:absolute;right:0;bottom:0;height:170px;object-fit:contain;pointer-events:none;" onerror="this.style.display='none'"/>
+    </div>
     <div style="margin-bottom:40px;">
-      <div style="font-family:var(--font-mono);font-size:0.74rem;color:var(--orange);letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;">📖 Documentation</div>
-      <h1 style="margin-bottom:10px;">How <em style="color:var(--red);font-style:normal;">ClipDAO</em> Works</h1>
       <p style="color:var(--muted);font-size:0.96rem;max-width:580px;">The trustless clipping marketplace for <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_1_2026-02-24_07-10-44-removebg-preview.png" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'"/> Blaze and <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_2_2026-02-24_07-10-44-removebg-preview.png" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'"/> Arena streamers — powered by <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_3_2026-02-24_07-10-44-removebg-preview.png" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'"/> Avalanche smart contracts.</p>
     </div>
 
@@ -5744,6 +6573,10 @@ function hideTxClapper() {
 
   <!-- Banner -->
   <div class="mkt-banner">
+    <!-- Marketplace hero image -->
+    <div style="position:absolute;inset:0;overflow:hidden;">
+      <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/ChatGPT%20Image%20Mar%201%2C%202026%2C%2002_42_59%20PM.png" alt="Marketplace" style="width:100%;height:100%;object-fit:cover;object-position:center;opacity:0.35;" onerror="this.style.display='none'"/>
+    </div>
     <div class="mkt-banner-grid">
       <div class="mkt-banner-title">NFT Marketplace</div>
       <div class="mkt-banner-sub">Buy · Sell · Equip · Trade ClipDAO identities on Avalanche</div>
