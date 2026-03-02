@@ -17,7 +17,7 @@ const NFT_ADDRESS      = '0x5424306e8Ac64B11E8bf1fA834D4e298FB2889d3';
 const ESCROW_ADDRESS   = '0x6938022B15Dd63A92eBCf6a5CC4449baB9584670';
 const TREASURY_ADDRESS = '0xB7f1391eC7500076378666fEd574aD0884892776';
 const FUJI_CHAIN_ID    = 43113;
-const HIREME_ADDRESS   = '0xB6E110be2197e11AB62F1817cc5Fc1BCa7F8847a';
+const HIREME_ADDRESS   = '0xE74a21F9b24B3e8127DEC290197f372482e2B7b8';
 const FUJI_RPCS = [
   'https://api.avax-test.network/ext/bc/C/rpc',
   'https://avalanche-fuji-c-chain-rpc.publicnode.com',
@@ -1901,7 +1901,9 @@ function friendlyError(e) {
   if (errName === 'IdentityNotConfirmed' || raw.includes('identitynotconfirmed') || raw.includes('identity not confirmed'))
     return '❌ Your NFT identity isn\'t confirmed yet. Go to Profile → confirm your identity on-chain first.';
   if (errName === 'NeedNFT' || raw.includes('neednft'))
-    return '❌ The escrow contract doesn\'t recognize your NFT. Go to Admin → Contract Setup → click "Link NFT → Escrow".';
+    return '\u274c You need a ClipDAO NFT for this action, OR the HireMe contract is not yet linked to the NFT. Admin \u2192 Contract Setup \u2192 \ud83d\udd17 Link NFT \u2192 HireMe.';
+  if (raw.includes('missing revert data') || (raw.includes('estimategas') && raw.includes('null')))
+    return '\u274c Contract ABI mismatch \u2014 the deployed contract at this address does not match the expected interface. The wrong .sol file was deployed. Redeploy using 4_ClipDAOHireMe.sol and update HIREME_ADDRESS in the code.';
   if (errName === 'NothingEquipped' || raw.includes('nothingequipped'))
     return '❌ No NFT is currently equipped. Equip an NFT first from your inventory or marketplace.';
   if (errName === 'DoNotOwnToken' || raw.includes('donotowntoken'))
@@ -2725,12 +2727,38 @@ async function loadAdminPage() {
           <button class="btn btn-ghost btn-sm" onclick="adminSetTreasuryEscrow()">🔗 Link Escrow → Treasury</button>
           <button class="btn btn-primary btn-sm" onclick="adminSetEscrowNFT()">🔗 Link NFT → Escrow</button>
           <button class="btn btn-orange btn-sm" onclick="adminSetNFTBountyContract()">🔗 Link Escrow → NFT (bountyContract)</button>
-          <button class="btn btn-ghost btn-sm" onclick="adminSetHireMeNFT()">🔗 Link NFT → HireMe</button>
+          <button class="btn btn-orange btn-sm" onclick="adminSetHireMeNFT()" id="admin-hireme-btn">🔗 Link NFT → HireMe</button>
         </div>
-        <div style="font-size:0.68rem;color:var(--muted);margin-top:8px;">⚠️ All 4 links are required after every deploy. Missing any will break bounties, clips, voting, or distributions.</div>
+        <div id="admin-hireme-status" style="margin-top:10px;padding:10px;border-radius:8px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);font-size:0.78rem;color:#ef4444;">
+          ⏳ Checking HireMe contract link…
+        </div>
+        <div style="font-size:0.68rem;color:var(--muted);margin-top:8px;">⚠️ All 5 links required after every deploy. Missing any will break features.</div>
       </div>
     </div>
   `;
+  // Check HireMe link status immediately
+  (async () => {
+    const statusEl = document.getElementById('admin-hireme-status');
+    const btnEl    = document.getElementById('admin-hireme-btn');
+    if (!statusEl) return;
+    try {
+      const p   = await getFujiProvider();
+      const roHM = new ethers.Contract(HIREME_ADDRESS, HIREME_ABI, p);
+      const linked = await roHM.nftContract().catch(()=>null);
+      const isLinked = linked && linked !== '0x0000000000000000000000000000000000000000';
+      if (isLinked) {
+        statusEl.style.background = 'rgba(34,197,94,0.08)';
+        statusEl.style.borderColor = 'rgba(34,197,94,0.3)';
+        statusEl.style.color = '#22c55e';
+        statusEl.innerHTML = `✅ HireMe → NFT linked: <span style="font-family:var(--font-mono);font-size:0.72rem;">${linked}</span>`;
+        if (btnEl) { btnEl.textContent = '✅ Already Linked'; btnEl.style.opacity='0.5'; }
+      } else {
+        statusEl.innerHTML = `❌ <strong>HireMe is NOT linked to NFT</strong> — this is why addPOWLink fails. Click the button above to fix it now.`;
+      }
+    } catch(e) {
+      statusEl.innerHTML = '⚠️ Could not check HireMe link status.';
+    }
+  })();
   // Load mint + contract status
   try {
     const p = await getFujiProvider();
@@ -2944,6 +2972,45 @@ async function loadHireMePage() {
   const roHM   = new ethers.Contract(HIREME_ADDRESS, HIREME_ABI, roP);
   const isStr  = userProfile?.role === 'streamer';
 
+  // ── Pre-flight: ABI compatibility + NFT link check ──────────
+  let nftLinked = false;
+  let abiMismatch = false;
+  try {
+    const linkedNFT = await roHM.nftContract();
+    nftLinked = linkedNFT && linkedNFT !== '0x0000000000000000000000000000000000000000';
+  } catch(e) {
+    // nftContract() call itself failed → ABI doesn't match deployed contract
+    abiMismatch = true;
+  }
+
+  if (abiMismatch) {
+    el.innerHTML = `<div style="background:rgba(239,68,68,0.1);border:2px solid rgba(239,68,68,0.5);border-radius:14px;padding:24px;">
+      <div style="font-weight:800;color:#ef4444;font-size:1.1rem;margin-bottom:12px;">⚠️ Wrong Contract Deployed</div>
+      <p style="color:var(--muted);font-size:0.85rem;line-height:1.7;margin-bottom:16px;">
+        The contract at <code style="background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:4px;font-size:0.75rem;">${HIREME_ADDRESS.slice(0,10)}…</code>
+        does not match the expected HireMe interface — a different .sol file was deployed.<br><br>
+        <strong style="color:white;">Fix: Redeploy the exact <code>4_ClipDAOHireMe.sol</code> provided, then update <code>HIREME_ADDRESS</code> in the frontend source.</strong>
+      </p>
+      <div style="background:rgba(0,0,0,0.3);border-radius:8px;padding:12px;font-family:var(--font-mono);font-size:0.72rem;color:var(--muted);line-height:1.8;">
+        Expected: <span style="color:var(--orange);">addPOWLink(string)</span> → selector <span style="color:var(--success);">0x0196bac8</span><br>
+        Received: selector <span style="color:#ef4444;">0xd580ec0c</span> (no match — wrong contract bytecode)
+      </div>
+    </div>`;
+    return;
+  }
+
+  if (!nftLinked) {
+    el.innerHTML = `<div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.35);border-radius:14px;padding:24px;margin-bottom:16px;">
+      <div style="font-weight:800;color:#ef4444;margin-bottom:8px;font-size:1rem;">⚙️ One-Time Setup Required</div>
+      <p style="color:var(--muted);font-size:0.85rem;line-height:1.7;margin-bottom:16px;">
+        The HireMe contract needs to be linked to the NFT contract once — all writes will fail until this is done.<br>
+        <strong style="color:white;">Fix: Admin → Contract Setup → 🔗 Link NFT → HireMe</strong>
+      </p>
+      <button class="btn btn-primary btn-sm" onclick="adminSetHireMeNFT().then(()=>setTimeout(loadHireMePage,2000))">🔗 Link NFT → HireMe Now</button>
+    </div>
+    <div style="opacity:0.4;pointer-events:none;">`;
+  }
+
   let myPOW=[], clipperIds=[], streamerIds=[];
   try { myPOW = await roHM.getPOW(account); } catch(e) {}
   try { clipperIds  = (await roHM.getClipperOffers(account)).map(Number);  } catch(e) {}
@@ -2971,7 +3038,8 @@ async function loadHireMePage() {
   const pending   = offerDetails.filter(o=>Number(o.status)===0);
   const completed = offerDetails.filter(o=>Number(o.status)===2||Number(o.status)===3||Number(o.status)===4);
 
-  el.innerHTML = _hmBuildPage(isStr, myPOW, pending, active, completed, allClippers);
+  el.innerHTML += _hmBuildPage(isStr, myPOW, pending, active, completed, allClippers);
+  if (!nftLinked) el.innerHTML += '</div>'; // close the grayed-out wrapper
 
   // Post-render avatar injection
   setTimeout(() => {
@@ -3145,6 +3213,25 @@ async function hmAddPOW() {
   if (!url || !url.startsWith('http')) { toast('Enter a valid URL starting with http', 'error'); return; }
   const ok = url.includes('x.com') || url.includes('twitter.com') || url.includes('youtube.com') || url.includes('youtu.be');
   if (!ok) { toast('Only X (x.com) or YouTube links accepted', 'error'); return; }
+
+  // Pre-flight: check HireMe contract has NFT linked + user holds NFT
+  try {
+    const roP = await getFujiProvider();
+    const roHM = new ethers.Contract(HIREME_ADDRESS, HIREME_ABI, roP);
+    const linkedNFT = await roHM.nftContract().catch(() => null);
+    if (!linkedNFT || linkedNFT === '0x0000000000000000000000000000000000000000') {
+      toast('⚙️ HireMe contract not linked to NFT yet. Ask admin to run: Admin → Link NFT → HireMe', 'error');
+      return;
+    }
+    const hasNft = await nftContract.hasNFT(account).catch(() => false);
+    if (!hasNft) {
+      toast('❌ You need a ClipDAO NFT to use Hire Me. Mint one first.', 'error');
+      return;
+    }
+  } catch(e) {
+    // Pre-flight failed silently — try the tx anyway, real error will surface
+  }
+
   try {
     toast('Adding to your portfolio…', 'pending');
     const tx = await hireMeContract.addPOWLink(url);
@@ -3242,6 +3329,18 @@ async function hmMakeOffer(clipperAddr) {
   const note  = document.getElementById('hm-on')?.value.trim()||'';
   if (clips<1||clips>50) { toast('Clips must be 1–50', 'error'); return; }
   if (avax<=0) { toast('Enter an AVAX offer amount', 'error'); return; }
+
+  // Pre-flight: NFT linked and user holds NFT
+  try {
+    const roP = await getFujiProvider();
+    const roHM = new ethers.Contract(HIREME_ADDRESS, HIREME_ABI, roP);
+    const linkedNFT = await roHM.nftContract().catch(()=>null);
+    if (!linkedNFT || linkedNFT==='0x0000000000000000000000000000000000000000') {
+      toast('⚙️ HireMe not linked to NFT yet. Admin must run: Link NFT → HireMe', 'error'); return;
+    }
+    const hasNft = await nftContract.hasNFT(account).catch(()=>false);
+    if (!hasNft) { toast('❌ You need a ClipDAO NFT to make offers', 'error'); return; }
+  } catch(e) {}
   try {
     toast('Creating offer…', 'pending');
     const tx1 = await hireMeContract.makeOffer(clipperAddr, clips, note);
