@@ -17,7 +17,7 @@ const NFT_ADDRESS      = '0x5424306e8Ac64B11E8bf1fA834D4e298FB2889d3';
 const ESCROW_ADDRESS   = '0x6938022B15Dd63A92eBCf6a5CC4449baB9584670';
 const TREASURY_ADDRESS = '0xB7f1391eC7500076378666fEd574aD0884892776';
 const FUJI_CHAIN_ID    = 43113;
-const HIREME_ADDRESS   = '0xE74a21F9b24B3e8127DEC290197f372482e2B7b8';
+const HIREME_ADDRESS   = '0xB6E110be2197e11AB62F1817cc5Fc1BCa7F8847a';
 const FUJI_RPCS = [
   'https://api.avax-test.network/ext/bc/C/rpc',
   'https://avalanche-fuji-c-chain-rpc.publicnode.com',
@@ -1833,7 +1833,7 @@ async function loadMySubmissions() {
 let prevPage = 'bounties';
 function showPage(page) {
   const current = document.querySelector('.page.active');
-  if (current && current.id && current.id !== 'page-bounty-detail') {
+  if (current && current.id && current.id !== 'page-bounty-detail' && current.id !== 'page-deal-detail') {
     prevPage = current.id.replace('page-','');
   }
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -1847,12 +1847,12 @@ function showPage(page) {
   if (page==='referrals')  loadReferrals();
   if (page==='rewards')    loadRewardsPage();
   if (page==='marketplace') loadMarketplace();
+  if (page==='hireme-browse') loadHireMeBrowse();
   if (page==='admin' && account?.toLowerCase()===ADMIN_WALLET) loadAdminPage();
   else if (page==='admin') { toast('Admin access only', 'error'); showPage('home'); }
 }
-function goBackFromBounty() {
-  showPage(prevPage || 'bounties');
-}
+function goBackFromBounty() { showPage(prevPage || 'bounties'); }
+function goBackFromDeal()   { showPage(prevPage || 'dashboard'); }
 
 function switchTab(tabId) {
   document.querySelectorAll('.dash-tab').forEach(t => t.style.display = 'none');
@@ -2929,819 +2929,1031 @@ async function setNFTProfilePicture() {
 }
 
 // ================================================================
-//  HIRE ME — Polished UX, Mutual Cancel, Supabase DMs
+//  HIRE ME — Supabase POW profiles + on-chain negotiation
 // ================================================================
-const HM_STATUS  = { 0:'PENDING', 1:'ACTIVE', 2:'COMPLETED', 3:'REJECTED', 4:'CANCELLED' };
-const HM_STATUS_COLOR = { 0:'var(--amber)', 1:'var(--success)', 2:'var(--muted)', 3:'var(--red)', 4:'var(--muted)' };
+const HM_STATUS = { 0:'PENDING', 1:'ACTIVE', 2:'COMPLETED', 3:'REJECTED', 4:'CANCELLED' };
 
-// ── HELPERS ──────────────────────────────────────────────────────
+// ── SHARED HELPERS ───────────────────────────────────────────────
 function _hmPlatformIcon(url='') {
-  if (!url) return '🔗';
   if (url.includes('youtube.com') || url.includes('youtu.be')) return '▶';
   if (url.includes('x.com') || url.includes('twitter.com')) return '𝕏';
   return '🔗';
 }
-function _hmAvatarEl(id, initial) {
-  return `<div id="${id}" style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--red),var(--orange));flex-shrink:0;overflow:hidden;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.9rem;color:white;">${initial||'?'}</div>`;
+function _hmAvatar(id, initial, size='40px') {
+  return `<div id="${id}" style="width:${size};height:${size};border-radius:50%;background:linear-gradient(135deg,var(--red),var(--orange));flex-shrink:0;overflow:hidden;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.9rem;color:white;">${initial||'?'}</div>`;
 }
-function _hmReadableStatus(status, cancelRequester, myAddr) {
-  if (status===1 && cancelRequester && cancelRequester !== '0x0000000000000000000000000000000000000000') {
-    const iRequested = cancelRequester.toLowerCase() === myAddr?.toLowerCase();
-    return iRequested ? '⚠️ You requested cancel — waiting for other party' : '⚠️ Other party wants to cancel — your decision';
-  }
-  const labels = {0:'Negotiating…', 1:'Active ✅', 2:'Completed ✓', 3:'Rejected', 4:'Cancelled'};
-  return labels[status] || '—';
+function _hmModal(id, body, maxW='520px') {
+  const el = document.createElement('div');
+  el.id = id;
+  el.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.82);z-index:2000;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px);';
+  el.innerHTML = `<div style="background:var(--card);border:1px solid rgba(255,107,26,0.2);border-radius:18px;padding:26px;max-width:${maxW};width:100%;max-height:90vh;overflow-y:auto;position:relative;">
+    <button onclick="document.getElementById('${id}').remove()" style="position:absolute;top:14px;right:14px;background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--muted);border-radius:8px;cursor:pointer;font-size:0.8rem;padding:5px 10px;" onmouseenter="this.style.color='white'" onmouseleave="this.style.color='var(--muted)'">✕</button>
+    ${body}
+  </div>`;
+  el.addEventListener('click', e => { if (e.target === el) el.remove(); });
+  return el;
 }
-
-// ── MAIN LOADER ──────────────────────────────────────────────────
-async function loadHireMePage() {
-  const el = document.getElementById('hireme-content');
-  if (!el) return;
-  if (!account) { el.innerHTML='<div class="empty-state"><p>Connect wallet to use Hire Me.</p></div>'; return; }
-  if (!hireMeContract) {
-    el.innerHTML=`<div class="empty-state" style="padding:40px 20px;">
-      <div style="font-size:3rem;margin-bottom:16px;">🤝</div>
-      <p style="font-weight:700;margin-bottom:8px;">Hire Me not yet live</p>
-      <p style="color:var(--muted);font-size:0.83rem;">Deploy ClipDAOHireMe.sol then update HIREME_ADDRESS in the source.</p>
-    </div>`;
-    return;
-  }
-  el.innerHTML='<div class="empty-state"><div class="spinner"></div><p>Loading…</p></div>';
-
-  const roP    = await getFujiProvider();
-  const roHM   = new ethers.Contract(HIREME_ADDRESS, HIREME_ABI, roP);
-  const isStr  = userProfile?.role === 'streamer';
-
-  // ── Pre-flight: ABI compatibility + NFT link check ──────────
-  let nftLinked = false;
-  let abiMismatch = false;
-  try {
-    const linkedNFT = await roHM.nftContract();
-    nftLinked = linkedNFT && linkedNFT !== '0x0000000000000000000000000000000000000000';
-  } catch(e) {
-    // nftContract() call itself failed → ABI doesn't match deployed contract
-    abiMismatch = true;
-  }
-
-  if (abiMismatch) {
-    el.innerHTML = `<div style="background:rgba(239,68,68,0.1);border:2px solid rgba(239,68,68,0.5);border-radius:14px;padding:24px;">
-      <div style="font-weight:800;color:#ef4444;font-size:1.1rem;margin-bottom:12px;">⚠️ Wrong Contract Deployed</div>
-      <p style="color:var(--muted);font-size:0.85rem;line-height:1.7;margin-bottom:16px;">
-        The contract at <code style="background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:4px;font-size:0.75rem;">${HIREME_ADDRESS.slice(0,10)}…</code>
-        does not match the expected HireMe interface — a different .sol file was deployed.<br><br>
-        <strong style="color:white;">Fix: Redeploy the exact <code>4_ClipDAOHireMe.sol</code> provided, then update <code>HIREME_ADDRESS</code> in the frontend source.</strong>
-      </p>
-      <div style="background:rgba(0,0,0,0.3);border-radius:8px;padding:12px;font-family:var(--font-mono);font-size:0.72rem;color:var(--muted);line-height:1.8;">
-        Expected: <span style="color:var(--orange);">addPOWLink(string)</span> → selector <span style="color:var(--success);">0x0196bac8</span><br>
-        Received: selector <span style="color:#ef4444;">0xd580ec0c</span> (no match — wrong contract bytecode)
-      </div>
-    </div>`;
-    return;
-  }
-
-  if (!nftLinked) {
-    el.innerHTML = `<div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.35);border-radius:14px;padding:24px;margin-bottom:16px;">
-      <div style="font-weight:800;color:#ef4444;margin-bottom:8px;font-size:1rem;">⚙️ One-Time Setup Required</div>
-      <p style="color:var(--muted);font-size:0.85rem;line-height:1.7;margin-bottom:16px;">
-        The HireMe contract needs to be linked to the NFT contract once — all writes will fail until this is done.<br>
-        <strong style="color:white;">Fix: Admin → Contract Setup → 🔗 Link NFT → HireMe</strong>
-      </p>
-      <button class="btn btn-primary btn-sm" onclick="adminSetHireMeNFT().then(()=>setTimeout(loadHireMePage,2000))">🔗 Link NFT → HireMe Now</button>
-    </div>
-    <div style="opacity:0.4;pointer-events:none;">`;
-  }
-
-  let myPOW=[], clipperIds=[], streamerIds=[];
-  try { myPOW = await roHM.getPOW(account); } catch(e) {}
-  try { clipperIds  = (await roHM.getClipperOffers(account)).map(Number);  } catch(e) {}
-  try { streamerIds = (await roHM.getStreamerOffers(account)).map(Number); } catch(e) {}
-  const allIds = [...new Set([...clipperIds, ...streamerIds])];
-  const offerDetails = (await Promise.all(allIds.map(id => roHM.getOffer(id).catch(()=>null)))).filter(Boolean);
-
-  // Discover all clippers who have POW (event scan)
-  let allClippers = [];
-  try {
-    const cur = await roP.getBlockNumber();
-    const from = Math.max(0, cur-150000);
-    const topic = ethers.id('POWAdded(address,string,uint256)');
-    const seen = new Set([account.toLowerCase()]);
-    for (let s=from; s<cur; s+=5000) {
-      const logs = await roP.getLogs({address:HIREME_ADDRESS,topics:[topic],fromBlock:s,toBlock:Math.min(s+4999,cur)}).catch(()=>[]);
-      for (const log of logs) {
-        const addr = ('0x'+log.topics[1].slice(26)).toLowerCase();
-        if (!seen.has(addr)) { seen.add(addr); allClippers.push(addr); }
-      }
-    }
-  } catch(e) {}
-
-  const active    = offerDetails.filter(o=>Number(o.status)===1);
-  const pending   = offerDetails.filter(o=>Number(o.status)===0);
-  const completed = offerDetails.filter(o=>Number(o.status)===2||Number(o.status)===3||Number(o.status)===4);
-
-  el.innerHTML += _hmBuildPage(isStr, myPOW, pending, active, completed, allClippers);
-  if (!nftLinked) el.innerHTML += '</div>'; // close the grayed-out wrapper
-
-  // Post-render avatar injection
-  setTimeout(() => {
-    offerDetails.forEach(o=>{
-      const other = o.clipper.toLowerCase()===account.toLowerCase() ? o.streamer : o.clipper;
-      loadWalletNFTAvatar(other, `hm-av-${Number(o.id)}`);
-    });
-    allClippers.forEach((addr,i)=>loadWalletNFTAvatar(addr,`hm-c-av-${i}`));
-  }, 80);
+function _hmTierBadge(tier, level) {
+  if (tier === 1) return `<span style="background:rgba(255,149,0,0.15);color:var(--amber);border:1px solid rgba(255,149,0,0.3);padding:2px 8px;border-radius:20px;font-size:0.62rem;font-weight:700;">👑 GENESIS Lv${level||1}</span>`;
+  if (tier === 2) return `<span style="background:rgba(232,53,10,0.12);color:var(--red);border:1px solid rgba(232,53,10,0.25);padding:2px 8px;border-radius:20px;font-size:0.62rem;font-weight:700;">⚡ EARLY ACCESS Lv${level||1}</span>`;
+  return '';
 }
-
-// ── PAGE BUILDER ─────────────────────────────────────────────────
-function _hmBuildPage(isStr, myPOW, pending, active, completed, clippers) {
-  return `
-  <style>
-  .hm-section { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:20px; margin-bottom:14px; }
-  .hm-section-title { font-weight:800; font-size:0.9rem; color:var(--orange); margin-bottom:14px; display:flex; align-items:center; gap:8px; }
-  .hm-deal { display:flex;align-items:center;gap:12px;padding:14px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,0.02);margin-bottom:8px;cursor:pointer;transition:all 0.15s; }
-  .hm-deal:hover { border-color:rgba(255,107,26,0.5);background:rgba(255,107,26,0.04); transform:translateY(-1px); }
-  .hm-deal.active-deal { border-color:rgba(34,197,94,0.35);background:rgba(34,197,94,0.03); }
-  .hm-deal.pending-deal { border-color:rgba(255,149,0,0.3); }
-  .hm-deal.cancel-pending { border-color:rgba(239,68,68,0.4);background:rgba(239,68,68,0.04); }
-  .hm-pow-item { display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;border:1px solid var(--border);background:rgba(255,255,255,0.02);margin-bottom:6px;transition:border-color 0.15s; }
-  .hm-pow-item:hover { border-color:rgba(255,107,26,0.3); }
-  .hm-pow-icon { width:28px;height:28px;border-radius:6px;background:rgba(255,107,26,0.12);display:flex;align-items:center;justify-content:center;font-size:0.85rem;flex-shrink:0; }
-  .hm-pow-url { flex:1;font-family:var(--font-mono);font-size:0.74rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
-  .hm-pow-url a { color:var(--orange);text-decoration:none; }
-  .hm-pow-url a:hover { text-decoration:underline; }
-  .hm-stat { text-align:center;padding:14px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px; }
-  .hm-stat-val { font-family:var(--font-display);font-size:1.6rem;line-height:1; }
-  .hm-stat-lbl { font-size:0.62rem;color:var(--muted);text-transform:uppercase;margin-top:4px; }
-  .hm-progress { height:4px;background:rgba(255,255,255,0.07);border-radius:2px;overflow:hidden;margin-top:5px; }
-  .hm-progress-fill { height:100%;background:linear-gradient(90deg,var(--red),var(--amber));border-radius:2px;transition:width 0.4s; }
-  .hm-clipper-card { display:flex;align-items:center;gap:12px;padding:12px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,0.02);margin-bottom:8px;cursor:pointer;transition:all 0.15s; }
-  .hm-clipper-card:hover { border-color:rgba(255,107,26,0.4);background:rgba(255,107,26,0.03);transform:translateY(-1px); }
-  .hm-input-row { display:flex;gap:8px;margin-top:12px; }
-  .hm-badge { display:inline-flex;align-items:center;padding:3px 9px;border-radius:20px;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px; }
-  .hm-badge-active { background:rgba(34,197,94,0.15);color:#22c55e;border:1px solid rgba(34,197,94,0.3); }
-  .hm-badge-pending { background:rgba(255,149,0,0.15);color:var(--amber);border:1px solid rgba(255,149,0,0.3); }
-  .hm-badge-cancel { background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3); }
-  .hm-badge-done { background:rgba(100,100,100,0.1);color:var(--muted);border:1px solid var(--border); }
-  .hm-dm-bubble { max-width:72%;padding:10px 14px;border-radius:14px;font-size:0.84rem;line-height:1.5;word-break:break-word; }
-  .hm-dm-bubble.mine { background:rgba(232,53,10,0.2);border:1px solid rgba(232,53,10,0.3);border-bottom-right-radius:4px;align-self:flex-end; }
-  .hm-dm-bubble.theirs { background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-bottom-left-radius:4px;align-self:flex-start; }
-  .hm-dm-time { font-size:0.6rem;color:var(--muted);margin-top:3px; }
-  </style>
-
-  ${_hmPOWSection(myPOW)}
-  ${active.length>0 ? _hmDealsSection('🟢 Active Deals', active, 'active') : ''}
-  ${pending.length>0 ? _hmDealsSection('⏳ Negotiations', pending, 'pending') : ''}
-  ${isStr ? _hmDiscovery(clippers) : ''}
-  ${completed.length>0 ? _hmDealsSection('📁 Past Deals', completed, 'done') : ''}
-  `;
-}
-
-// ── POW SECTION ──────────────────────────────────────────────────
-function _hmPOWSection(pow) {
-  const items = pow.length > 0
-    ? pow.map((p,i) => {
-        const icon = _hmPlatformIcon(p.url);
-        const short = p.url.length>55 ? p.url.slice(0,55)+'…' : p.url;
-        const date  = new Date(Number(p.addedAt)*1000).toLocaleDateString('en-US',{month:'short',day:'numeric'});
-        return `<div class="hm-pow-item">
-          <div class="hm-pow-icon">${icon}</div>
-          <div class="hm-pow-url"><a href="${escHtml(p.url)}" target="_blank" rel="noopener">${escHtml(short)}</a></div>
-          <span style="font-size:0.65rem;color:var(--muted);flex-shrink:0;">${date}</span>
-          <button onclick="hmRemovePOW(${i})" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);color:#ef4444;border-radius:6px;cursor:pointer;font-size:0.72rem;padding:3px 8px;flex-shrink:0;" title="Remove">✕</button>
-        </div>`;
-      }).join('')
-    : `<div style="text-align:center;padding:20px 0;color:var(--muted);">
-        <div style="font-size:2rem;margin-bottom:8px;">🎬</div>
-        <div style="font-size:0.84rem;">No clips yet — add your best X &amp; YouTube clips below to attract streamers.</div>
-       </div>`;
-
-  const addForm = pow.length < 20 ? `
-    <div class="hm-input-row">
-      <input type="url" id="hm-pow-input" placeholder="Paste X (x.com) or YouTube link…" style="flex:1;font-size:0.83rem;border-radius:9px;"/>
-      <button class="btn btn-primary" onclick="hmAddPOW()" style="flex-shrink:0;">+ Add Clip</button>
-    </div>` : `<div style="font-size:0.72rem;color:var(--muted);margin-top:10px;text-align:center;">Gallery full (20/20) — remove a link to add more.</div>`;
-
-  return `<div class="hm-section">
-    <div class="hm-section-title">🎬 My Proof of Work <span style="font-size:0.68rem;color:var(--muted);font-weight:400;margin-left:auto;">${pow.length}/20</span></div>
-    <p style="font-size:0.8rem;color:var(--muted);margin-bottom:14px;line-height:1.6;">Your public portfolio — streamers browse these before making offers. Only X and YouTube links are accepted.</p>
-    ${items}
-    ${addForm}
+function _hmStatPill(icon, val, label) {
+  return `<div style="text-align:center;padding:10px 8px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;min-width:56px;">
+    <div style="font-size:0.75rem;margin-bottom:2px;">${icon}</div>
+    <div style="font-family:var(--font-display);font-size:1.1rem;line-height:1;color:var(--orange);">${val}</div>
+    <div style="font-size:0.58rem;color:var(--muted);text-transform:uppercase;margin-top:2px;letter-spacing:0.5px;">${label}</div>
   </div>`;
 }
 
-// ── DEALS LIST ────────────────────────────────────────────────────
-function _hmDealsSection(title, offers, type) {
+// ── SUPABASE HIREME PROFILE HELPERS ──────────────────────────────
+// Table: hireme_profiles
+// Columns: wallet, available, bio, rate_note, platforms (text[]),
+//          pow_links (jsonb [{url,label,added_at}]),
+//          clips_submitted, bounties_won, rep_score, nft_tier, nft_level,
+//          username, x_handle, updated_at
+
+async function hmLoadMyProfile() {
+  if (!db || !account) return null;
+  try {
+    const { data } = await db.from('hireme_profiles').select('*').eq('wallet', account.toLowerCase()).maybeSingle();
+    return data;
+  } catch(e) { return null; }
+}
+
+async function hmSaveProfile(fields) {
+  if (!db || !account) return;
+  await db.from('hireme_profiles').upsert({ wallet: account.toLowerCase(), ...fields, updated_at: new Date().toISOString() });
+}
+
+async function hmRefreshNFTStats(wallet) {
+  // Pull live stats from NFT contract and cache to Supabase
+  if (!nftContract || !db) return {};
+  try {
+    const activeId = await nftContract.getActiveToken(wallet).catch(()=>null);
+    if (!activeId || Number(activeId) === 0) return {};
+    const stats = await nftContract.nftStats(Number(activeId));
+    const rep   = await treasuryContract?.getReputation(wallet).catch(()=>null);
+    const fields = {
+      nft_tier:        Number(stats.tier),
+      nft_level:       Number(stats.level),
+      clips_submitted: Number(stats.clipsSubmitted),
+      bounties_won:    Number(stats.bountiesWon),
+      rep_score:       rep ? Number(rep.clipperRep) : 0,
+      updated_at:      new Date().toISOString()
+    };
+    await db.from('hireme_profiles').upsert({ wallet: wallet.toLowerCase(), ...fields }).catch(()=>{});
+    return fields;
+  } catch(e) { return {}; }
+}
+
+// ── DASHBOARD: HIRE ME TAB (clipper edits own profile + sees deals) ──
+async function loadHireMePage() {
+  const el = document.getElementById('hireme-content');
+  if (!el) return;
+  if (!account) { el.innerHTML = '<div class="empty-state"><p>Connect wallet to use Hire Me.</p></div>'; return; }
+
+  el.innerHTML = '<div class="empty-state"><div class="spinner"></div><p>Loading…</p></div>';
+
+  // Load profile + NFT stats in parallel
+  const [myProf, nftStats] = await Promise.all([
+    hmLoadMyProfile(),
+    hmRefreshNFTStats(account)
+  ]);
+
+  // Merge NFT stats into profile display
+  const prof = { ...myProf, ...nftStats };
+  const pow  = prof.pow_links || [];
+
+  // Load on-chain offers (negotiation stays on-chain)
+  let offerDetails = [];
+  if (hireMeContract) {
+    try {
+      const roP = await getFujiProvider();
+      const roHM = new ethers.Contract(HIREME_ADDRESS, HIREME_ABI, roP);
+      const clipperIds  = (await roHM.getClipperOffers(account).catch(()=>[])).map(Number);
+      const streamerIds = (await roHM.getStreamerOffers(account).catch(()=>[])).map(Number);
+      const allIds = [...new Set([...clipperIds, ...streamerIds])];
+      offerDetails = (await Promise.all(allIds.map(id => roHM.getOffer(id).catch(()=>null)))).filter(Boolean);
+    } catch(e) {}
+  }
+
+  const active    = offerDetails.filter(o => Number(o.status) === 1);
+  const pending   = offerDetails.filter(o => Number(o.status) === 0);
+  const completed = offerDetails.filter(o => [2,3,4].includes(Number(o.status)));
+
+  el.innerHTML = `
+  <style>
+  .hm-section { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:20px; margin-bottom:14px; }
+  .hm-stitle { font-weight:800; font-size:0.9rem; color:var(--orange); margin-bottom:14px; display:flex; align-items:center; gap:8px; }
+  .hm-pow-row { display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;border:1px solid var(--border);background:rgba(255,255,255,0.02);margin-bottom:6px; }
+  .hm-pow-icon { width:28px;height:28px;border-radius:6px;background:rgba(255,107,26,0.1);display:flex;align-items:center;justify-content:center;font-size:0.85rem;flex-shrink:0; }
+  .hm-deal-row { display:flex;align-items:center;gap:12px;padding:13px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,0.02);margin-bottom:8px;cursor:pointer;transition:all 0.15s; }
+  .hm-deal-row:hover { border-color:rgba(255,107,26,0.4);transform:translateY(-1px); }
+  .hm-deal-row.active { border-color:rgba(34,197,94,0.3);background:rgba(34,197,94,0.03); }
+  .hm-deal-row.pending { border-color:rgba(255,149,0,0.25); }
+  .hm-deal-row.cancel-req { border-color:rgba(239,68,68,0.4);background:rgba(239,68,68,0.04); }
+  .hm-badge { display:inline-flex;align-items:center;padding:3px 9px;border-radius:20px;font-size:0.62rem;font-weight:700;text-transform:uppercase; }
+  .hm-badge-active { background:rgba(34,197,94,0.15);color:#22c55e;border:1px solid rgba(34,197,94,0.3); }
+  .hm-badge-pending { background:rgba(255,149,0,0.15);color:var(--amber);border:1px solid rgba(255,149,0,0.3); }
+  .hm-badge-done { background:rgba(100,100,100,0.1);color:var(--muted);border:1px solid var(--border); }
+  .hm-badge-cancel { background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3); }
+  .hm-prog { height:4px;background:rgba(255,255,255,0.07);border-radius:2px;overflow:hidden;margin-top:5px; }
+  .hm-prog-fill { height:100%;background:linear-gradient(90deg,var(--red),var(--amber));border-radius:2px; }
+  .hm-toggle { position:relative;display:inline-block;width:44px;height:24px; }
+  .hm-toggle input { opacity:0;width:0;height:0; }
+  .hm-slider { position:absolute;cursor:pointer;inset:0;background:rgba(255,255,255,0.1);border-radius:24px;transition:0.3s; }
+  .hm-slider:before { content:"";position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:white;border-radius:50%;transition:0.3s; }
+  input:checked + .hm-slider { background:var(--red); }
+  input:checked + .hm-slider:before { transform:translateX(20px); }
+  </style>
+
+  <!-- Profile card -->
+  <div class="hm-section">
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;">
+      <div id="hm-my-av" style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,var(--red),var(--orange));overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1.2rem;">?</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:800;font-size:1.05rem;">${escHtml(prof.username||account.slice(0,10)+'…')}</div>
+        <div style="font-size:0.75rem;color:var(--muted);font-family:var(--font-mono);">${account.slice(0,14)}…</div>
+        <div style="margin-top:4px;">${_hmTierBadge(prof.nft_tier, prof.nft_level)}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+        <div style="font-size:0.75rem;color:var(--muted);font-weight:600;">Available for hire</div>
+        <label class="hm-toggle">
+          <input type="checkbox" id="hm-avail-toggle" ${prof.available ? 'checked' : ''} onchange="hmToggleAvailability(this.checked)"/>
+          <span class="hm-slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Stats row -->
+    <div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;">
+      ${_hmStatPill('🏆', prof.bounties_won||0, 'Won')}
+      ${_hmStatPill('📎', prof.clips_submitted||0, 'Clips')}
+      ${_hmStatPill('⭐', prof.rep_score||0, 'Rep')}
+      ${_hmStatPill('⚡', prof.nft_level||1, 'Level')}
+    </div>
+
+    <!-- Edit profile fields -->
+    <div style="display:grid;gap:10px;">
+      <div class="form-group" style="margin-bottom:0;">
+        <label style="font-size:0.72rem;">Tagline / Bio <span style="color:var(--muted);">(shown on your public card)</span></label>
+        <textarea id="hm-bio" rows="2" placeholder="e.g. Fast turnaround, specialise in hype clips. Blaze & Arena." style="resize:vertical;font-size:0.83rem;">${escHtml(prof.bio||'')}</textarea>
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label style="font-size:0.72rem;">Rate note <span style="color:var(--muted);">(optional, e.g. "0.5 AVAX per clip")</span></label>
+        <input type="text" id="hm-rate" value="${escHtml(prof.rate_note||'')}" placeholder="e.g. 0.3–0.5 AVAX per clip"/>
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label style="font-size:0.72rem;">Platforms</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.83rem;"><input type="checkbox" id="hm-plat-blaze" ${(prof.platforms||[]).includes('blaze')?'checked':''}> 🔴 Blaze</label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.83rem;"><input type="checkbox" id="hm-plat-arena" ${(prof.platforms||[]).includes('arena')?'checked':''}> 🟡 Arena</label>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="hmSaveMyProfile()" style="width:fit-content;">💾 Save Profile</button>
+    </div>
+  </div>
+
+  <!-- POW Links -->
+  <div class="hm-section">
+    <div class="hm-stitle">🎬 Proof of Work <span style="font-size:0.68rem;color:var(--muted);font-weight:400;margin-left:auto;">${pow.length}/20 clips</span></div>
+    <p style="font-size:0.8rem;color:var(--muted);margin-bottom:14px;line-height:1.6;">Add your best X and YouTube clips — this is what streamers see first when they visit your profile. Stored in Supabase, free to edit anytime.</p>
+    <div id="hm-pow-list">${_hmRenderPOWList(pow)}</div>
+    ${pow.length < 20 ? `<div style="display:flex;gap:8px;margin-top:10px;">
+      <input type="url" id="hm-pow-input" placeholder="Paste X (x.com) or YouTube link…" style="flex:1;font-size:0.83rem;border-radius:9px;"/>
+      <input type="text" id="hm-pow-label" placeholder="Label (optional)" style="width:140px;font-size:0.83rem;border-radius:9px;"/>
+      <button class="btn btn-primary" onclick="hmAddPOW()" style="flex-shrink:0;">+ Add</button>
+    </div>` : `<div style="font-size:0.72rem;color:var(--muted);margin-top:8px;">Gallery full (20/20). Remove a clip to add more.</div>`}
+    <div style="margin-top:12px;padding:10px;background:rgba(255,107,26,0.05);border-radius:8px;font-size:0.75rem;color:var(--muted);">
+      💡 <strong style="color:var(--text);">Tip:</strong> Add your highest-performing clips. Streamers sort by your on-chain stats but they read your POW to decide who to hire.
+    </div>
+  </div>
+
+  <!-- Deals -->
+  ${active.length > 0 ? _hmDealsHTML('🟢 Active Deals', active) : ''}
+  ${pending.length > 0 ? _hmDealsHTML('⏳ Negotiations', pending) : ''}
+  ${offerDetails.length === 0 ? `<div class="hm-section" style="text-align:center;padding:30px;">
+    <div style="font-size:2rem;margin-bottom:8px;">📭</div>
+    <div style="font-weight:700;margin-bottom:4px;">No deals yet</div>
+    <div style="font-size:0.82rem;color:var(--muted);">Set your profile as available and add POW clips — streamers will find you in Browse Clippers.</div>
+    <button class="btn btn-primary btn-sm" onclick="showPage('hireme-browse')" style="margin-top:14px;">🔍 See Browse Page</button>
+  </div>` : ''}
+  ${completed.length > 0 ? _hmDealsHTML('📁 Past Deals', completed, true) : ''}
+  `;
+
+  loadWalletNFTAvatar(account, 'hm-my-av');
+
+  // Avatar inject for deal partners
+  setTimeout(() => {
+    offerDetails.forEach(o => {
+      const other = o.clipper.toLowerCase() === account.toLowerCase() ? o.streamer : o.clipper;
+      loadWalletNFTAvatar(other, `hm-deal-av-${Number(o.id)}`);
+    });
+  }, 80);
+}
+
+function _hmRenderPOWList(pow) {
+  if (!pow || pow.length === 0) return `<div style="text-align:center;padding:18px 0;color:var(--muted);font-size:0.84rem;">No clips yet — paste your first X or YouTube link below.</div>`;
+  return pow.map((p, i) => {
+    const icon  = _hmPlatformIcon(p.url);
+    const short = p.url.length > 52 ? p.url.slice(0, 52) + '…' : p.url;
+    const date  = p.added_at ? new Date(p.added_at).toLocaleDateString('en-US', {month:'short', day:'numeric'}) : '';
+    return `<div class="hm-pow-row">
+      <div class="hm-pow-icon">${icon}</div>
+      <div style="flex:1;min-width:0;">
+        <a href="${escHtml(p.url)}" target="_blank" rel="noopener" style="color:var(--orange);font-family:var(--font-mono);font-size:0.73rem;text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${escHtml(short)}</a>
+        ${p.label ? `<div style="font-size:0.67rem;color:var(--muted);margin-top:1px;">${escHtml(p.label)}</div>` : ''}
+      </div>
+      <span style="font-size:0.63rem;color:var(--muted);flex-shrink:0;">${date}</span>
+      <button onclick="hmRemovePOW(${i})" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);color:#ef4444;border-radius:6px;cursor:pointer;font-size:0.7rem;padding:3px 8px;flex-shrink:0;">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function _hmDealsHTML(title, offers, muted=false) {
   const rows = offers.map(o => {
     const isClipper  = o.clipper.toLowerCase() === account.toLowerCase();
     const other      = isClipper ? o.streamer : o.clipper;
-    const otherRole  = isClipper ? 'Streamer' : 'Clipper';
-    const avax       = parseFloat(ethers.formatEther(o.avaxAmount||0n));
+    const avax       = parseFloat(ethers.formatEther(o.avaxAmount || 0n));
     const clips      = Number(o.clipCount);
     const approved   = Number(o.approvedClips);
     const status     = Number(o.status);
     const hasCancelReq = o.cancelRequester && o.cancelRequester !== '0x0000000000000000000000000000000000000000';
-    const iRequested = hasCancelReq && o.cancelRequester.toLowerCase() === account.toLowerCase();
+    const iReq       = hasCancelReq && o.cancelRequester.toLowerCase() === account.toLowerCase();
+    const otherShort = other.slice(0,6)+'…'+other.slice(-4);
+    const init       = (other.slice(2,4)||'??').toUpperCase();
 
-    let badge = '';
-    if (type==='active')  badge = hasCancelReq ? '<span class="hm-badge hm-badge-cancel">Cancel Pending</span>' : '<span class="hm-badge hm-badge-active">Active</span>';
-    if (type==='pending') badge = '<span class="hm-badge hm-badge-pending">Negotiating</span>';
-    if (type==='done')    badge = `<span class="hm-badge hm-badge-done">${HM_STATUS[status]||'Done'}</span>`;
+    let badge = '', sub = '', cls = 'hm-deal-row';
+    if (status === 0) { badge = '<span class="hm-badge hm-badge-pending">Negotiating</span>'; cls += ' pending'; sub = avax>0?`${clips} clips · ${avax.toFixed(3)} AVAX`:'Awaiting price'; }
+    if (status === 1) { badge = hasCancelReq ? '<span class="hm-badge hm-badge-cancel">Cancel Pending</span>' : '<span class="hm-badge hm-badge-active">Active</span>'; cls += hasCancelReq ? ' cancel-req' : ' active'; sub = `${approved}/${clips} approved · ${avax.toFixed(3)} AVAX locked`; }
+    if (status >= 2)  { badge = '<span class="hm-badge hm-badge-done">'+HM_STATUS[status]+'</span>'; sub = `${clips} clips · ${avax.toFixed(3)} AVAX`; }
 
-    const cls = type==='active' ? (hasCancelReq ? 'hm-deal cancel-pending' : 'hm-deal active-deal') : (type==='pending' ? 'hm-deal pending-deal' : 'hm-deal');
-    const initial = (other.slice(2,4)||'?').toUpperCase();
-    const short = other.slice(0,6)+'…'+other.slice(-4);
-
-    let subline = '';
-    if (type==='active')  subline = `${approved}/${clips} clips approved · ${avax.toFixed(4)} AVAX locked`;
-    if (type==='pending') subline = avax>0 ? `${clips} clips · ${avax.toFixed(4)} AVAX offered` : `${clips} clips · awaiting price`;
-    if (type==='done')    subline = `${clips} clips · ${avax.toFixed(4)} AVAX`;
-
-    if (hasCancelReq) subline += iRequested ? ' — waiting for other party' : ' — RESPOND REQUIRED';
-
-    const prog = type==='active' && clips>0 ? `<div class="hm-progress"><div class="hm-progress-fill" style="width:${Math.round(approved/clips*100)}%"></div></div>` : '';
+    const prog = status===1 && clips>0 ? `<div class="hm-prog"><div class="hm-prog-fill" style="width:${Math.round(approved/clips*100)}%"></div></div>` : '';
 
     return `<div class="${cls}" onclick="hmOpenOffer(${Number(o.id)})">
-      ${_hmAvatarEl(`hm-av-${Number(o.id)}`, initial)}
+      ${_hmAvatar(`hm-deal-av-${Number(o.id)}`, init)}
       <div style="flex:1;min-width:0;">
-        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2px;">
-          <span style="font-weight:700;font-size:0.88rem;">${short}</span>
-          <span style="font-size:0.65rem;color:var(--muted);">${otherRole}</span>
+        <div style="display:flex;align-items:center;gap:5px;margin-bottom:2px;">
+          <span style="font-weight:700;font-size:0.87rem;">${otherShort}</span>
+          <span style="font-size:0.63rem;color:var(--muted);">${isClipper?'(Streamer)':'(Clipper)'}</span>
         </div>
-        <div style="font-size:0.74rem;color:var(--muted);">${subline}</div>
+        <div style="font-size:0.73rem;color:var(--muted);">${sub}</div>
         ${prog}
       </div>
-      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">
-        ${badge}
-        <span style="font-size:0.65rem;color:var(--muted);">Deal #${Number(o.id)}</span>
-      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">${badge}<span style="font-size:0.62rem;color:var(--muted);">#${Number(o.id)}</span></div>
     </div>`;
   }).join('');
 
-  return `<div class="hm-section">
-    <div class="hm-section-title">${title} <span style="font-size:0.68rem;color:var(--muted);font-weight:400;margin-left:auto;">${offers.length}</span></div>
+  return `<div class="hm-section" style="${muted?'opacity:0.75;':''}">
+    <div class="hm-stitle">${title} <span style="font-size:0.68rem;color:var(--muted);font-weight:400;margin-left:auto;">${offers.length}</span></div>
     ${rows}
   </div>`;
 }
 
-// ── CLIPPER DISCOVERY (streamers only) ──────────────────────────
-function _hmDiscovery(clippers) {
-  if (clippers.length===0) return `<div class="hm-section"><div class="hm-section-title">🔍 Browse Clippers</div>
-    <div style="text-align:center;padding:20px 0;color:var(--muted);font-size:0.84rem;">No clippers with portfolios yet. Check back soon!</div></div>`;
+// ── PROFILE SAVE / AVAILABILITY ───────────────────────────────────
+async function hmSaveMyProfile() {
+  if (!db || !account) { toast('Connect wallet first', 'error'); return; }
+  const bio      = document.getElementById('hm-bio')?.value.trim() || '';
+  const rate_note= document.getElementById('hm-rate')?.value.trim() || '';
+  const platforms= [];
+  if (document.getElementById('hm-plat-blaze')?.checked) platforms.push('blaze');
+  if (document.getElementById('hm-plat-arena')?.checked) platforms.push('arena');
 
-  const cards = clippers.slice(0,30).map((addr,i)=>{
-    const short = addr.slice(0,6)+'…'+addr.slice(-4);
-    const init  = (addr.slice(2,4)||'?').toUpperCase();
-    return `<div class="hm-clipper-card" onclick="hmViewClipper('${addr}')">
-      ${_hmAvatarEl(`hm-c-av-${i}`, init)}
-      <div style="flex:1;min-width:0;">
-        <div style="font-weight:700;font-size:0.85rem;font-family:var(--font-mono);">${short}</div>
-        <div style="font-size:0.72rem;color:var(--muted);margin-top:2px;">Has portfolio clips</div>
-      </div>
-      <span style="font-size:0.75rem;color:var(--orange);">View &amp; Hire →</span>
-    </div>`;
-  }).join('');
-
-  return `<div class="hm-section">
-    <div class="hm-section-title">🔍 Browse Clippers <span style="font-size:0.68rem;color:var(--muted);font-weight:400;margin-left:auto;">${clippers.length} available</span></div>
-    ${cards}
-  </div>`;
+  // Also snapshot username from userProfile
+  const fields = {
+    bio, rate_note, platforms,
+    username:  userProfile?.username || '',
+    x_handle:  userProfile?.x_handle || '',
+    available: document.getElementById('hm-avail-toggle')?.checked || false,
+  };
+  try {
+    toast('Saving profile…', 'pending');
+    await hmSaveProfile(fields);
+    toast('✅ Profile saved!', 'success');
+  } catch(e) { toast('Save failed', 'error'); }
 }
 
-// ── ADD / REMOVE POW ─────────────────────────────────────────────
+async function hmToggleAvailability(val) {
+  if (!db || !account) return;
+  try {
+    await db.from('hireme_profiles').upsert({ wallet: account.toLowerCase(), available: val, updated_at: new Date().toISOString() });
+    toast(val ? '✅ You are now visible in Browse Clippers' : '🔒 Hidden from Browse Clippers', val?'success':'success');
+  } catch(e) {}
+}
+
+// ── POW MANAGEMENT (Supabase only, no chain tx) ──────────────────
 async function hmAddPOW() {
-  if (!hireMeContract) { toast('HireMe contract not deployed yet', 'error'); return; }
-  const url = document.getElementById('hm-pow-input')?.value.trim();
-  if (!url || !url.startsWith('http')) { toast('Enter a valid URL starting with http', 'error'); return; }
+  if (!db || !account) { toast('Connect wallet first', 'error'); return; }
+  const url   = document.getElementById('hm-pow-input')?.value.trim();
+  const label = document.getElementById('hm-pow-label')?.value.trim() || '';
+  if (!url || !url.startsWith('http')) { toast('Enter a valid URL', 'error'); return; }
   const ok = url.includes('x.com') || url.includes('twitter.com') || url.includes('youtube.com') || url.includes('youtu.be');
   if (!ok) { toast('Only X (x.com) or YouTube links accepted', 'error'); return; }
 
-  // Pre-flight: check HireMe contract has NFT linked + user holds NFT
   try {
-    const roP = await getFujiProvider();
-    const roHM = new ethers.Contract(HIREME_ADDRESS, HIREME_ABI, roP);
-    const linkedNFT = await roHM.nftContract().catch(() => null);
-    if (!linkedNFT || linkedNFT === '0x0000000000000000000000000000000000000000') {
-      toast('⚙️ HireMe contract not linked to NFT yet. Ask admin to run: Admin → Link NFT → HireMe', 'error');
-      return;
-    }
-    const hasNft = await nftContract.hasNFT(account).catch(() => false);
-    if (!hasNft) {
-      toast('❌ You need a ClipDAO NFT to use Hire Me. Mint one first.', 'error');
-      return;
-    }
+    const prof = await hmLoadMyProfile();
+    const existing = prof?.pow_links || [];
+    if (existing.length >= 20) { toast('Gallery full (20/20). Remove a clip first.', 'error'); return; }
+    const newLinks = [...existing, { url, label, added_at: new Date().toISOString() }];
+    await hmSaveProfile({ pow_links: newLinks });
+    document.getElementById('hm-pow-input').value = '';
+    document.getElementById('hm-pow-label').value = '';
+    // Re-render just the POW list
+    document.getElementById('hm-pow-list').innerHTML = _hmRenderPOWList(newLinks);
+    toast('✅ Clip added!', 'success');
+  } catch(e) { toast('Failed to add clip', 'error'); }
+}
+
+async function hmRemovePOW(index) {
+  if (!db || !account || !confirm('Remove this clip?')) return;
+  try {
+    const prof = await hmLoadMyProfile();
+    const links = (prof?.pow_links || []).filter((_, i) => i !== index);
+    await hmSaveProfile({ pow_links: links });
+    document.getElementById('hm-pow-list').innerHTML = _hmRenderPOWList(links);
+    toast('Clip removed', 'success');
+  } catch(e) { toast('Failed to remove', 'error'); }
+}
+
+// ── BROWSE PAGE — public clipper discovery ────────────────────────
+let _hmBrowseData = []; // cached for client-side filter/sort
+
+async function loadHireMeBrowse() {
+  const grid = document.getElementById('hm-browse-grid');
+  if (!grid) return;
+  grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);"><div class="spinner"></div><p style="margin-top:12px;">Loading clippers…</p></div>';
+
+  try {
+    const { data, error } = await db.from('hireme_profiles')
+      .select('*')
+      .eq('available', true)
+      .gt('pow_links', '[]') // has at least one link (jsonb not empty array)
+      .order('rep_score', { ascending: false })
+      .limit(100);
+
+    if (error) throw error;
+    _hmBrowseData = data || [];
+    hmBrowseRender(_hmBrowseData);
   } catch(e) {
-    // Pre-flight failed silently — try the tx anyway, real error will surface
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);">Failed to load clippers. Make sure the hireme_profiles table exists in Supabase.</div>';
+  }
+}
+
+function hmBrowseFilter() {
+  const search   = (document.getElementById('hm-search')?.value||'').toLowerCase();
+  const platform = document.getElementById('hm-filter-platform')?.value||'';
+  const sort     = document.getElementById('hm-filter-sort')?.value||'rep';
+  const tier     = document.getElementById('hm-filter-tier')?.value||'';
+
+  let filtered = _hmBrowseData.filter(p => {
+    if (search) {
+      const haystack = ((p.username||'')+(p.x_handle||'')+(p.bio||'')+(p.wallet||'')).toLowerCase();
+      if (!haystack.includes(search)) return false;
+    }
+    if (platform) {
+      if (platform === 'both') { if (!(p.platforms||[]).includes('blaze') || !(p.platforms||[]).includes('arena')) return false; }
+      else { if (!(p.platforms||[]).includes(platform)) return false; }
+    }
+    if (tier && String(p.nft_tier) !== tier) return false;
+    return true;
+  });
+
+  const sortFns = {
+    rep:   (a,b) => (b.rep_score||0)   - (a.rep_score||0),
+    won:   (a,b) => (b.bounties_won||0) - (a.bounties_won||0),
+    clips: (a,b) => (b.clips_submitted||0) - (a.clips_submitted||0),
+    level: (a,b) => (b.nft_level||0)   - (a.nft_level||0),
+    new:   (a,b) => new Date(b.updated_at||0) - new Date(a.updated_at||0),
+  };
+  filtered.sort(sortFns[sort] || sortFns.rep);
+
+  hmBrowseRender(filtered);
+}
+
+function hmBrowseRender(list) {
+  const grid  = document.getElementById('hm-browse-grid');
+  const count = document.getElementById('hm-browse-count');
+  if (!grid) return;
+
+  if (count) count.textContent = `${list.length} clipper${list.length!==1?'s':''} available`;
+
+  if (list.length === 0) {
+    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:var(--muted);">
+      <div style="font-size:3rem;margin-bottom:14px;">😶</div>
+      <div style="font-weight:700;margin-bottom:6px;">No clippers match your filters</div>
+      <div style="font-size:0.83rem;">Try clearing filters or check back later.</div>
+    </div>`;
+    return;
   }
 
-  try {
-    toast('Adding to your portfolio…', 'pending');
-    const tx = await hireMeContract.addPOWLink(url);
-    await tx.wait();
-    toast('✅ Clip added to your portfolio!', 'success');
-    loadHireMePage();
-  } catch(e) { toast(friendlyError(e), 'error'); }
-}
-async function hmRemovePOW(index) {
-  if (!hireMeContract || !confirm('Remove this clip from your portfolio?')) return;
-  try {
-    toast('Removing…', 'pending');
-    const tx = await hireMeContract.removePOWLink(index);
-    await tx.wait();
-    toast('Clip removed', 'success');
-    loadHireMePage();
-  } catch(e) { toast(friendlyError(e), 'error'); }
+  grid.innerHTML = list.map((p, i) => {
+    const name    = p.username || (p.wallet||'').slice(0,8)+'…';
+    const init    = name[0]?.toUpperCase()||'?';
+    const pow     = p.pow_links || [];
+    const plats   = (p.platforms||[]).map(pl => pl==='blaze'?'🔴 Blaze':pl==='arena'?'🟡 Arena':'').filter(Boolean).join(' · ');
+    const rateLbl = p.rate_note ? `<div style="font-size:0.72rem;color:var(--success);margin-top:3px;">💰 ${escHtml(p.rate_note)}</div>` : '';
+
+    // POW preview — show first 3
+    const powPreview = pow.slice(0,3).map(lnk => `
+      <a href="${escHtml(lnk.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()"
+         style="display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:7px;border:1px solid var(--border);background:rgba(255,255,255,0.02);text-decoration:none;transition:border-color 0.15s;"
+         onmouseover="this.style.borderColor='rgba(255,107,26,0.4)'" onmouseout="this.style.borderColor='var(--border)'">
+        <span style="font-size:0.78rem;flex-shrink:0;">${_hmPlatformIcon(lnk.url)}</span>
+        <span style="font-family:var(--font-mono);font-size:0.68rem;color:var(--orange);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${escHtml(lnk.url.length>38?lnk.url.slice(0,38)+'…':lnk.url)}</span>
+      </a>`).join('');
+
+    return `<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;cursor:pointer;transition:all 0.15s;display:flex;flex-direction:column;gap:0;"
+                 onclick="hmViewClipper('${p.wallet}')"
+                 onmouseover="this.style.borderColor='rgba(255,107,26,0.45)';this.style.transform='translateY(-2px)'"
+                 onmouseout="this.style.borderColor='var(--border)';this.style.transform='none'">
+
+      <!-- Card header -->
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+        ${_hmAvatar(`hm-br-av-${i}`, init, '46px')}
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:800;font-size:0.95rem;">${escHtml(name)}</div>
+          ${p.x_handle ? `<div style="font-size:0.72rem;color:var(--muted);">@${escHtml(p.x_handle)}</div>` : ''}
+          ${_hmTierBadge(p.nft_tier, p.nft_level)}
+        </div>
+        <div style="flex-shrink:0;font-size:1.2rem;">${pow.length>0?'🎬':''}</div>
+      </div>
+
+      <!-- Stats row -->
+      <div style="display:flex;gap:6px;margin-bottom:12px;">
+        <div style="flex:1;text-align:center;padding:8px 4px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;">
+          <div style="font-family:var(--font-display);font-size:1.1rem;color:var(--orange);">${p.bounties_won||0}</div>
+          <div style="font-size:0.58rem;color:var(--muted);text-transform:uppercase;">Wins</div>
+        </div>
+        <div style="flex:1;text-align:center;padding:8px 4px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;">
+          <div style="font-family:var(--font-display);font-size:1.1rem;color:var(--amber);">${p.clips_submitted||0}</div>
+          <div style="font-size:0.58rem;color:var(--muted);text-transform:uppercase;">Clips</div>
+        </div>
+        <div style="flex:1;text-align:center;padding:8px 4px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;">
+          <div style="font-family:var(--font-display);font-size:1.1rem;color:var(--success);">${p.rep_score||0}</div>
+          <div style="font-size:0.58rem;color:var(--muted);text-transform:uppercase;">Rep</div>
+        </div>
+        <div style="flex:1;text-align:center;padding:8px 4px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;">
+          <div style="font-family:var(--font-display);font-size:1.1rem;color:var(--red);">${pow.length}</div>
+          <div style="font-size:0.58rem;color:var(--muted);text-transform:uppercase;">POW</div>
+        </div>
+      </div>
+
+      ${p.bio ? `<div style="font-size:0.8rem;color:var(--muted);line-height:1.55;margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${escHtml(p.bio)}</div>` : ''}
+      ${plats ? `<div style="font-size:0.7rem;color:var(--muted);margin-bottom:10px;">${plats}</div>` : ''}
+      ${rateLbl}
+
+      <!-- POW preview -->
+      ${pow.length > 0 ? `<div style="margin-top:10px;display:flex;flex-direction:column;gap:5px;">${powPreview}${pow.length>3?`<div style="font-size:0.68rem;color:var(--muted);text-align:center;padding:4px;">+${pow.length-3} more clips</div>`:''}</div>` : `<div style="margin-top:10px;padding:10px;border:1px dashed rgba(255,255,255,0.1);border-radius:8px;text-align:center;font-size:0.75rem;color:var(--muted);">No POW clips yet</div>`}
+
+      <button class="btn btn-primary btn-sm" style="margin-top:14px;width:100%;font-size:0.82rem;" onclick="event.stopPropagation();hmViewClipper('${p.wallet}')">View Profile &amp; Hire →</button>
+    </div>`;
+  }).join('');
+
+  // Inject avatars
+  setTimeout(() => list.forEach((p,i) => loadWalletNFTAvatar(p.wallet, `hm-br-av-${i}`)), 80);
 }
 
-// ── VIEW CLIPPER + MAKE OFFER MODAL ──────────────────────────────
+// ── CLIPPER PROFILE MODAL ─────────────────────────────────────────
 async function hmViewClipper(clipperAddr) {
-  if (!hireMeContract) return;
-  const roP  = await getFujiProvider();
-  const roHM = new ethers.Contract(HIREME_ADDRESS, HIREME_ABI, roP);
-  let pow=[];
-  try { pow = await roHM.getPOW(clipperAddr); } catch(e) {}
-  let prof=null;
-  if (db) try { const r=await db.from('profiles').select('*').eq('wallet',clipperAddr.toLowerCase()).maybeSingle(); prof=r.data; } catch(e){}
-  const name  = prof?.username || clipperAddr.slice(0,10)+'…';
-  const init  = name[0].toUpperCase();
-  const isSelf = clipperAddr.toLowerCase()===account?.toLowerCase();
+  const roP = await getFujiProvider();
+  let prof = null;
+  try {
+    const { data } = await db.from('hireme_profiles').select('*').eq('wallet', clipperAddr.toLowerCase()).maybeSingle();
+    prof = data;
+  } catch(e) {}
 
-  const powHTML = pow.length>0 ? pow.map(p=>`
-    <div class="hm-pow-item">
-      <div class="hm-pow-icon">${_hmPlatformIcon(p.url)}</div>
-      <div class="hm-pow-url"><a href="${escHtml(p.url)}" target="_blank" rel="noopener">${escHtml(p.url.length>52?p.url.slice(0,52)+'…':p.url)}</a></div>
-      <span style="font-size:0.65rem;color:var(--muted);">${new Date(Number(p.addedAt)*1000).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span>
-    </div>`).join('')
-    : '<div style="color:var(--muted);font-size:0.84rem;padding:12px 0;">No portfolio links yet.</div>';
+  const name    = prof?.username || clipperAddr.slice(0,10)+'…';
+  const pow     = prof?.pow_links || [];
+  const isSelf  = clipperAddr.toLowerCase() === account?.toLowerCase();
+  const init    = name[0]?.toUpperCase()||'?';
+  const plats   = (prof?.platforms||[]).map(pl=>pl==='blaze'?'🔴 Blaze':'🟡 Arena').join(' &nbsp;·&nbsp; ');
 
-  const offerForm = !isSelf ? `
-    <div style="margin-top:24px;border-top:1px solid var(--border);padding-top:20px;">
-      <div style="font-weight:800;font-size:0.92rem;margin-bottom:14px;color:var(--orange);">💼 Make an Offer</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
-        <div class="form-group" style="margin-bottom:0;">
-          <label>Clips required</label>
-          <input type="number" id="hm-oc" min="1" max="50" value="5" style="font-size:0.9rem;"/>
+  const powHTML = pow.length > 0
+    ? pow.map(p => `<a href="${escHtml(p.url)}" target="_blank" rel="noopener"
+        style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;border:1px solid var(--border);background:rgba(255,255,255,0.02);text-decoration:none;margin-bottom:6px;transition:border-color 0.15s;"
+        onmouseover="this.style.borderColor='rgba(255,107,26,0.45)'" onmouseout="this.style.borderColor='var(--border)'">
+        <span style="font-size:1rem;flex-shrink:0;">${_hmPlatformIcon(p.url)}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-family:var(--font-mono);font-size:0.73rem;color:var(--orange);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(p.url.length>50?p.url.slice(0,50)+'…':p.url)}</div>
+          ${p.label?`<div style="font-size:0.62rem;color:var(--muted);margin-top:1px;">${escHtml(p.label)}</div>`:''}
         </div>
-        <div class="form-group" style="margin-bottom:0;">
-          <label>Your offer (AVAX)</label>
-          <input type="number" id="hm-oa" step="0.001" min="0.001" placeholder="e.g. 0.5"/>
-        </div>
+        <span style="font-size:0.62rem;color:var(--muted);flex-shrink:0;">${p.added_at?new Date(p.added_at).toLocaleDateString('en-US',{month:'short',day:'numeric'}):''}</span>
+        <span style="font-size:0.72rem;color:var(--muted);">↗</span>
+      </a>`).join('')
+    : `<div style="color:var(--muted);font-size:0.84rem;padding:12px 0;text-align:center;">No portfolio clips posted yet.</div>`;
+
+  const offerForm = !isSelf && account ? `
+    <div style="margin-top:22px;border-top:1px solid var(--border);padding-top:20px;">
+      <div style="font-weight:800;font-size:0.92rem;margin-bottom:14px;">💼 Make an Offer</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <div class="form-group" style="margin-bottom:0;"><label style="font-size:0.71rem;">Clips required</label><input type="number" id="hm-oc" min="1" max="50" value="5"/></div>
+        <div class="form-group" style="margin-bottom:0;"><label style="font-size:0.71rem;">Offer (AVAX)</label><input type="number" id="hm-oa" step="0.001" min="0.001" placeholder="0.5"/></div>
       </div>
-      <div class="form-group" style="margin-bottom:16px;">
-        <label>Requirements / context</label>
-        <textarea id="hm-on" rows="3" placeholder="Stream dates, clip style, quality standards…" style="resize:vertical;"></textarea>
-      </div>
-      <div style="font-size:0.72rem;color:var(--muted);margin-bottom:12px;">⚠️ AVAX is only locked when both sides accept. 2.5% platform fee deducted from final payout.</div>
-      <button class="btn btn-primary" style="width:100%;font-size:0.9rem;padding:12px;" onclick="hmMakeOffer('${clipperAddr}')">📨 Send Offer to ${escHtml(name)}</button>
-    </div>` : '<div style="margin-top:14px;font-size:0.82rem;color:var(--muted);">This is your own profile.</div>';
+      <div class="form-group" style="margin-bottom:14px;"><label style="font-size:0.71rem;">Requirements / context</label>
+        <textarea id="hm-on" rows="3" placeholder="Stream dates, clip style, quality bar, deadlines…" style="resize:vertical;"></textarea></div>
+      <div style="font-size:0.72rem;color:var(--muted);margin-bottom:12px;">AVAX is only locked when both sides accept. 2.5% platform fee on payout. On-chain negotiation.</div>
+      ${hireMeContract ? `<button class="btn btn-primary" style="width:100%;" onclick="hmMakeOffer('${clipperAddr}')">📨 Send Offer to ${escHtml(name)}</button>` : `<div style="color:var(--muted);font-size:0.82rem;text-align:center;">HireMe contract not deployed yet — offers unavailable.</div>`}
+    </div>` : (isSelf ? `<div style="margin-top:14px;font-size:0.82rem;color:var(--muted);text-align:center;">This is your own profile.</div>` : `<div style="margin-top:14px;font-size:0.82rem;color:var(--muted);text-align:center;">Connect wallet to make an offer.</div>`);
 
   const modal = _hmModal('hm-clipper-modal', `
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;">
-      ${_hmAvatarEl('hm-modal-cav', init)}
+    <!-- Header -->
+    <div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:20px;">
+      ${_hmAvatar('hm-modal-av', init, '52px')}
       <div style="flex:1;min-width:0;">
-        <div style="font-weight:800;font-size:1.1rem;">${escHtml(name)}</div>
-        <div style="font-family:var(--font-mono);font-size:0.72rem;color:var(--muted);">${clipperAddr}</div>
+        <div style="font-weight:800;font-size:1.1rem;margin-bottom:3px;">${escHtml(name)}</div>
+        ${prof?.x_handle?`<div style="font-size:0.75rem;color:var(--muted);">@${escHtml(prof.x_handle)}</div>`:''}
+        <div style="font-family:var(--font-mono);font-size:0.68rem;color:var(--muted);">${clipperAddr.slice(0,16)}…</div>
+        <div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap;">${_hmTierBadge(prof?.nft_tier,prof?.nft_level)}${plats?`<span style="font-size:0.7rem;color:var(--muted);">${plats}</span>`:''}</div>
       </div>
     </div>
-    <div style="font-weight:700;color:var(--orange);margin-bottom:12px;font-size:0.9rem;">🎬 Portfolio (${pow.length} clips)</div>
+
+    <!-- Stats -->
+    <div style="display:flex;gap:8px;margin-bottom:16px;">
+      ${_hmStatPill('🏆', prof?.bounties_won||0, 'Wins')}
+      ${_hmStatPill('📎', prof?.clips_submitted||0, 'Clips')}
+      ${_hmStatPill('⭐', prof?.rep_score||0, 'Rep')}
+      ${_hmStatPill('⚡', prof?.nft_level||1, 'Level')}
+    </div>
+
+    ${prof?.bio?`<div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:0.83rem;color:var(--muted);line-height:1.6;margin-bottom:16px;">${escHtml(prof.bio)}</div>`:''}
+    ${prof?.rate_note?`<div style="font-size:0.8rem;color:var(--success);margin-bottom:14px;font-weight:600;">💰 Rate: ${escHtml(prof.rate_note)}</div>`:''}
+
+    <div style="font-weight:700;color:var(--orange);margin-bottom:10px;font-size:0.9rem;">🎬 Proof of Work <span style="font-weight:400;color:var(--muted);font-size:0.72rem;">${pow.length} clip${pow.length!==1?'s':''}</span></div>
     ${powHTML}
     ${offerForm}
   `);
   document.body.appendChild(modal);
-  modal.addEventListener('click', e=>{ if(e.target===modal) modal.remove(); });
-  loadWalletNFTAvatar(clipperAddr, 'hm-modal-cav');
+  loadWalletNFTAvatar(clipperAddr, 'hm-modal-av');
 }
 
-function _hmModal(id, innerHTML, maxW='500px') {
-  const el = document.createElement('div');
-  el.id = id;
-  el.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:2000;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(3px);';
-  el.innerHTML = `<div style="background:var(--card);border:1px solid rgba(255,107,26,0.2);border-radius:18px;padding:26px;max-width:${maxW};width:100%;max-height:88vh;overflow-y:auto;position:relative;">
-    <button onclick="document.getElementById('${id}').remove()" style="position:absolute;top:16px;right:16px;background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--muted);border-radius:8px;cursor:pointer;font-size:0.85rem;padding:5px 10px;transition:all 0.15s;" onmouseenter="this.style.color='white'" onmouseleave="this.style.color='var(--muted)'">✕</button>
-    ${innerHTML}
-  </div>`;
-  return el;
-}
-
-// ── MAKE OFFER ────────────────────────────────────────────────────
+// ── MAKE OFFER (on-chain) ─────────────────────────────────────────
 async function hmMakeOffer(clipperAddr) {
   if (!hireMeContract) { toast('HireMe contract not deployed', 'error'); return; }
   const clips = parseInt(document.getElementById('hm-oc')?.value)||0;
   const avax  = parseFloat(document.getElementById('hm-oa')?.value)||0;
   const note  = document.getElementById('hm-on')?.value.trim()||'';
-  if (clips<1||clips>50) { toast('Clips must be 1–50', 'error'); return; }
-  if (avax<=0) { toast('Enter an AVAX offer amount', 'error'); return; }
-
-  // Pre-flight: NFT linked and user holds NFT
+  if (clips<1||clips>50) { toast('Clips must be 1–50','error'); return; }
+  if (avax<=0) { toast('Enter an AVAX amount','error'); return; }
   try {
-    const roP = await getFujiProvider();
-    const roHM = new ethers.Contract(HIREME_ADDRESS, HIREME_ABI, roP);
-    const linkedNFT = await roHM.nftContract().catch(()=>null);
-    if (!linkedNFT || linkedNFT==='0x0000000000000000000000000000000000000000') {
-      toast('⚙️ HireMe not linked to NFT yet. Admin must run: Link NFT → HireMe', 'error'); return;
-    }
-    const hasNft = await nftContract.hasNFT(account).catch(()=>false);
-    if (!hasNft) { toast('❌ You need a ClipDAO NFT to make offers', 'error'); return; }
-  } catch(e) {}
-  try {
-    toast('Creating offer…', 'pending');
+    toast('Creating offer on-chain…','pending');
     const tx1 = await hireMeContract.makeOffer(clipperAddr, clips, note);
     await tx1.wait();
-    // Immediately set the AVAX amount via counterOffer
     const roP = await getFujiProvider();
     const roHM = new ethers.Contract(HIREME_ADDRESS, HIREME_ABI, roP);
     const ids = await roHM.getStreamerOffers(account);
     const lastId = Number(ids[ids.length-1]);
     const tx2 = await hireMeContract.counterOffer(lastId, ethers.parseEther(avax.toString()), clips, note);
     await tx2.wait();
+    if (db) await db.from('hm_messages').insert({offer_id:lastId,sender:account.toLowerCase(),recipient:clipperAddr.toLowerCase(),message:`📨 Offer: ${clips} clips for ${avax} AVAX${note?'. Note: '+note:''}`,msg_type:'offer',created_at:new Date().toISOString()}).catch(()=>{});
     document.getElementById('hm-clipper-modal')?.remove();
-    toast('✅ Offer sent! Clipper will be notified.', 'success');
-    // Log to Supabase DM channel
-    if (db) {
-      await db.from('hm_messages').insert({
-        offer_id: lastId,
-        sender: account.toLowerCase(),
-        recipient: clipperAddr.toLowerCase(),
-        message: `📨 New offer: ${clips} clips for ${avax} AVAX. Note: ${note||'None'}`,
-        msg_type: 'offer',
-        created_at: new Date().toISOString()
-      }).catch(()=>{});
-    }
+    toast('✅ Offer sent! Clipper will see it in their Hire Me tab.','success');
     loadHireMePage();
-  } catch(e) { toast(friendlyError(e), 'error'); }
+  } catch(e) { toast(friendlyError(e),'error'); }
 }
 
-// ── OPEN OFFER DETAIL MODAL ───────────────────────────────────────
+// ── OPEN OFFER MODAL (full negotiation / deal management) ─────────
+
+// ── DEAL DETAIL — full page view ─────────────────────────────────
+let _dealPollTimer = null;
+
 async function hmOpenOffer(offerId) {
-  if (!hireMeContract) return;
-  const roP  = await getFujiProvider();
+  // Navigate to full-page deal view
+  showPage('deal-detail');
+  await _renderDealPage(offerId);
+  // Poll for new DMs every 8s while on this page
+  clearInterval(_dealPollTimer);
+  _dealPollTimer = setInterval(() => _pollDMs(offerId), 8000);
+}
+
+async function _renderDealPage(offerId) {
+  const el = document.getElementById('deal-detail-content');
+  if (!el) return;
+  el.innerHTML = '<div class="empty-state"><div class="spinner"></div><p>Loading deal…</p></div>';
+
+  if (!hireMeContract) {
+    el.innerHTML = '<div class="empty-state"><p>HireMe contract not connected.</p><button class="btn btn-ghost btn-sm" onclick="goBackFromDeal()">← Back</button></div>';
+    return;
+  }
+
+  const roP = await getFujiProvider();
   const roHM = new ethers.Contract(HIREME_ADDRESS, HIREME_ABI, roP);
-  let o, clips=[];
-  try { o = await roHM.getOffer(offerId); clips = await roHM.getOfferClips(offerId); } catch(e) { toast('Failed to load deal', 'error'); return; }
+  let o, clips = [];
+  try {
+    [o, clips] = await Promise.all([roHM.getOffer(offerId), roHM.getOfferClips(offerId)]);
+  } catch(e) {
+    el.innerHTML = '<div class="empty-state"><p>Failed to load deal.</p><button class="btn btn-ghost btn-sm" onclick="goBackFromDeal()">← Back</button></div>';
+    return;
+  }
 
   const status      = Number(o.status);
-  const isClipper   = o.clipper.toLowerCase()===account.toLowerCase();
-  const isStreamer  = o.streamer.toLowerCase()===account.toLowerCase();
+  const isClipper   = o.clipper.toLowerCase() === account.toLowerCase();
+  const isStreamer   = o.streamer.toLowerCase() === account.toLowerCase();
   const other       = isClipper ? o.streamer : o.clipper;
-  const avax        = parseFloat(ethers.formatEther(o.avaxAmount||0n));
+  const otherRole   = isClipper ? 'Streamer' : 'Clipper';
+  const avax        = parseFloat(ethers.formatEther(o.avaxAmount || 0n));
   const clipCount   = Number(o.clipCount);
   const approved    = Number(o.approvedClips);
-  const lastSide    = Number(o.lastSide);
-  const myTurn      = status===0 && ((isClipper&&lastSide===0)||(isStreamer&&lastSide===1));
-  const hasCancelReq = o.cancelRequester && o.cancelRequester!=='0x0000000000000000000000000000000000000000';
-  const iRequested  = hasCancelReq && o.cancelRequester.toLowerCase()===account.toLowerCase();
-  const initOther   = (other.slice(2,4)||'?').toUpperCase();
-  const shortOther  = other.slice(0,6)+'…'+other.slice(-4);
+  const lastSide    = Number(o.lastSide); // 0=streamer 1=clipper
+  const myTurn      = status === 0 && ((isClipper && lastSide === 0) || (isStreamer && lastSide === 1));
+  const otherTurn   = status === 0 && !myTurn;
+  const hasCancelReq= o.cancelRequester && o.cancelRequester !== '0x0000000000000000000000000000000000000000';
+  const iRequested  = hasCancelReq && o.cancelRequester.toLowerCase() === account.toLowerCase();
 
-  // Load DMs from Supabase
-  let dmsHTML = '';
-  if (db) {
-    try {
-      const {data:msgs} = await db.from('hm_messages').select('*')
-        .eq('offer_id', offerId).order('created_at',{ascending:true}).limit(50);
-      if (msgs?.length>0) {
-        dmsHTML = msgs.map(m=>{
-          const mine = m.sender?.toLowerCase()===account?.toLowerCase();
-          const time = new Date(m.created_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
-          return `<div style="display:flex;flex-direction:column;align-items:${mine?'flex-end':'flex-start'};margin-bottom:8px;">
-            <div class="hm-dm-bubble ${mine?'mine':'theirs'}">${escHtml(m.message)}</div>
-            <div class="hm-dm-time">${time}</div>
-          </div>`;
-        }).join('');
-      } else {
-        dmsHTML = '<div style="text-align:center;color:var(--muted);font-size:0.8rem;padding:12px 0;">No messages yet — start the conversation!</div>';
-      }
-    } catch(e) {}
-  }
+  // Load other party's Supabase profile
+  let otherProf = null;
+  if (db) { try { const {data} = await db.from('hireme_profiles').select('*').eq('wallet', other.toLowerCase()).maybeSingle(); otherProf = data; } catch(e){} }
+  const otherName = otherProf?.username || other.slice(0,8)+'…';
 
-  // Clip rows
-  const clipRows = clips.map((c,i)=>{
-    const icon = _hmPlatformIcon(c.link);
-    const short = c.link.length>45 ? c.link.slice(0,45)+'…' : c.link;
-    return `<div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
-      <div style="width:22px;height:22px;border-radius:50%;background:${c.approved?'rgba(34,197,94,0.2)':'rgba(255,255,255,0.07)'};border:1px solid ${c.approved?'rgba(34,197,94,0.5)':'rgba(255,255,255,0.1)'};display:flex;align-items:center;justify-content:center;font-size:0.65rem;flex-shrink:0;color:${c.approved?'#22c55e':'var(--muted)'};">${c.approved?'✓':i+1}</div>
-      <div style="font-size:0.85rem;flex-shrink:0;">${icon}</div>
-      <a href="${escHtml(c.link)}" target="_blank" rel="noopener" style="color:var(--orange);font-family:var(--font-mono);font-size:0.73rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(short)}</a>
-      ${c.approved
-        ? '<span style="font-size:0.65rem;color:#22c55e;flex-shrink:0;font-weight:700;">✅ Approved</span>'
-        : isStreamer&&status===1
-          ? `<button onclick="hmApproveClip(${offerId},${i})" class="btn btn-primary btn-sm" style="flex-shrink:0;font-size:0.65rem;padding:4px 10px;">Approve</button>`
-          : '<span style="font-size:0.65rem;color:var(--muted);flex-shrink:0;">Pending</span>'}
-    </div>`;
-  }).join('');
+  // Load DMs
+  let msgs = [];
+  if (db) { try { const r = await db.from('hm_messages').select('*').eq('offer_id', offerId).order('created_at',{ascending:true}).limit(100); msgs = r.data || []; } catch(e){} }
 
-  // Action panel
+  // Status label + color
+  const statusLabels = {0:'Negotiating',1:'Active',2:'Completed',3:'Rejected',4:'Cancelled'};
+  const statusColors = {0:'var(--amber)',1:'#22c55e',2:'var(--muted)',3:'var(--red)',4:'var(--muted)'};
+
+  // Progress pct
+  const progPct = clipCount > 0 ? Math.round(approved/clipCount*100) : 0;
+
+  // Step indicator (visual pipeline)
+  const steps = [
+    { key:0, label:'Negotiating', icon:'💬', done: status >= 1 },
+    { key:1, label:'Deal Active', icon:'🔒', done: status >= 1 },
+    { key:2, label:'Clips Submitted', icon:'📎', done: clips.length >= clipCount && clipCount > 0 },
+    { key:3, label:'All Approved', icon:'✅', done: status === 2 },
+    { key:4, label:'Paid Out', icon:'💰', done: status === 2 },
+  ];
+  const stepsHTML = `<div style="display:flex;align-items:center;gap:0;margin-bottom:24px;overflow-x:auto;padding-bottom:4px;">
+    ${steps.map((s,i) => `
+      <div style="display:flex;flex-direction:column;align-items:center;flex:1;min-width:60px;position:relative;">
+        <div style="width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.9rem;border:2px solid ${s.done?'var(--success)':status===s.key?'var(--orange)':'var(--border)'};background:${s.done?'rgba(34,197,94,0.15)':status===s.key?'rgba(255,107,26,0.12)':'rgba(255,255,255,0.03)'};transition:all 0.3s;">
+          ${s.done ? '✓' : s.icon}
+        </div>
+        <div style="font-size:0.58rem;color:${s.done?'#22c55e':status===s.key?'var(--orange)':'var(--muted)'};margin-top:4px;text-align:center;line-height:1.3;">${s.label}</div>
+        ${i<steps.length-1?`<div style="position:absolute;top:16px;left:calc(50% + 16px);right:calc(-50% + 16px);height:2px;background:${s.done?'rgba(34,197,94,0.4)':'var(--border)'};"></div>`:''}
+      </div>`).join('')}
+  </div>`;
+
+  // Action panel — context-sensitive
   let actionHTML = '';
-  if (status===0) {
-    if (myTurn) {
-      actionHTML = `
-        <div style="background:rgba(255,149,0,0.06);border:1px solid rgba(255,149,0,0.2);border-radius:12px;padding:16px;margin-bottom:16px;">
-          <div style="font-weight:800;color:var(--amber);margin-bottom:14px;">⚡ Your turn to respond</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
-            <div class="form-group" style="margin-bottom:0;"><label style="font-size:0.72rem;">Clips</label>
-              <input type="number" id="hm-cnt" value="${clipCount}" min="1" max="50"/></div>
-            <div class="form-group" style="margin-bottom:0;"><label style="font-size:0.72rem;">AVAX</label>
-              <input type="number" id="hm-avx" value="${avax.toFixed(4)}" step="0.001" min="0.001"/></div>
+  if (status === 0) {
+    // ── NEGOTIATION ──
+    const turnBanner = myTurn
+      ? `<div style="background:rgba(255,107,26,0.1);border:1px solid rgba(255,107,26,0.3);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;"><span style="font-size:1.2rem;">⚡</span><div><div style="font-weight:800;color:var(--orange);font-size:0.9rem;">Your turn to respond</div><div style="font-size:0.75rem;color:var(--muted);">Review the terms and counter, accept, or reject</div></div></div>`
+      : `<div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;"><span style="font-size:1.2rem;">⏳</span><div><div style="font-weight:700;font-size:0.9rem;">Waiting for ${otherName}</div><div style="font-size:0.75rem;color:var(--muted);">They need to respond before you can counter again</div></div></div>`;
+
+    actionHTML = `
+      ${turnBanner}
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:16px;">
+        <div style="font-weight:800;color:var(--orange);margin-bottom:14px;font-size:0.92rem;">📋 Current Terms</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label style="font-size:0.72rem;">Number of clips</label>
+            <input type="number" id="hm-cnt" value="${clipCount}" min="1" max="50" style="font-size:1rem;font-weight:700;"/>
           </div>
-          <div class="form-group" style="margin-bottom:14px;"><label style="font-size:0.72rem;">Note</label>
-            <textarea id="hm-nte" rows="2" style="resize:vertical;">${escHtml(o.note||'')}</textarea></div>
-          <div style="display:flex;gap:8px;">
-            <button class="btn btn-ghost" style="flex:1;" onclick="hmCounterOffer(${offerId})">↕ Counter</button>
-            <button class="btn btn-primary" style="flex:1;" onclick="hmAcceptOffer(${offerId})">${isStreamer?`✅ Accept &amp; Lock ${avax.toFixed(4)} AVAX`:'✅ Accept Terms'}</button>
-            <button class="btn btn-ghost" style="color:var(--red);padding:0 14px;" onclick="hmRejectOffer(${offerId})">Reject</button>
+          <div class="form-group" style="margin-bottom:0;">
+            <label style="font-size:0.72rem;">AVAX amount</label>
+            <input type="number" id="hm-avx" value="${avax > 0 ? avax.toFixed(4) : ''}" step="0.001" min="0.001" placeholder="e.g. 0.5" style="font-size:1rem;font-weight:700;color:var(--orange);"/>
           </div>
-        </div>`;
-    } else {
-      // Can also pre-accept if terms look good
-      actionHTML = `
-        <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
-          <div style="color:var(--muted);font-size:0.84rem;margin-bottom:12px;">⏳ Waiting for ${isClipper?'streamer':'clipper'} to respond…</div>
-          <div style="display:flex;gap:8px;">
-            <button class="btn btn-primary btn-sm" style="flex:1;" onclick="hmAcceptOffer(${offerId})">${isStreamer?`Accept &amp; Lock ${avax.toFixed(4)} AVAX`:'Accept Terms'}</button>
-            <button class="btn btn-ghost btn-sm" style="color:var(--red);" onclick="hmRejectOffer(${offerId})">Reject</button>
-          </div>
-        </div>`;
-    }
-  } else if (status===1) {
-    // Active deal — submit or approve
+        </div>
+        <div class="form-group" style="margin-bottom:16px;">
+          <label style="font-size:0.72rem;">Notes / requirements</label>
+          <textarea id="hm-nte" rows="3" placeholder="Clip style, stream dates, quality requirements…" style="resize:vertical;font-size:0.83rem;">${escHtml(o.note||'')}</textarea>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+          <button class="btn btn-ghost" onclick="hmCounterOffer(${offerId})" style="font-size:0.82rem;">↕ Send Counter</button>
+          <button class="btn btn-primary" onclick="hmAcceptOffer(${offerId})" style="font-size:0.82rem;">${isStreamer && avax > 0 ? `✅ Accept &amp; Lock ${avax.toFixed(3)} AVAX` : '✅ Accept Terms'}</button>
+          <button class="btn btn-ghost" onclick="hmRejectOffer(${offerId})" style="color:var(--red);font-size:0.82rem;">✗ Reject</button>
+        </div>
+        ${avax > 0 && isStreamer ? `<div style="font-size:0.72rem;color:var(--muted);margin-top:10px;padding:8px 10px;background:rgba(255,149,0,0.06);border-radius:7px;">⚠️ Accepting will lock <strong>${avax.toFixed(4)} AVAX</strong> in escrow. Released only when all ${clipCount} clips are approved.</div>` : ''}
+      </div>`;
+
+  } else if (status === 1) {
+    // ── ACTIVE DEAL ──
+    const progBar = `<div style="background:rgba(255,255,255,0.07);border-radius:6px;height:8px;overflow:hidden;margin-bottom:6px;"><div style="height:100%;background:linear-gradient(90deg,var(--red),var(--amber),#22c55e);border-radius:6px;width:${progPct}%;transition:width 0.5s;"></div></div>
+    <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--muted);margin-bottom:16px;"><span>${approved} of ${clipCount} clips approved</span><span>${progPct}%</span></div>`;
+
+    let submitSection = '';
     if (isClipper) {
       const remaining = clipCount - clips.length;
-      if (remaining>0) {
-        actionHTML = `
-          <div style="background:rgba(34,197,94,0.05);border:1px solid rgba(34,197,94,0.2);border-radius:12px;padding:16px;margin-bottom:16px;">
-            <div style="font-weight:700;color:var(--success);margin-bottom:12px;">📤 Submit clip ${clips.length+1} of ${clipCount}</div>
-            <div class="form-group" style="margin-bottom:12px;">
-              <input type="url" id="hm-clip-url-${offerId}" placeholder="https://x.com/… or https://youtube.com/…"/>
-            </div>
-            <button class="btn btn-primary" style="width:100%;" onclick="hmSubmitClip(${offerId})">Submit Clip</button>
-          </div>`;
-      } else {
-        actionHTML = `<div style="text-align:center;padding:14px;background:rgba(34,197,94,0.05);border:1px solid rgba(34,197,94,0.2);border-radius:12px;color:var(--success);font-weight:700;margin-bottom:16px;">✅ All ${clipCount} clips submitted — waiting for streamer approval</div>`;
-      }
-    }
-    // Mutual cancel section
-    if (hasCancelReq) {
-      if (iRequested) {
-        actionHTML += `<div style="background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.3);border-radius:12px;padding:14px;margin-bottom:16px;">
-          <div style="font-weight:700;color:#ef4444;margin-bottom:6px;">⚠️ You requested cancellation</div>
-          <div style="font-size:0.8rem;color:var(--muted);">Waiting for ${isClipper?'streamer':'clipper'} to accept or reject. They must agree for the deal to cancel.</div>
-        </div>`;
-      } else {
-        actionHTML += `<div style="background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.3);border-radius:12px;padding:14px;margin-bottom:16px;">
-          <div style="font-weight:700;color:#ef4444;margin-bottom:8px;">⚠️ Other party wants to cancel</div>
-          <div style="font-size:0.8rem;color:var(--muted);margin-bottom:12px;">If you agree, streamer gets AVAX back minus 2% penalty. If you refuse, the deal continues.</div>
-          <div style="display:flex;gap:8px;">
-            <button class="btn btn-ghost" style="flex:1;color:#ef4444;border-color:rgba(239,68,68,0.4);" onclick="hmAgreeCancel(${offerId})">Agree to Cancel</button>
-            <button class="btn btn-primary" style="flex:1;" onclick="hmRejectCancel(${offerId})">Refuse — Keep Going</button>
+      if (remaining > 0) {
+        submitSection = `<div style="background:rgba(34,197,94,0.05);border:1px solid rgba(34,197,94,0.25);border-radius:14px;padding:18px;margin-bottom:16px;">
+          <div style="font-weight:800;color:var(--success);margin-bottom:4px;">📤 Submit clip ${clips.length+1} of ${clipCount}</div>
+          <div style="font-size:0.78rem;color:var(--muted);margin-bottom:12px;">${remaining} clip${remaining>1?'s':''} remaining. Only X (x.com) and YouTube links accepted.</div>
+          <div class="form-group" style="margin-bottom:12px;">
+            <label style="font-size:0.72rem;">Clip link</label>
+            <input type="url" id="hm-clip-url-${offerId}" placeholder="https://x.com/… or https://youtube.com/watch?v=…" style="font-size:0.9rem;"/>
           </div>
+          <button class="btn btn-primary" style="width:100%;" onclick="hmSubmitClip(${offerId})">Submit Clip →</button>
+        </div>`;
+      } else {
+        submitSection = `<div style="background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.25);border-radius:12px;padding:16px;margin-bottom:16px;text-align:center;">
+          <div style="font-size:1.5rem;margin-bottom:6px;">🎯</div>
+          <div style="font-weight:800;color:var(--success);">All ${clipCount} clips submitted!</div>
+          <div style="font-size:0.78rem;color:var(--muted);margin-top:4px;">Waiting for streamer to review and approve each one.</div>
         </div>`;
       }
-    } else {
-      actionHTML += `<button onclick="hmRequestCancel(${offerId})" style="width:100%;background:none;border:1px solid rgba(239,68,68,0.25);color:rgba(239,68,68,0.7);border-radius:9px;padding:10px;cursor:pointer;font-size:0.78rem;margin-bottom:16px;transition:all 0.15s;" onmouseenter="this.style.borderColor='rgba(239,68,68,0.6)';this.style.color='#ef4444'" onmouseleave="this.style.borderColor='rgba(239,68,68,0.25)';this.style.color='rgba(239,68,68,0.7)'">Request Cancellation (needs other party approval)</button>`;
     }
-  } else if (status===2) {
-    actionHTML = `<div style="text-align:center;padding:20px;background:rgba(34,197,94,0.05);border:1px solid rgba(34,197,94,0.2);border-radius:12px;margin-bottom:16px;">
-      <div style="font-size:1.8rem;margin-bottom:6px;">🎉</div>
-      <div style="font-weight:800;color:var(--success);margin-bottom:4px;">Deal Completed!</div>
-      <div style="font-size:0.8rem;color:var(--muted);">${avax.toFixed(4)} AVAX paid to clipper · 2.5% platform fee deducted</div>
+
+    // Cancel section
+    const cancelSection = hasCancelReq
+      ? (iRequested
+          ? `<div style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.3);border-radius:12px;padding:14px;margin-bottom:14px;">
+              <div style="font-weight:700;color:#ef4444;margin-bottom:4px;">⚠️ You requested cancellation</div>
+              <div style="font-size:0.78rem;color:var(--muted);">Waiting for ${otherName} to accept or reject your cancel request.</div>
+            </div>`
+          : `<div style="background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.4);border-radius:12px;padding:16px;margin-bottom:14px;">
+              <div style="font-weight:800;color:#ef4444;margin-bottom:6px;">⚠️ ${otherName} wants to cancel this deal</div>
+              <div style="font-size:0.8rem;color:var(--muted);margin-bottom:14px;">If you agree, the streamer gets their AVAX back minus a 2% penalty. You can also refuse — the deal continues as normal.</div>
+              <div style="display:flex;gap:8px;">
+                <button class="btn btn-ghost" style="flex:1;color:#ef4444;border-color:rgba(239,68,68,0.4);" onclick="hmAgreeCancel(${offerId})">Agree to Cancel</button>
+                <button class="btn btn-primary" style="flex:1;" onclick="hmRejectCancel(${offerId})">Refuse — Keep Going</button>
+              </div>
+            </div>`)
+      : `<div style="text-align:center;margin-bottom:14px;">
+          <button onclick="hmRequestCancel(${offerId})" style="background:none;border:1px dashed rgba(239,68,68,0.25);color:rgba(239,68,68,0.6);border-radius:8px;padding:8px 16px;cursor:pointer;font-size:0.75rem;transition:all 0.15s;" onmouseover="this.style.borderColor='rgba(239,68,68,0.5)';this.style.color='#ef4444'" onmouseout="this.style.borderColor='rgba(239,68,68,0.25)';this.style.color='rgba(239,68,68,0.6)'">Request cancellation (other party must agree)</button>
+        </div>`;
+
+    actionHTML = progBar + submitSection + cancelSection;
+
+  } else if (status === 2) {
+    actionHTML = `<div style="text-align:center;padding:28px;background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.25);border-radius:16px;margin-bottom:16px;">
+      <div style="font-size:2.5rem;margin-bottom:10px;">🎉</div>
+      <div style="font-weight:900;font-size:1.3rem;color:var(--success);margin-bottom:4px;">Deal Completed!</div>
+      <div style="font-size:0.85rem;color:var(--muted);">${avax.toFixed(4)} AVAX paid to clipper • 2.5% platform fee deducted</div>
+    </div>`;
+  } else if (status === 3) {
+    actionHTML = `<div style="text-align:center;padding:22px;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);border-radius:14px;margin-bottom:16px;">
+      <div style="font-size:2rem;margin-bottom:8px;">❌</div>
+      <div style="font-weight:800;color:var(--red);">Offer Rejected</div>
+      <div style="font-size:0.82rem;color:var(--muted);margin-top:4px;">This negotiation ended without a deal.</div>
+    </div>`;
+  } else if (status === 4) {
+    actionHTML = `<div style="text-align:center;padding:22px;background:rgba(100,100,100,0.06);border:1px solid var(--border);border-radius:14px;margin-bottom:16px;">
+      <div style="font-size:2rem;margin-bottom:8px;">🚫</div>
+      <div style="font-weight:800;color:var(--muted);">Deal Cancelled</div>
+      <div style="font-size:0.82rem;color:var(--muted);margin-top:4px;">AVAX refunded to streamer minus 2% penalty.</div>
     </div>`;
   }
 
-  const modal = _hmModal('hm-offer-modal', `
-    <!-- Header -->
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:22px;padding-bottom:18px;border-bottom:1px solid var(--border);">
-      ${_hmAvatarEl('hm-oa-modal-av', initOther)}
-      <div style="flex:1;min-width:0;">
-        <div style="font-weight:800;font-size:1.05rem;">${shortOther}</div>
-        <div style="font-size:0.72rem;color:var(--muted);">${isClipper?'Streamer (hired you)':'Clipper (you hired)'}</div>
+  // Clips submitted list
+  const clipsHTML = clips.length > 0 ? `
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:16px;">
+      <div style="font-weight:800;font-size:0.92rem;margin-bottom:14px;">📎 Submitted Clips <span style="font-weight:400;color:var(--muted);font-size:0.72rem;">${clips.length}/${clipCount}</span></div>
+      ${clips.map((c,i) => `
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+          <div style="width:24px;height:24px;border-radius:50%;background:${c.approved?'rgba(34,197,94,0.2)':'rgba(255,255,255,0.07)'};border:2px solid ${c.approved?'rgba(34,197,94,0.6)':'rgba(255,255,255,0.1)'};display:flex;align-items:center;justify-content:center;font-size:0.65rem;font-weight:700;color:${c.approved?'#22c55e':'var(--muted)'};flex-shrink:0;">${c.approved?'✓':i+1}</div>
+          <span style="font-size:0.9rem;flex-shrink:0;">${_hmPlatformIcon(c.link)}</span>
+          <a href="${escHtml(c.link)}" target="_blank" rel="noopener" style="flex:1;color:var(--orange);font-family:var(--font-mono);font-size:0.75rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(c.link.length>50?c.link.slice(0,50)+'…':c.link)}</a>
+          ${c.approved
+            ? '<span style="font-size:0.7rem;color:#22c55e;font-weight:800;flex-shrink:0;">✅ Approved</span>'
+            : isStreamer && status===1
+              ? `<button onclick="hmApproveClip(${offerId},${i})" class="btn btn-primary btn-sm" style="flex-shrink:0;font-size:0.72rem;">Approve</button>`
+              : '<span style="font-size:0.7rem;color:var(--muted);flex-shrink:0;">Pending review</span>'}
+        </div>`).join('')}
+      ${isStreamer && clips.length > 0 && approved < clips.length
+        ? `<div style="margin-top:10px;font-size:0.75rem;color:var(--muted);text-align:center;">${clips.length-approved} clip${clips.length-approved>1?'s':''} waiting for your approval</div>` : ''}
+    </div>` : '';
+
+  // DM thread
+  const dmBubbles = msgs.length > 0
+    ? msgs.map(m => {
+        const mine = m.sender?.toLowerCase() === account?.toLowerCase();
+        const time  = new Date(m.created_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+        const typeColors = {offer:'rgba(255,107,26,0.18)',counter:'rgba(255,149,0,0.15)',accept:'rgba(34,197,94,0.15)',clip:'rgba(80,80,255,0.12)',approve:'rgba(34,197,94,0.15)',cancel_request:'rgba(239,68,68,0.15)',cancel_rejected:'rgba(34,197,94,0.12)'};
+        const bg = typeColors[m.msg_type] || (mine ? 'rgba(232,53,10,0.2)' : 'rgba(255,255,255,0.06)');
+        const isSystem = ['offer','counter','accept','clip','approve','cancel_request','cancel_rejected'].includes(m.msg_type);
+        if (isSystem) {
+          return `<div style="text-align:center;margin:8px 0;"><span style="background:${bg};border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:5px 14px;font-size:0.72rem;color:var(--muted);">${escHtml(m.message)}</span></div>`;
+        }
+        return `<div style="display:flex;flex-direction:column;align-items:${mine?'flex-end':'flex-start'};margin-bottom:10px;">
+          <div style="max-width:75%;padding:10px 14px;border-radius:16px;font-size:0.84rem;line-height:1.55;word-break:break-word;background:${bg};border:1px solid rgba(255,255,255,0.07);${mine?'border-bottom-right-radius:4px;':'border-bottom-left-radius:4px;'}">${escHtml(m.message)}</div>
+          <div style="font-size:0.6rem;color:var(--muted);margin-top:4px;">${mine?'You':otherName} · ${time}</div>
+        </div>`;
+      }).join('')
+    : `<div style="text-align:center;padding:20px 0;color:var(--muted);font-size:0.8rem;">No messages yet — say hi! 👋</div>`;
+
+  // Render the full page
+  el.innerHTML = `
+  <style>
+  #deal-detail-content .form-group label { font-size: 0.72rem; }
+  </style>
+
+  <!-- Back button + header -->
+  <div style="display:flex;align-items:center;gap:12px;padding:20px 0 18px;border-bottom:1px solid var(--border);margin-bottom:24px;">
+    <button onclick="goBackFromDeal()" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:8px 14px;cursor:pointer;font-size:0.82rem;flex-shrink:0;transition:all 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.06)'">← Back</button>
+    <div style="flex:1;min-width:0;">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span style="font-weight:900;font-size:1.05rem;">Deal #${offerId}</span>
+        <span style="padding:3px 10px;border-radius:20px;font-size:0.65rem;font-weight:800;text-transform:uppercase;background:${status===1?'rgba(34,197,94,0.15)':status===0?'rgba(255,149,0,0.15)':'rgba(100,100,100,0.12)'};color:${statusColors[status]};border:1px solid ${statusColors[status]}22;">${statusLabels[status]||'—'}</span>
+        ${hasCancelReq ? '<span style="padding:3px 10px;border-radius:20px;font-size:0.65rem;font-weight:800;text-transform:uppercase;background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3);">Cancel Pending</span>' : ''}
       </div>
-      <div style="text-align:right;">
-        <span class="hm-badge ${status===1?'hm-badge-active':status===0?'hm-badge-pending':'hm-badge-done'}">${HM_STATUS[status]||'?'}</span>
-        <div style="font-size:0.65rem;color:var(--muted);margin-top:4px;">Deal #${offerId}</div>
-      </div>
+      <div style="font-size:0.73rem;color:var(--muted);margin-top:2px;">with ${otherName} (${otherRole})</div>
     </div>
+    <div id="hm-dd-other-av" style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--red),var(--orange));overflow:hidden;display:flex;align-items:center;justify-content:center;font-weight:700;color:white;flex-shrink:0;">${(other.slice(2,4)||'??').toUpperCase()}</div>
+  </div>
 
-    <!-- Stats -->
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px;">
-      <div class="hm-stat"><div class="hm-stat-val" style="color:var(--orange);">${avax.toFixed(3)}</div><div class="hm-stat-lbl">AVAX</div></div>
-      <div class="hm-stat"><div class="hm-stat-val" style="color:var(--amber);">${clipCount}</div><div class="hm-stat-lbl">Clips Required</div></div>
-      <div class="hm-stat"><div class="hm-stat-val" style="color:var(--success);">${approved}</div><div class="hm-stat-lbl">Approved</div></div>
+  <!-- Deal stats strip -->
+  <div style="display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap;">
+    <div style="flex:1;min-width:80px;text-align:center;padding:14px 8px;background:var(--card);border:1px solid var(--border);border-radius:12px;">
+      <div style="font-family:var(--font-display);font-size:1.5rem;color:var(--orange);">${avax > 0 ? avax.toFixed(3) : '—'}</div>
+      <div style="font-size:0.62rem;color:var(--muted);text-transform:uppercase;margin-top:2px;">AVAX</div>
     </div>
-    ${status>=1&&clipCount>0?`<div class="hm-progress" style="margin-bottom:20px;height:6px;border-radius:3px;"><div class="hm-progress-fill" style="width:${Math.round(approved/clipCount*100)}%"></div></div>`:''}
-    ${o.note?`<div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:20px;font-size:0.83rem;color:var(--muted);line-height:1.6;">${escHtml(o.note)}</div>`:''}
-
-    ${actionHTML}
-
-    <!-- Clips list -->
-    ${status>=1&&clips.length>0?`<div style="margin-bottom:20px;">
-      <div style="font-weight:700;font-size:0.88rem;margin-bottom:10px;">📎 Submitted Clips</div>
-      ${clipRows}
-    </div>`:''}
-
-    <!-- DM Thread -->
-    <div>
-      <div style="font-weight:700;font-size:0.88rem;margin-bottom:10px;">💬 Messages</div>
-      <div id="hm-dm-thread" style="display:flex;flex-direction:column;gap:2px;max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px;background:rgba(0,0,0,0.2);">${dmsHTML}</div>
-      <div style="display:flex;gap:8px;">
-        <input type="text" id="hm-dm-input-${offerId}" placeholder="Type a message…" style="flex:1;font-size:0.83rem;border-radius:9px;" onkeydown="if(event.key==='Enter')hmSendDM(${offerId},'${other}')"/>
-        <button class="btn btn-primary btn-sm" onclick="hmSendDM(${offerId},'${other}')" style="flex-shrink:0;">Send</button>
-      </div>
+    <div style="flex:1;min-width:80px;text-align:center;padding:14px 8px;background:var(--card);border:1px solid var(--border);border-radius:12px;">
+      <div style="font-family:var(--font-display);font-size:1.5rem;color:var(--amber);">${clipCount}</div>
+      <div style="font-size:0.62rem;color:var(--muted);text-transform:uppercase;margin-top:2px;">Clips</div>
     </div>
-  `, '540px');
+    <div style="flex:1;min-width:80px;text-align:center;padding:14px 8px;background:var(--card);border:1px solid ${approved===clipCount&&clipCount>0?'rgba(34,197,94,0.3)':'var(--border)'};border-radius:12px;">
+      <div style="font-family:var(--font-display);font-size:1.5rem;color:${approved===clipCount&&clipCount>0?'#22c55e':'var(--success)'};">${approved}/${clipCount}</div>
+      <div style="font-size:0.62rem;color:var(--muted);text-transform:uppercase;margin-top:2px;">Approved</div>
+    </div>
+    ${avax > 0 ? `<div style="flex:1;min-width:80px;text-align:center;padding:14px 8px;background:var(--card);border:1px solid var(--border);border-radius:12px;">
+      <div style="font-family:var(--font-display);font-size:1.5rem;color:var(--success);">${(avax*0.975).toFixed(3)}</div>
+      <div style="font-size:0.62rem;color:var(--muted);text-transform:uppercase;margin-top:2px;">Payout</div>
+    </div>` : ''}
+  </div>
 
-  document.body.appendChild(modal);
-  modal.addEventListener('click', e=>{ if(e.target===modal) modal.remove(); });
-  loadWalletNFTAvatar(other, 'hm-oa-modal-av');
-  // Scroll DM thread to bottom
-  setTimeout(()=>{const t=document.getElementById('hm-dm-thread');if(t)t.scrollTop=t.scrollHeight;},100);
+  <!-- Step progress -->
+  ${stepsHTML}
+
+  <!-- Action area -->
+  ${actionHTML}
+
+  <!-- Clips list -->
+  ${clipsHTML}
+
+  <!-- DM Chat -->
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:16px;">
+    <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;">
+      <span style="font-weight:800;font-size:0.92rem;">💬 Messages</span>
+      <span style="font-size:0.7rem;color:var(--muted);">with ${otherName}</span>
+      <div style="margin-left:auto;width:8px;height:8px;border-radius:50%;background:var(--success);"></div>
+    </div>
+    <div id="hm-dm-thread" style="padding:16px;min-height:180px;max-height:360px;overflow-y:auto;display:flex;flex-direction:column;">
+      ${dmBubbles}
+    </div>
+    <div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;gap:8px;background:rgba(0,0,0,0.15);">
+      <input type="text" id="hm-dm-input-${offerId}" placeholder="Type a message to ${otherName}…" style="flex:1;font-size:0.84rem;border-radius:10px;background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--text);padding:10px 14px;" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();hmSendDM(${offerId},'${other}')}"/>
+      <button class="btn btn-primary" onclick="hmSendDM(${offerId},'${other}')" style="padding:10px 18px;border-radius:10px;font-size:0.84rem;">Send</button>
+    </div>
+  </div>`;
+
+  // Scroll DM to bottom
+  setTimeout(() => {
+    const t = document.getElementById('hm-dm-thread');
+    if (t) t.scrollTop = t.scrollHeight;
+  }, 80);
+
+  loadWalletNFTAvatar(other, 'hm-dd-other-av');
 }
 
-// ── DM ────────────────────────────────────────────────────────────
+// Poll for new DMs while deal page is open
+async function _pollDMs(offerId) {
+  if (document.getElementById('page-deal-detail')?.classList.contains('active') && db) {
+    try {
+      const {data:msgs} = await db.from('hm_messages').select('*').eq('offer_id',offerId).order('created_at',{ascending:true}).limit(100);
+      const thread = document.getElementById('hm-dm-thread');
+      if (!thread || !msgs) return;
+      const roP = await getFujiProvider();
+      const roHM = new ethers.Contract(HIREME_ADDRESS, HIREME_ABI, roP);
+      const o = await roHM.getOffer(offerId).catch(()=>null);
+      const other = o ? (o.clipper.toLowerCase()===account.toLowerCase() ? o.streamer : o.clipper) : '';
+      const otherName = '—';
+      const atBottom = thread.scrollTop + thread.clientHeight >= thread.scrollHeight - 20;
+      thread.innerHTML = msgs.map(m => {
+        const mine = m.sender?.toLowerCase() === account?.toLowerCase();
+        const time  = new Date(m.created_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+        const typeColors = {offer:'rgba(255,107,26,0.18)',counter:'rgba(255,149,0,0.15)',accept:'rgba(34,197,94,0.15)',clip:'rgba(80,80,255,0.12)',approve:'rgba(34,197,94,0.15)',cancel_request:'rgba(239,68,68,0.15)',cancel_rejected:'rgba(34,197,94,0.12)'};
+        const bg = typeColors[m.msg_type] || (mine ? 'rgba(232,53,10,0.2)' : 'rgba(255,255,255,0.06)');
+        const isSystem = ['offer','counter','accept','clip','approve','cancel_request','cancel_rejected'].includes(m.msg_type);
+        if (isSystem) return `<div style="text-align:center;margin:8px 0;"><span style="background:${bg};border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:5px 14px;font-size:0.72rem;color:var(--muted);">${escHtml(m.message)}</span></div>`;
+        return `<div style="display:flex;flex-direction:column;align-items:${mine?'flex-end':'flex-start'};margin-bottom:10px;">
+          <div style="max-width:75%;padding:10px 14px;border-radius:16px;font-size:0.84rem;line-height:1.55;word-break:break-word;background:${bg};border:1px solid rgba(255,255,255,0.07);${mine?'border-bottom-right-radius:4px;':'border-bottom-left-radius:4px;'}">${escHtml(m.message)}</div>
+          <div style="font-size:0.6rem;color:var(--muted);margin-top:4px;">${time}</div>
+        </div>`;
+      }).join('');
+      if (atBottom) thread.scrollTop = thread.scrollHeight;
+    } catch(e) {}
+  } else {
+    clearInterval(_dealPollTimer);
+  }
+}
+
+// ── DM SEND ───────────────────────────────────────────────────────
 async function hmSendDM(offerId, recipientAddr) {
-  if (!db||!account) { toast('Connect wallet & Supabase to send messages','error'); return; }
+  if (!db || !account) { toast('Connect to send messages', 'error'); return; }
   const input = document.getElementById(`hm-dm-input-${offerId}`);
   const msg   = input?.value.trim();
   if (!msg) return;
   try {
-    await db.from('hm_messages').insert({
-      offer_id: offerId,
-      sender: account.toLowerCase(),
-      recipient: recipientAddr.toLowerCase(),
-      message: msg,
-      msg_type: 'text',
-      created_at: new Date().toISOString()
-    });
     input.value = '';
-    // Reload DMs
-    const {data:msgs} = await db.from('hm_messages').select('*').eq('offer_id',offerId).order('created_at',{ascending:true}).limit(50);
+    // Optimistic append
     const thread = document.getElementById('hm-dm-thread');
-    if (thread&&msgs) {
-      thread.innerHTML = msgs.map(m=>{
-        const mine = m.sender?.toLowerCase()===account?.toLowerCase();
-        const time = new Date(m.created_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
-        return `<div style="display:flex;flex-direction:column;align-items:${mine?'flex-end':'flex-start'};margin-bottom:8px;">
-          <div class="hm-dm-bubble ${mine?'mine':'theirs'}">${escHtml(m.message)}</div>
-          <div class="hm-dm-time">${time}</div>
-        </div>`;
-      }).join('');
+    if (thread) {
+      const time = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+      thread.innerHTML += `<div style="display:flex;flex-direction:column;align-items:flex-end;margin-bottom:10px;">
+        <div style="max-width:75%;padding:10px 14px;border-radius:16px;font-size:0.84rem;line-height:1.55;word-break:break-word;background:rgba(232,53,10,0.2);border:1px solid rgba(255,255,255,0.07);border-bottom-right-radius:4px;">${escHtml(msg)}</div>
+        <div style="font-size:0.6rem;color:var(--muted);margin-top:4px;">You · ${time}</div>
+      </div>`;
       thread.scrollTop = thread.scrollHeight;
     }
-  } catch(e) { toast('Message failed to send','error'); }
+    await db.from('hm_messages').insert({offer_id: Number(offerId), sender: account.toLowerCase(), recipient: recipientAddr.toLowerCase(), message: msg, msg_type: 'text', created_at: new Date().toISOString()});
+  } catch(e) { toast('Message failed to send', 'error'); }
 }
 
-// ── COUNTER ───────────────────────────────────────────────────────
+// ── ON-CHAIN NEGOTIATION ACTIONS ──────────────────────────────────
 async function hmCounterOffer(offerId) {
-  const clips = parseInt(document.getElementById('hm-cnt')?.value)||0;
-  const avax  = parseFloat(document.getElementById('hm-avx')?.value)||0;
-  const note  = document.getElementById('hm-nte')?.value.trim()||'';
-  if (clips<1||clips>50||avax<=0) { toast('Check clips (1-50) and AVAX > 0','error'); return; }
+  const clips=parseInt(document.getElementById('hm-cnt')?.value)||0;
+  const avax=parseFloat(document.getElementById('hm-avx')?.value)||0;
+  const note=document.getElementById('hm-nte')?.value.trim()||'';
+  if(clips<1||avax<=0){toast('Check clips (1-50) and AVAX > 0','error');return;}
   try {
     toast('Sending counter-offer…','pending');
-    const tx = await hireMeContract.counterOffer(offerId, ethers.parseEther(avax.toString()), clips, note);
+    const tx=await hireMeContract.counterOffer(offerId,ethers.parseEther(avax.toString()),clips,note);
     await tx.wait();
-    if (db) {
-      const roP=await getFujiProvider(); const roHM=new ethers.Contract(HIREME_ADDRESS,HIREME_ABI,roP);
-      const o=await roHM.getOffer(offerId);
-      const recipient = account.toLowerCase()===o.clipper.toLowerCase() ? o.streamer : o.clipper;
-      await db.from('hm_messages').insert({offer_id:offerId,sender:account.toLowerCase(),recipient:recipient.toLowerCase(),message:`↕ Counter-offer: ${clips} clips for ${avax} AVAX. Note: ${note||'None'}`,msg_type:'counter',created_at:new Date().toISOString()}).catch(()=>{});
-    }
-    document.getElementById('hm-offer-modal')?.remove();
-    toast('Counter-offer sent!','success');
-    loadHireMePage();
-  } catch(e) { toast(friendlyError(e),'error'); }
+    const roP=await getFujiProvider();const roHM=new ethers.Contract(HIREME_ADDRESS,HIREME_ABI,roP);
+    const o=await roHM.getOffer(offerId);
+    const rec=account.toLowerCase()===o.clipper.toLowerCase()?o.streamer:o.clipper;
+    if(db)await db.from('hm_messages').insert({offer_id:offerId,sender:account.toLowerCase(),recipient:rec.toLowerCase(),message:`↕ Counter: ${clips} clips for ${avax} AVAX${note?'. '+note:''}`,msg_type:'counter',created_at:new Date().toISOString()}).catch(()=>{});
+    toast('Counter-offer sent!','success'); await _renderDealPage(offerId);
+  }catch(e){toast(friendlyError(e),'error');}
 }
-
-// ── ACCEPT ────────────────────────────────────────────────────────
 async function hmAcceptOffer(offerId) {
-  const roP=await getFujiProvider(); const roHM=new ethers.Contract(HIREME_ADDRESS,HIREME_ABI,roP);
-  const o = await roHM.getOffer(offerId).catch(()=>null);
-  if (!o) { toast('Failed to load offer','error'); return; }
-  const isStr = o.streamer.toLowerCase()===account.toLowerCase();
-  const avax  = o.avaxAmount;
-  if (isStr&&(!avax||avax===0n)) { toast('No AVAX amount agreed yet','error'); return; }
-  if (isStr&&!confirm(`Lock ${ethers.formatEther(avax)} AVAX into escrow? This activates the deal — AVAX is only released when all clips are approved.`)) return;
-  try {
-    toast(isStr?'Locking AVAX & accepting…':'Accepting terms…','pending');
-    const tx = await hireMeContract.acceptOffer(offerId, {value: isStr ? avax : 0n});
+  const roP=await getFujiProvider();const roHM=new ethers.Contract(HIREME_ADDRESS,HIREME_ABI,roP);
+  const o=await roHM.getOffer(offerId).catch(()=>null);
+  if(!o){toast('Failed to load offer','error');return;}
+  const isStr=o.streamer.toLowerCase()===account.toLowerCase();
+  const avax=o.avaxAmount;
+  if(isStr&&(!avax||avax===0n)){toast('No AVAX amount set yet','error');return;}
+  if(isStr&&!confirm(`Lock ${ethers.formatEther(avax)} AVAX into escrow? AVAX only releases when all clips are approved.`))return;
+  try{
+    toast(isStr?'Locking AVAX…':'Accepting terms…','pending');
+    const tx=await hireMeContract.acceptOffer(offerId,{value:isStr?avax:0n});
     await tx.wait();
-    if (db) {
-      const recipient = isStr ? o.clipper : o.streamer;
-      await db.from('hm_messages').insert({offer_id:offerId,sender:account.toLowerCase(),recipient:recipient.toLowerCase(),message:isStr?`✅ Streamer accepted & locked ${ethers.formatEther(avax)} AVAX. Deal is now active!`:'✅ Clipper accepted terms. Streamer please lock AVAX to activate deal.',msg_type:'accept',created_at:new Date().toISOString()}).catch(()=>{});
-    }
-    document.getElementById('hm-offer-modal')?.remove();
-    toast(isStr?'✅ Deal activated! AVAX locked. Clipper can now submit clips.':'✅ Terms accepted! Streamer needs to lock AVAX.','success');
-    loadHireMePage();
-  } catch(e) { toast(friendlyError(e),'error'); }
+    const rec=isStr?o.clipper:o.streamer;
+    if(db)await db.from('hm_messages').insert({offer_id:offerId,sender:account.toLowerCase(),recipient:rec.toLowerCase(),message:isStr?`✅ Deal activated! ${ethers.formatEther(avax)} AVAX locked. Submit your clips!`:'✅ Clipper accepted. Streamer — lock AVAX to activate the deal.',msg_type:'accept',created_at:new Date().toISOString()}).catch(()=>{});
+    toast(isStr?'✅ AVAX locked — deal active!':'✅ Terms accepted!','success'); await _renderDealPage(offerId);
+  }catch(e){toast(friendlyError(e),'error');}
 }
-
-// ── REJECT ────────────────────────────────────────────────────────
 async function hmRejectOffer(offerId) {
-  if (!confirm('Reject this offer? This ends the negotiation.')) return;
-  try {
-    toast('Rejecting…','pending');
-    const tx = await hireMeContract.rejectOffer(offerId);
-    await tx.wait();
-    document.getElementById('hm-offer-modal')?.remove();
-    toast('Offer rejected.','success');
-    loadHireMePage();
-  } catch(e) { toast(friendlyError(e),'error'); }
+  if(!confirm('Reject this offer?'))return;
+  try{toast('Rejecting…','pending');const tx=await hireMeContract.rejectOffer(offerId);await tx.wait();toast('Offer rejected.','success'); await _renderDealPage(offerId);}catch(e){toast(friendlyError(e),'error');}
 }
-
-// ── SUBMIT CLIP ────────────────────────────────────────────────────
 async function hmSubmitClip(offerId) {
-  const link = document.getElementById(`hm-clip-url-${offerId}`)?.value.trim();
-  if (!link||!link.startsWith('http')) { toast('Enter a valid clip URL','error'); return; }
-  const ok = link.includes('x.com')||link.includes('twitter.com')||link.includes('youtube.com')||link.includes('youtu.be');
-  if (!ok) { toast('Only X or YouTube links accepted','error'); return; }
-  try {
-    toast('Submitting clip…','pending');
-    const tx = await hireMeContract.submitClip(offerId, link);
-    await tx.wait();
-    if (db) {
-      const roP=await getFujiProvider(); const roHM=new ethers.Contract(HIREME_ADDRESS,HIREME_ABI,roP);
-      const o=await roHM.getOffer(offerId);
-      await db.from('hm_messages').insert({offer_id:offerId,sender:account.toLowerCase(),recipient:o.streamer.toLowerCase(),message:`📎 New clip submitted: ${link}`,msg_type:'clip',created_at:new Date().toISOString()}).catch(()=>{});
-    }
-    document.getElementById('hm-offer-modal')?.remove();
-    toast('✅ Clip submitted! Streamer will review it.','success');
-    loadHireMePage();
-  } catch(e) { toast(friendlyError(e),'error'); }
+  const link=document.getElementById(`hm-clip-url-${offerId}`)?.value.trim();
+  if(!link||!link.startsWith('http')){toast('Enter a valid URL','error');return;}
+  if(!link.includes('x.com')&&!link.includes('twitter.com')&&!link.includes('youtube.com')&&!link.includes('youtu.be')){toast('Only X or YouTube links','error');return;}
+  try{
+    toast('Submitting clip…','pending');const tx=await hireMeContract.submitClip(offerId,link);await tx.wait();
+    const roP=await getFujiProvider();const roHM=new ethers.Contract(HIREME_ADDRESS,HIREME_ABI,roP);const o=await roHM.getOffer(offerId);
+    if(db)await db.from('hm_messages').insert({offer_id:offerId,sender:account.toLowerCase(),recipient:o.streamer.toLowerCase(),message:`📎 New clip: ${link}`,msg_type:'clip',created_at:new Date().toISOString()}).catch(()=>{});
+    toast('✅ Clip submitted!','success'); await _renderDealPage(offerId);
+  }catch(e){toast(friendlyError(e),'error');}
 }
-
-// ── APPROVE CLIP ──────────────────────────────────────────────────
 async function hmApproveClip(offerId, clipIdx) {
-  try {
-    toast('Approving clip…','pending');
-    const tx = await hireMeContract.approveClip(clipIdx, offerId);
-    await tx.wait();
-    const roP=await getFujiProvider(); const roHM=new ethers.Contract(HIREME_ADDRESS,HIREME_ABI,roP);
-    const o = await roHM.getOffer(offerId);
-    const complete = Number(o.status)===2;
-    if (db) {
-      await db.from('hm_messages').insert({offer_id:offerId,sender:account.toLowerCase(),recipient:o.clipper.toLowerCase(),message:complete?`🎉 All clips approved! Payout of ${ethers.formatEther(o.avaxAmount)} AVAX sent to your wallet.`:`✅ Clip #${clipIdx+1} approved! ${Number(o.approvedClips)}/${Number(o.clipCount)} done.`,msg_type:'approve',created_at:new Date().toISOString()}).catch(()=>{});
-    }
-    document.getElementById('hm-offer-modal')?.remove();
-    toast(complete?'🎉 All clips approved — clipper paid out automatically!':'✅ Clip approved!','success');
-    loadHireMePage();
-  } catch(e) { toast(friendlyError(e),'error'); }
+  try{
+    toast('Approving…','pending');const tx=await hireMeContract.approveClip(clipIdx,offerId);await tx.wait();
+    const roP=await getFujiProvider();const roHM=new ethers.Contract(HIREME_ADDRESS,HIREME_ABI,roP);const o=await roHM.getOffer(offerId);
+    const done=Number(o.status)===2;
+    if(db)await db.from('hm_messages').insert({offer_id:offerId,sender:account.toLowerCase(),recipient:o.clipper.toLowerCase(),message:done?`🎉 All done! Payout sent.`:`✅ Clip #${clipIdx+1} approved (${Number(o.approvedClips)}/${Number(o.clipCount)})`,msg_type:'approve',created_at:new Date().toISOString()}).catch(()=>{});
+    toast(done?'🎉 All clips approved — clipper paid!':'✅ Clip approved!','success'); await _renderDealPage(offerId);
+  }catch(e){toast(friendlyError(e),'error');}
 }
-
-// ── MUTUAL CANCEL ─────────────────────────────────────────────────
 async function hmRequestCancel(offerId) {
-  if (!confirm('Request cancellation? The other party must AGREE for the deal to actually cancel. If they refuse, the deal continues.\n\nThe streamer gets their AVAX back minus a 2% penalty if agreed.')) return;
-  try {
-    toast('Submitting cancel request…','pending');
-    const tx = await hireMeContract.requestCancel(offerId);
-    await tx.wait();
-    if (db) {
-      const roP=await getFujiProvider(); const roHM=new ethers.Contract(HIREME_ADDRESS,HIREME_ABI,roP);
-      const o=await roHM.getOffer(offerId);
-      const recipient = account.toLowerCase()===o.clipper.toLowerCase() ? o.streamer : o.clipper;
-      await db.from('hm_messages').insert({offer_id:offerId,sender:account.toLowerCase(),recipient:recipient.toLowerCase(),message:'⚠️ Cancel requested. The other party must agree for the deal to cancel. They can also refuse and the deal continues.',msg_type:'cancel_request',created_at:new Date().toISOString()}).catch(()=>{});
-    }
-    document.getElementById('hm-offer-modal')?.remove();
-    toast('Cancel requested. Other party must agree before deal cancels.','success');
-    loadHireMePage();
-  } catch(e) { toast(friendlyError(e),'error'); }
+  if(!confirm('Request cancellation? The OTHER party must agree for the deal to actually cancel. They can also refuse.'))return;
+  try{
+    toast('Requesting cancel…','pending');const tx=await hireMeContract.requestCancel(offerId);await tx.wait();
+    const roP=await getFujiProvider();const roHM=new ethers.Contract(HIREME_ADDRESS,HIREME_ABI,roP);const o=await roHM.getOffer(offerId);
+    const rec=account.toLowerCase()===o.clipper.toLowerCase()?o.streamer:o.clipper;
+    if(db)await db.from('hm_messages').insert({offer_id:offerId,sender:account.toLowerCase(),recipient:rec.toLowerCase(),message:'⚠️ Cancellation requested. You must agree or refuse.',msg_type:'cancel_request',created_at:new Date().toISOString()}).catch(()=>{});
+    toast('Cancel requested — other party must agree.','success'); await _renderDealPage(offerId);
+  }catch(e){toast(friendlyError(e),'error');}
 }
 async function hmAgreeCancel(offerId) {
-  if (!confirm('Agree to cancel? Streamer gets their AVAX back minus 2% penalty. This cannot be undone.')) return;
-  try {
-    toast('Agreeing to cancel…','pending');
-    const tx = await hireMeContract.agreeCancelDeal(offerId);
-    await tx.wait();
-    document.getElementById('hm-offer-modal')?.remove();
-    toast('Deal cancelled. AVAX refunded minus 2% penalty.','success');
-    loadHireMePage();
-  } catch(e) { toast(friendlyError(e),'error'); }
+  if(!confirm('Agree to cancel? 2% penalty deducted from locked AVAX, rest refunded to streamer.'))return;
+  try{toast('Agreeing to cancel…','pending');const tx=await hireMeContract.agreeCancelDeal(offerId);await tx.wait();toast('Deal cancelled. Streamer refunded minus 2%.','success'); await _renderDealPage(offerId);}catch(e){toast(friendlyError(e),'error');}
 }
 async function hmRejectCancel(offerId) {
-  try {
-    toast('Rejecting cancel request…','pending');
-    const tx = await hireMeContract.rejectCancelRequest(offerId);
-    await tx.wait();
-    if (db) {
-      const roP=await getFujiProvider(); const roHM=new ethers.Contract(HIREME_ADDRESS,HIREME_ABI,roP);
-      const o=await roHM.getOffer(offerId);
-      const recipient = account.toLowerCase()===o.clipper.toLowerCase() ? o.streamer : o.clipper;
-      await db.from('hm_messages').insert({offer_id:offerId,sender:account.toLowerCase(),recipient:recipient.toLowerCase(),message:'❌ Cancel request rejected — deal continues. Get those clips in!',msg_type:'cancel_rejected',created_at:new Date().toISOString()}).catch(()=>{});
-    }
-    document.getElementById('hm-offer-modal')?.remove();
-    toast('Cancel request rejected — deal continues!','success');
-    loadHireMePage();
-  } catch(e) { toast(friendlyError(e),'error'); }
+  try{
+    toast('Rejecting cancel request…','pending');const tx=await hireMeContract.rejectCancelRequest(offerId);await tx.wait();
+    const roP=await getFujiProvider();const roHM=new ethers.Contract(HIREME_ADDRESS,HIREME_ABI,roP);const o=await roHM.getOffer(offerId);
+    const rec=account.toLowerCase()===o.clipper.toLowerCase()?o.streamer:o.clipper;
+    if(db)await db.from('hm_messages').insert({offer_id:offerId,sender:account.toLowerCase(),recipient:rec.toLowerCase(),message:'❌ Cancel request rejected — deal continues.',msg_type:'cancel_rejected',created_at:new Date().toISOString()}).catch(()=>{});
+    toast('Cancel rejected — deal continues!','success'); await _renderDealPage(offerId);
+  }catch(e){toast(friendlyError(e),'error');}
 }
 
-// ── ADMIN: Link NFT → HireMe ──────────────────────────────────────
+// ── ADMIN LINK ─────────────────────────────────────────────────────
 async function adminSetHireMeNFT() {
-  if (!signer) { toast('Connect wallet first','error'); return; }
-  if (HIREME_ADDRESS==='0x0000000000000000000000000000000000000000') { toast('Update HIREME_ADDRESS in source first','error'); return; }
-  try {
-    const hm = new ethers.Contract(HIREME_ADDRESS, HIREME_ABI, signer);
+  if(!signer){toast('Connect wallet first','error');return;}
+  if(HIREME_ADDRESS==='0x0000000000000000000000000000000000000000'){toast('Update HIREME_ADDRESS in source first','error');return;}
+  try{
+    const hm=new ethers.Contract(HIREME_ADDRESS,HIREME_ABI,signer);
     toast('Linking NFT → HireMe…','pending');
-    const tx = await hm.setNFTContract(NFT_ADDRESS);
-    await tx.wait();
-    toast('✅ NFT linked to HireMe contract!','success');
-    loadAdminPage();
-  } catch(e) { toast(friendlyError(e),'error'); }
+    const tx=await hm.setNFTContract(NFT_ADDRESS);await tx.wait();
+    toast('✅ NFT linked to HireMe!','success');loadAdminPage();
+  }catch(e){toast(friendlyError(e),'error');}
 }
 
 // EXPOSE TO WINDOW
@@ -4378,7 +4590,7 @@ function mktFilterCards(query) {
 }
 
 
-const exposed = { connectWallet,disconnectWallet,showPage,switchTab,openModal,closeModal,selectRole,onboardNext,finishOnboarding,mintGenesis,mintEarlyAccess,saveProfile,postBounty,submitClip,voteOnClip,pickWinner,resolveVote,filterBounties,openBountyDetail,setMobileActive,loadInventory,openSubDetail,openHostProfile,openClipperProfile,openStreamViewer,addPendingWinner,removePendingWinner,confirmMultiWinners,confirmSingleWinner,postComment,openEditBounty,copyReferralLink,shareReferralLink,loadReferrals,loadRewardsPage,registerAsGenesisHolder,flagContent,adminDismissFlag,adminActionFlag,adminBanUser,adminForcePause,adminExportData,adminToggleMint,adminSetTreasuryNFT,adminSetTreasuryEscrow,adminSetEscrowNFT,adminSetNFTBountyContract,adminSetHireMeNFT,loadAdminPage,toggleMobileDrawer,closeMobileDrawer,loadClipFeed,loadStreamerDashboard,loadMarketplace,mktListNFT,mktDelistNFT,mktBuyNFT,mktUpdatePrice,mktEquipToken,mktUnequipToken,mktShowListModal,mktShowUpdateModal,mktSwitchTab,mktEquipFromInventory,updateSchedPreview,checkRewardVsBalance,loadWalletNFTAvatar,loadHireMePage,hmAddPOW,hmRemovePOW,hmViewClipper,hmMakeOffer,hmOpenOffer,hmCounterOffer,hmAcceptOffer,hmRejectOffer,hmSubmitClip,hmApproveClip,hmRequestCancel,hmAgreeCancel,hmRejectCancel,hmSendDM };
+const exposed = { connectWallet,disconnectWallet,showPage,switchTab,openModal,closeModal,selectRole,onboardNext,finishOnboarding,mintGenesis,mintEarlyAccess,saveProfile,postBounty,submitClip,voteOnClip,pickWinner,resolveVote,filterBounties,openBountyDetail,setMobileActive,loadInventory,openSubDetail,openHostProfile,openClipperProfile,openStreamViewer,addPendingWinner,removePendingWinner,confirmMultiWinners,confirmSingleWinner,postComment,openEditBounty,copyReferralLink,shareReferralLink,loadReferrals,loadRewardsPage,registerAsGenesisHolder,flagContent,adminDismissFlag,adminActionFlag,adminBanUser,adminForcePause,adminExportData,adminToggleMint,adminSetTreasuryNFT,adminSetTreasuryEscrow,adminSetEscrowNFT,adminSetNFTBountyContract,adminSetHireMeNFT,loadAdminPage,toggleMobileDrawer,closeMobileDrawer,loadClipFeed,loadStreamerDashboard,loadMarketplace,mktListNFT,mktDelistNFT,mktBuyNFT,mktUpdatePrice,mktEquipToken,mktUnequipToken,mktShowListModal,mktShowUpdateModal,mktSwitchTab,mktEquipFromInventory,updateSchedPreview,checkRewardVsBalance,loadWalletNFTAvatar,loadHireMePage,loadHireMeBrowse,hmBrowseFilter,hmBrowseRender,hmAddPOW,hmRemovePOW,hmViewClipper,hmMakeOffer,hmOpenOffer,hmCounterOffer,hmAcceptOffer,hmRejectOffer,hmSubmitClip,hmApproveClip,hmRequestCancel,hmAgreeCancel,hmRejectCancel,hmSendDM,hmSaveMyProfile,hmToggleAvailability,goBackFromDeal };
 Object.assign(window, exposed);
 
 // INIT
@@ -4863,6 +5075,7 @@ function hideTxClapper() {
   <div class="nav-right">
     <!-- Desktop only links -->
     <button class="btn btn-ghost btn-sm nav-desktop-only" onclick="showPage('bounties')" style="font-size:0.7rem;">Bounties</button>
+    <button class="btn btn-ghost btn-sm nav-desktop-only" onclick="showPage('hireme-browse')" style="font-size:0.7rem;">🤝 Hire</button>
     <button class="btn btn-ghost btn-sm nav-desktop-only" onclick="showPage('rewards')" style="font-size:0.7rem;">💰 Rewards</button>
     <button class="btn btn-ghost btn-sm nav-desktop-only" onclick="showPage('referrals')" style="font-size:0.7rem;">💸 Refer</button>
     <button class="btn btn-ghost btn-sm nav-desktop-only" onclick="showPage('docs')" style="font-size:0.7rem;">Docs</button>
@@ -4941,6 +5154,7 @@ function hideTxClapper() {
         <div class="nav-item" onclick="switchTab('tab-submissions')" id="nav-submissions"><span class="icon">📎</span> My Submissions</div>
         <div class="nav-item" onclick="switchTab('tab-post')" id="nav-post"><span class="icon">➕</span> Post Bounty</div>
         <div class="nav-item" onclick="switchTab('tab-hireme')" id="nav-hireme"><span class="icon">🤝</span> Hire Me</div>
+        <div class="nav-item" onclick="showPage('hireme-browse')"><span class="icon">🔍</span> Browse Clippers</div>
         <div class="nav-item" onclick="switchTab('tab-streamer')" id="nav-streamer"><span class="icon">📡</span> Streamer Hub</div>
         <div class="nav-item" onclick="switchTab('tab-feed')" id="nav-feed"><span class="icon">🎬</span> Clip Feed</div>
         <div class="sidebar-label">Account</div>
@@ -6100,6 +6314,60 @@ function hideTxClapper() {
 
 
 <!-- ==================== PAGE: MARKETPLACE ==================== -->
+<div id="page-deal-detail" class="page">
+  <div id="deal-detail-content" style="max-width:740px;margin:0 auto;padding:0 16px 80px;"></div>
+</div>
+
+<div id="page-hireme-browse" class="page">
+  <div style="max-width:1100px;margin:0 auto;padding:0 16px 80px;">
+    <!-- Header banner -->
+    <div style="border-radius:0 0 18px 18px;overflow:hidden;margin-bottom:28px;max-height:170px;position:relative;">
+      <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/ChatGPT%20Image%20Feb%2028%2C%202026%2C%2001_17_18%20PM.png" alt="Hire" style="width:100%;height:170px;object-fit:cover;object-position:center;display:block;" onerror="this.parentElement.style.background='linear-gradient(135deg,#0d0000,#000)';this.style.display='none'"/>
+      <div style="position:absolute;inset:0;background:linear-gradient(to right,rgba(0,0,0,0.8) 0%,rgba(0,0,0,0.3) 60%,transparent 100%);pointer-events:none;"></div>
+      <div style="position:absolute;bottom:20px;left:24px;">
+        <div style="font-family:var(--font-mono);font-size:0.7rem;color:var(--orange);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;">🤝 Hire Me</div>
+        <div style="font-family:var(--font-display);font-size:2.4rem;line-height:1;color:white;">Find Your Clipper</div>
+        <div style="font-size:0.82rem;color:rgba(255,255,255,0.65);margin-top:5px;">Browse verified clippers • Check their portfolio • Send an offer</div>
+      </div>
+      <img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/ChatGPT_Image_Mar_1__2026__02_50_54_PM-removebg-preview.png" style="position:absolute;right:0;bottom:0;height:160px;object-fit:contain;pointer-events:none;" onerror="this.style.display='none'"/>
+    </div>
+
+    <!-- Search + Filters bar -->
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px 20px;margin-bottom:20px;">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+        <div style="flex:1;min-width:200px;position:relative;">
+          <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:0.9rem;">🔍</span>
+          <input type="text" id="hm-search" placeholder="Search by name, username, or @handle…" oninput="hmBrowseFilter()" style="width:100%;padding-left:36px;font-size:0.85rem;border-radius:9px;box-sizing:border-box;"/>
+        </div>
+        <select id="hm-filter-platform" onchange="hmBrowseFilter()" style="font-size:0.82rem;border-radius:9px;padding:8px 12px;background:var(--dark);border:1px solid var(--border);color:var(--text);">
+          <option value="">All Platforms</option>
+          <option value="blaze">🔴 Blaze</option>
+          <option value="arena">🟡 Arena</option>
+          <option value="both">Both</option>
+        </select>
+        <select id="hm-filter-sort" onchange="hmBrowseFilter()" style="font-size:0.82rem;border-radius:9px;padding:8px 12px;background:var(--dark);border:1px solid var(--border);color:var(--text);">
+          <option value="rep">⭐ Top Reputation</option>
+          <option value="won">🏆 Most Wins</option>
+          <option value="clips">📎 Most Clips</option>
+          <option value="level">⚡ Highest Level</option>
+          <option value="new">🆕 Newest</option>
+        </select>
+        <select id="hm-filter-tier" onchange="hmBrowseFilter()" style="font-size:0.82rem;border-radius:9px;padding:8px 12px;background:var(--dark);border:1px solid var(--border);color:var(--text);">
+          <option value="">Any Tier</option>
+          <option value="1">👑 Genesis</option>
+          <option value="2">⚡ Early Access</option>
+        </select>
+      </div>
+      <div id="hm-browse-count" style="font-size:0.72rem;color:var(--muted);margin-top:10px;"></div>
+    </div>
+
+    <!-- Results grid -->
+    <div id="hm-browse-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;">
+      <div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);"><div class="spinner"></div><p style="margin-top:12px;">Loading clippers…</p></div>
+    </div>
+  </div>
+</div>
+
 <div id="page-marketplace" class="page">
 
 <style>
