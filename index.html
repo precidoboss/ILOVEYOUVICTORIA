@@ -1935,6 +1935,36 @@ function friendlyError(e) {
     return '❌ Transaction would fail on-chain. Contract may be paused or minting not open yet.';
   }
 
+  // HireMe specific
+  if (errName === 'ActivePairExists' || raw.includes('activepairexists'))
+    return '❌ You already have an active deal with this person. Finish or cancel it first.';
+  if (errName === 'NotYourTurn' || raw.includes('notyourturn'))
+    return '❌ Not your turn — wait for the other party to respond before countering again.';
+  if (errName === 'WrongStatus' || raw.includes('wrongstatus'))
+    return '❌ This deal is not in the right state for that action. Refresh and try again.';
+  if (errName === 'NotParty' || raw.includes('notparty'))
+    return '❌ Only the clipper or streamer in this deal can do that.';
+  if (errName === 'NotClipper' || raw.includes('notclipper'))
+    return '❌ Only the clipper can submit clips.';
+  if (errName === 'NotStreamer' || raw.includes('notstreamer'))
+    return '❌ Only the streamer can perform this action.';
+  if (errName === 'WrongValue' || raw.includes('wrongvalue'))
+    return '❌ The AVAX amount sent does not match the agreed amount. Check the deal terms.';
+  if (errName === 'ClipCountExceeded' || raw.includes('clipcountexceeded'))
+    return '❌ Already submitted the maximum clips for this deal.';
+  if (errName === 'AlreadyRequested' || raw.includes('alreadyrequested'))
+    return '❌ A cancellation request is already pending for this deal.';
+  if (errName === 'CannotAgreeSelf' || raw.includes('cannotagreeself'))
+    return '❌ You cannot agree to your own cancel request — the other party must respond.';
+  if (errName === 'NoCancelRequest' || raw.includes('nocancelrequest'))
+    return '❌ No active cancel request on this deal.';
+  if (raw.includes('cannot hire yourself'))
+    return '❌ You cannot create a deal with yourself.';
+  if (raw.includes('1-50 clips') || raw.includes('clip') && raw.includes('max'))
+    return '❌ Clip count must be between 1 and 50.';
+  if (raw.includes('no avax set') || raw.includes('no avax amount'))
+    return '❌ No AVAX amount has been set on this deal yet. Both parties must agree on a price first.';
+
   const short = (reason || e.message || 'Unknown error').slice(0, 200);
   return '❌ ' + short;
 }
@@ -3714,13 +3744,7 @@ async function _renderDealPage(offerId) {
             </div>
           </div>
 
-          ${isStreamer ? avaxPickerHTML(avax, myBalance) : `
-          <div class="form-group" style="margin-bottom:14px;">
-            <label style="font-size:0.72rem;">Proposed AVAX (streamer sets this)</label>
-            <div style="padding:12px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;font-size:0.85rem;color:var(--muted);">
-              ${avax > 0 ? `<span style="color:var(--orange);font-weight:700;font-size:1.1rem;">${avax.toFixed(4)} AVAX</span>` : 'No amount set yet — streamer will propose an amount'}
-            </div>
-          </div>`}
+          ${isStreamer ? avaxPickerHTML(avax, myBalance) : avaxPickerHTML(avax, 0)}
 
           <div class="form-group" style="margin-bottom:16px;">
             <label style="font-size:0.72rem;">Notes / requirements</label>
@@ -3842,25 +3866,7 @@ async function _renderDealPage(offerId) {
   }
 
   // ── Clips list with embed + reject ─────────────────────────────
-  function _embedHTML(link) {
-    // X/Twitter embed
-    const xMatch = link.match(/(?:twitter|x)\.com\/(?:\w+)\/status\/(\d+)/);
-    if (xMatch) {
-      return `<div style="border-radius:10px;overflow:hidden;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.08);margin-top:8px;">
-        <blockquote class="twitter-tweet" data-theme="dark" data-dnt="true" style="margin:0;">
-          <a href="${escHtml(link)}"></a>
-        </blockquote>
-      </div>`;
-    }
-    // YouTube embed
-    const ytMatch = link.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|shorts\/|embed\/))([A-Za-z0-9_-]{11})/);
-    if (ytMatch) {
-      return `<div style="position:relative;padding-bottom:56.25%;height:0;border-radius:10px;overflow:hidden;margin-top:8px;">
-        <iframe src="https://www.youtube.com/embed/${ytMatch[1]}" frameborder="0" allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowfullscreen style="position:absolute;inset:0;width:100%;height:100%;border-radius:10px;"></iframe>
-      </div>`;
-    }
-    return '';
-  }
+  function _embedHTML(link) { return _buildClipEmbed(link); }
 
   const clipsHTML = clips.length > 0 ? `
     <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:16px;">
@@ -4039,41 +4045,80 @@ async function hmSendDM(offerId, recipientAddr) {
 
 // ── ON-CHAIN NEGOTIATION ACTIONS ──────────────────────────────────
 async function hmCounterOffer(offerId) {
-  const clips=parseInt(document.getElementById('hm-cnt')?.value)||0;
-  const avax=parseFloat(document.getElementById('hm-avx')?.value)||0;
-  const note=document.getElementById('hm-nte')?.value.trim()||'';
-  if(clips<1||avax<=0){toast('Check clips (1-50) and AVAX > 0','error');return;}
+  const clips = parseInt(document.getElementById('hm-cnt')?.value) || 0;
+  const avax  = parseFloat(document.getElementById('hm-avx')?.value) || 0;
+  const note  = document.getElementById('hm-nte')?.value.trim() || '';
+  if (clips < 1 || clips > 50) { toast('Clips must be between 1 and 50', 'error'); return; }
+  if (avax <= 0) { toast('Set an AVAX amount greater than 0', 'error'); return; }
   try {
-    toast('Sending counter-offer…','pending');
-    const tx=await hireMeContract.counterOffer(offerId,ethers.parseEther(avax.toString()),clips,note);
+    toast('Sending counter-offer…', 'pending');
+    const tx = await hireMeContract.counterOffer(offerId, ethers.parseEther(avax.toString()), clips, note);
     await tx.wait();
-    const roP=await getFujiProvider();const roHM=new ethers.Contract(HIREME_ADDRESS,HIREME_ABI,roP);
-    const o=await roHM.getOffer(offerId);
-    const rec=account.toLowerCase()===o.clipper.toLowerCase()?o.streamer:o.clipper;
-    if(db)await db.from('hm_messages').insert({offer_id:offerId,sender:account.toLowerCase(),recipient:rec.toLowerCase(),message:`↕ Counter: ${clips} clips for ${avax} AVAX${note?'. '+note:''}`,msg_type:'counter',created_at:new Date().toISOString()}).catch(()=>{});
-    toast('Counter-offer sent!','success'); await _renderDealPage(offerId);
-  }catch(e){toast(friendlyError(e),'error');}
+    const roP = await getFujiProvider();
+    const roHM = new ethers.Contract(HIREME_ADDRESS, HIREME_ABI, roP);
+    const o = await roHM.getOffer(offerId);
+    const rec = account.toLowerCase() === o.clipper.toLowerCase() ? o.streamer : o.clipper;
+    const isClipperSide = account.toLowerCase() === o.clipper.toLowerCase();
+    const counterMsg = `↕ Counter-offer from ${isClipperSide ? 'Clipper' : 'Streamer'}: ${clips} clip${clips!==1?'s':''} for ${avax} AVAX${note ? ' — ' + note : ''}`;
+    if (db) await db.from('hm_messages').insert({offer_id: offerId, sender: account.toLowerCase(), recipient: rec.toLowerCase(), message: counterMsg, msg_type: 'counter', created_at: new Date().toISOString()}).catch(()=>{});
+    toast(`✅ Counter-offer sent — ${clips} clips for ${avax} AVAX`, 'success');
+    await _renderDealPage(offerId);
+  } catch(e) { toast(friendlyError(e), 'error'); }
 }
 async function hmAcceptOffer(offerId) {
-  const roP=await getFujiProvider();const roHM=new ethers.Contract(HIREME_ADDRESS,HIREME_ABI,roP);
-  const o=await roHM.getOffer(offerId).catch(()=>null);
-  if(!o){toast('Failed to load offer','error');return;}
-  const isStr=o.streamer.toLowerCase()===account.toLowerCase();
-  const avax=o.avaxAmount;
-  if(isStr&&(!avax||avax===0n)){toast('No AVAX amount set yet','error');return;}
-  if(isStr&&!confirm(`Lock ${ethers.formatEther(avax)} AVAX into escrow? AVAX only releases when all clips are approved.`))return;
-  try{
-    toast(isStr?'Locking AVAX…':'Accepting terms…','pending');
-    const tx=await hireMeContract.acceptOffer(offerId,{value:isStr?avax:0n});
-    await tx.wait();
-    const rec=isStr?o.clipper:o.streamer;
-    if(db)await db.from('hm_messages').insert({offer_id:offerId,sender:account.toLowerCase(),recipient:rec.toLowerCase(),message:isStr?`✅ Deal activated! ${ethers.formatEther(avax)} AVAX locked. Submit your clips!`:'✅ Clipper accepted. Streamer — lock AVAX to activate the deal.',msg_type:'accept',created_at:new Date().toISOString()}).catch(()=>{});
-    toast(isStr?'✅ AVAX locked — deal active!':'✅ Terms accepted!','success'); await _renderDealPage(offerId);
-  }catch(e){toast(friendlyError(e),'error');}
+  const roP = await getFujiProvider();
+  const roHM = new ethers.Contract(HIREME_ADDRESS, HIREME_ABI, roP);
+  const o = await roHM.getOffer(offerId).catch(() => null);
+  if (!o) { toast('Failed to load offer details', 'error'); return; }
+  const isStr = o.streamer.toLowerCase() === account.toLowerCase();
+  const avax = o.avaxAmount;
+  if (isStr && (!avax || avax === 0n)) { toast('No AVAX amount agreed yet — use the counter form to set one first', 'error'); return; }
+  const avaxFormatted = ethers.formatEther(avax);
+
+  const doAccept = async () => {
+    try {
+      toast(isStr ? `Locking ${avaxFormatted} AVAX…` : 'Accepting terms…', 'pending');
+      const tx = await hireMeContract.acceptOffer(offerId, { value: isStr ? avax : 0n });
+      await tx.wait();
+      const rec = isStr ? o.clipper : o.streamer;
+      if (db) await db.from('hm_messages').insert({
+        offer_id: offerId, sender: account.toLowerCase(), recipient: rec.toLowerCase(),
+        message: isStr
+          ? `🔒 Deal activated! ${avaxFormatted} AVAX locked in escrow. Clipper — submit your clips!`
+          : `✅ Clipper accepted the terms. Streamer — lock your AVAX to activate the deal.`,
+        msg_type: 'accept', created_at: new Date().toISOString()
+      }).catch(()=>{});
+      toast(isStr ? `🔒 ${avaxFormatted} AVAX locked — deal is now active!` : '✅ Terms accepted — waiting for streamer to lock AVAX.', 'success');
+      await _renderDealPage(offerId);
+    } catch(e) { toast(friendlyError(e), 'error'); }
+  };
+
+  if (isStr) {
+    hmConfirm(
+      `🔒 Lock ${avaxFormatted} AVAX?`,
+      `This will lock ${avaxFormatted} AVAX in escrow for ${Number(o.clipCount)} clip${Number(o.clipCount)!==1?'s':''}. The AVAX is only released when all clips are approved. If the deal is cancelled, 2% stays with the platform.`,
+      doAccept,
+      `Lock ${avaxFormatted} AVAX`
+    );
+  } else {
+    await doAccept();
+  }
 }
 async function hmRejectOffer(offerId) {
-  if(!confirm('Reject this offer?'))return;
-  try{toast('Rejecting…','pending');const tx=await hireMeContract.rejectOffer(offerId);await tx.wait();toast('Offer rejected.','success'); await _renderDealPage(offerId);}catch(e){toast(friendlyError(e),'error');}
+  hmConfirm(
+    '✗ Reject this offer?',
+    'This will end the negotiation entirely. Neither party can reopen it.',
+    async () => {
+      try {
+        toast('Rejecting offer…', 'pending');
+        const tx = await hireMeContract.rejectOffer(offerId);
+        await tx.wait();
+        toast('Offer rejected.', 'success');
+        await _renderDealPage(offerId);
+      } catch(e) { toast(friendlyError(e), 'error'); }
+    },
+    'Reject Offer', true
+  );
 }
 async function hmSubmitClip(offerId) {
   const link=document.getElementById(`hm-clip-url-${offerId}`)?.value.trim();
@@ -4082,8 +4127,14 @@ async function hmSubmitClip(offerId) {
   try{
     toast('Submitting clip…','pending');const tx=await hireMeContract.submitClip(offerId,link);await tx.wait();
     const roP=await getFujiProvider();const roHM=new ethers.Contract(HIREME_ADDRESS,HIREME_ABI,roP);const o=await roHM.getOffer(offerId);
-    if(db)await db.from('hm_messages').insert({offer_id:offerId,sender:account.toLowerCase(),recipient:o.streamer.toLowerCase(),message:`📎 New clip: ${link}`,msg_type:'clip',created_at:new Date().toISOString()}).catch(()=>{});
-    toast('✅ Clip submitted!','success'); await _renderDealPage(offerId);
+    const clipNum = (await roHM.getOfferClips(offerId)).length;
+    if (db) await db.from('hm_messages').insert({
+      offer_id: offerId, sender: account.toLowerCase(), recipient: o.streamer.toLowerCase(),
+      message: `📎 Clip #${clipNum} submitted — ${link}`,
+      msg_type: 'clip', created_at: new Date().toISOString()
+    }).catch(()=>{});
+    toast(`✅ Clip #${clipNum} submitted — waiting for approval.`, 'success');
+    await _renderDealPage(offerId);
   }catch(e){toast(friendlyError(e),'error');}
 }
 async function hmApproveClip(offerId, clipIdx) {
@@ -4092,45 +4143,50 @@ async function hmApproveClip(offerId, clipIdx) {
     const roP=await getFujiProvider();const roHM=new ethers.Contract(HIREME_ADDRESS,HIREME_ABI,roP);const o=await roHM.getOffer(offerId);
     const done=Number(o.status)===2;
     if(db)await db.from('hm_messages').insert({offer_id:offerId,sender:account.toLowerCase(),recipient:o.clipper.toLowerCase(),message:done?`🎉 All done! Payout sent.`:`✅ Clip #${clipIdx+1} approved (${Number(o.approvedClips)}/${Number(o.clipCount)})`,msg_type:'approve',created_at:new Date().toISOString()}).catch(()=>{});
-    toast(done?'🎉 All clips approved — clipper paid!':'✅ Clip approved!','success'); await _renderDealPage(offerId);
+    const approvedCount = Number(o.approvedClips);
+    const totalCount = Number(o.clipCount);
+    toast(done ? `🎉 All ${totalCount} clips approved — clipper has been paid!` : `✅ Clip #${clipIdx+1} approved (${approvedCount}/${totalCount} done).`, 'success');
+    await _renderDealPage(offerId);
   }catch(e){toast(friendlyError(e),'error');}
 }
-async function hmRejectClip(offerId, clipIdx) {
-  if (!confirm('Reject this clip? The clipper will need to submit a replacement.')) return;
-  try {
-    toast('Logging rejection…', 'pending');
-    const roP = await getFujiProvider();
-    const roHM = new ethers.Contract(HIREME_ADDRESS, HIREME_ABI, roP);
-    const o = await roHM.getOffer(offerId);
-    // Store rejection as a DM message (contract has no reject clip fn — streamer just gives feedback)
-    if (db) {
-      await db.from('hm_messages').insert({
-        offer_id: Number(offerId),
-        sender: account.toLowerCase(),
-        recipient: o.clipper.toLowerCase(),
-        message: `❌ Clip #${clipIdx+1} was rejected — please submit a replacement that meets the requirements.`,
-        msg_type: 'clip_rejected',
-        created_at: new Date().toISOString()
-      });
-    }
-    toast('❌ Clip rejected — clipper notified via DM', 'success');
-    await _renderDealPage(offerId);
-  } catch(e) { toast(friendlyError(e), 'error'); }
-}
+// hmRejectClip defined below with reason modal
 
 async function hmRequestCancel(offerId) {
-  if(!confirm('Request cancellation? The OTHER party must agree for the deal to actually cancel. They can also refuse.'))return;
-  try{
-    toast('Requesting cancel…','pending');const tx=await hireMeContract.requestCancel(offerId);await tx.wait();
-    const roP=await getFujiProvider();const roHM=new ethers.Contract(HIREME_ADDRESS,HIREME_ABI,roP);const o=await roHM.getOffer(offerId);
-    const rec=account.toLowerCase()===o.clipper.toLowerCase()?o.streamer:o.clipper;
-    if(db)await db.from('hm_messages').insert({offer_id:offerId,sender:account.toLowerCase(),recipient:rec.toLowerCase(),message:'⚠️ Cancellation requested. You must agree or refuse.',msg_type:'cancel_request',created_at:new Date().toISOString()}).catch(()=>{});
-    toast('Cancel requested — other party must agree.','success'); await _renderDealPage(offerId);
-  }catch(e){toast(friendlyError(e),'error');}
+  hmConfirm(
+    '⚠️ Request cancellation?',
+    'The other party must agree before the deal actually cancels. They can also refuse and the deal continues. If they agree, 2% of the locked AVAX goes to the platform.',
+    async () => {
+      try {
+        toast('Sending cancel request…', 'pending');
+        const tx = await hireMeContract.requestCancel(offerId);
+        await tx.wait();
+        const roP = await getFujiProvider();
+        const roHM = new ethers.Contract(HIREME_ADDRESS, HIREME_ABI, roP);
+        const o = await roHM.getOffer(offerId);
+        const rec = account.toLowerCase() === o.clipper.toLowerCase() ? o.streamer : o.clipper;
+        if (db) await db.from('hm_messages').insert({offer_id: offerId, sender: account.toLowerCase(), recipient: rec.toLowerCase(), message: '⚠️ Cancellation requested — please agree or refuse below.', msg_type: 'cancel_request', created_at: new Date().toISOString()}).catch(()=>{});
+        toast('Cancel request sent — waiting for their response.', 'success');
+        await _renderDealPage(offerId);
+      } catch(e) { toast(friendlyError(e), 'error'); }
+    },
+    'Request Cancel', true
+  );
 }
 async function hmAgreeCancel(offerId) {
-  if(!confirm('Agree to cancel? 2% penalty deducted from locked AVAX, rest refunded to streamer.'))return;
-  try{toast('Agreeing to cancel…','pending');const tx=await hireMeContract.agreeCancelDeal(offerId);await tx.wait();toast('Deal cancelled. Streamer refunded minus 2%.','success'); await _renderDealPage(offerId);}catch(e){toast(friendlyError(e),'error');}
+  hmConfirm(
+    'Agree to cancel this deal?',
+    'The streamer will get their AVAX refunded minus a 2% cancellation fee. This cannot be undone.',
+    async () => {
+      try {
+        toast('Cancelling deal…', 'pending');
+        const tx = await hireMeContract.agreeCancelDeal(offerId);
+        await tx.wait();
+        toast('Deal cancelled — streamer refunded (minus 2% fee).', 'success');
+        await _renderDealPage(offerId);
+      } catch(e) { toast(friendlyError(e), 'error'); }
+    },
+    'Agree & Cancel', true
+  );
 }
 async function hmRejectCancel(offerId) {
   try{
@@ -4775,7 +4831,77 @@ async function sbViewStreamer(wallet) {
   loadWalletNFTAvatar(wallet, 'sb-modal-av');
 }
 
-// EXPOSE TO WINDOW
+// ── AVAX PICKER HELPERS ───────────────────────────────────────────
+function hmAvaxInputChange(offerId) {
+  const inp = document.getElementById('hm-avx');
+  if (!inp) return;
+  const v = parseFloat(inp.value) || 0;
+  const range = document.getElementById('hm-avx-range');
+  if (range) range.value = Math.min(parseFloat(range.max), v * 1000);
+  const warn = document.getElementById(`hm-avax-warn-${offerId}`);
+  if (warn) {
+    const bal = parseFloat(range?.max || '0') / 1000;
+    warn.style.display = (bal > 0 && v > bal) ? 'block' : 'none';
+  }
+}
+
+function hmAvaxRangeChange(offerId, rawVal, bal) {
+  const v = parseFloat(rawVal) / 1000;
+  const inp = document.getElementById('hm-avx');
+  if (inp) inp.value = v.toFixed(3);
+  const warn = document.getElementById(`hm-avax-warn-${offerId}`);
+  if (warn) warn.style.display = (bal > 0 && v > bal) ? 'block' : 'none';
+}
+
+function hmAvaxPreset(offerId, val, bal) {
+  const v = parseFloat(val);
+  const inp = document.getElementById('hm-avx');
+  if (inp) inp.value = v.toFixed(3);
+  const range = document.getElementById('hm-avx-range');
+  if (range) range.value = Math.min(parseFloat(range.max), v * 1000);
+  const warn = document.getElementById(`hm-avax-warn-${offerId}`);
+  if (warn) warn.style.display = (bal > 0 && v > bal) ? 'block' : 'none';
+}
+
+function hmAdjClips(delta) {
+  const inp = document.getElementById('hm-cnt');
+  if (!inp) return;
+  const cur = parseInt(inp.value) || 1;
+  inp.value = Math.max(1, Math.min(50, cur + delta));
+}
+
+// Preview clip embed while typing URL
+function hmClipPreview(offerId) {
+  const inp = document.getElementById(`hm-clip-url-${offerId}`);
+  const prev = document.getElementById(`hm-clip-preview-${offerId}`);
+  if (!inp || !prev) return;
+  const url = inp.value.trim();
+  const embed = _buildClipEmbed(url);
+  prev.innerHTML = embed
+    ? `<div style="margin-bottom:8px;">${embed}</div>`
+    : '';
+}
+
+// ── CONFIRMATION HELPERS (replaces confirm() dialogs) ────────────
+function hmConfirm(message, details, onConfirm, confirmLabel = 'Confirm', danger = false) {
+  const ex = document.getElementById('hm-confirm-modal');
+  if (ex) ex.remove();
+  const modal = document.createElement('div');
+  modal.id = 'hm-confirm-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:3000;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(6px);animation:fadeIn 0.15s ease;';
+  modal.innerHTML = `<div style="background:var(--card);border:1px solid ${danger?'rgba(239,68,68,0.3)':'var(--border)'};border-radius:16px;padding:24px;max-width:400px;width:100%;box-shadow:0 24px 60px rgba(0,0,0,0.6);">
+    <div style="font-weight:800;font-size:1rem;margin-bottom:8px;color:${danger?'#ef4444':'var(--text)'};">${message}</div>
+    ${details ? `<div style="font-size:0.82rem;color:var(--muted);line-height:1.6;margin-bottom:18px;">${details}</div>` : '<div style="margin-bottom:18px;"></div>'}
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-ghost" style="flex:1;" onclick="document.getElementById('hm-confirm-modal').remove()">Cancel</button>
+      <button class="${danger?'btn btn-ghost':'btn btn-primary'}" style="flex:1;${danger?'color:#ef4444;border-color:rgba(239,68,68,0.4);':''}" onclick="document.getElementById('hm-confirm-modal').remove();(${onConfirm.toString()})();">${confirmLabel}</button>
+    </div>
+  </div>`;
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
+// ── EXPOSE TO WINDOW
 
 // ================================================================
 //  MARKETPLACE — Full Logic
@@ -5409,7 +5535,7 @@ function mktFilterCards(query) {
 }
 
 
-const exposed = { connectWallet,disconnectWallet,showPage,switchTab,openModal,closeModal,selectRole,onboardNext,finishOnboarding,mintGenesis,mintEarlyAccess,saveProfile,postBounty,submitClip,voteOnClip,pickWinner,resolveVote,filterBounties,openBountyDetail,setMobileActive,loadInventory,openSubDetail,openHostProfile,openClipperProfile,openStreamViewer,addPendingWinner,removePendingWinner,confirmMultiWinners,confirmSingleWinner,postComment,openEditBounty,copyReferralLink,shareReferralLink,loadReferrals,loadRewardsPage,registerAsGenesisHolder,flagContent,adminDismissFlag,adminActionFlag,adminBanUser,adminForcePause,adminExportData,adminToggleMint,adminSetTreasuryNFT,adminSetTreasuryEscrow,adminSetEscrowNFT,adminSetNFTBountyContract,adminSetHireMeNFT,loadAdminPage,toggleMobileDrawer,closeMobileDrawer,loadClipFeed,loadStreamerDashboard,loadMarketplace,mktListNFT,mktDelistNFT,mktBuyNFT,mktUpdatePrice,mktEquipToken,mktUnequipToken,mktShowListModal,mktShowUpdateModal,mktSwitchTab,mktEquipFromInventory,updateSchedPreview,checkRewardVsBalance,loadWalletNFTAvatar,loadHireMePage,loadHireMeBrowse,hmBrowseFilter,hmBrowseRender,hmAddPOW,hmRemovePOW,hmViewClipper,hmMakeOffer,hmOpenOffer,hmCounterOffer,hmAcceptOffer,hmRejectOffer,hmSubmitClip,hmApproveClip,hmRequestCancel,hmAgreeCancel,hmRejectCancel,hmSendDM,hmSaveMyProfile,hmToggleAvailability,goBackFromDeal,loadStreamerBrowse,sbFilter,sbRender,sbViewStreamer };
+const exposed = { connectWallet,disconnectWallet,showPage,switchTab,openModal,closeModal,selectRole,onboardNext,finishOnboarding,mintGenesis,mintEarlyAccess,saveProfile,postBounty,submitClip,voteOnClip,pickWinner,resolveVote,filterBounties,openBountyDetail,setMobileActive,loadInventory,openSubDetail,openHostProfile,openClipperProfile,openStreamViewer,addPendingWinner,removePendingWinner,confirmMultiWinners,confirmSingleWinner,postComment,openEditBounty,copyReferralLink,shareReferralLink,loadReferrals,loadRewardsPage,registerAsGenesisHolder,flagContent,adminDismissFlag,adminActionFlag,adminBanUser,adminForcePause,adminExportData,adminToggleMint,adminSetTreasuryNFT,adminSetTreasuryEscrow,adminSetEscrowNFT,adminSetNFTBountyContract,adminSetHireMeNFT,loadAdminPage,toggleMobileDrawer,closeMobileDrawer,loadClipFeed,loadStreamerDashboard,loadMarketplace,mktListNFT,mktDelistNFT,mktBuyNFT,mktUpdatePrice,mktEquipToken,mktUnequipToken,mktShowListModal,mktShowUpdateModal,mktSwitchTab,mktEquipFromInventory,updateSchedPreview,checkRewardVsBalance,loadWalletNFTAvatar,loadHireMePage,loadHireMeBrowse,hmBrowseFilter,hmBrowseRender,hmAddPOW,hmRemovePOW,hmViewClipper,hmMakeOffer,hmOpenOffer,hmCounterOffer,hmAcceptOffer,hmRejectOffer,hmSubmitClip,hmApproveClip,hmRequestCancel,hmAgreeCancel,hmRejectCancel,hmSendDM,hmSaveMyProfile,hmToggleAvailability,goBackFromDeal,loadStreamerBrowse,sbFilter,sbRender,sbViewStreamer,hmConfirm,hmAdjClips,hmAvaxInputChange,hmAvaxRangeChange,hmAvaxPreset,hmClipPreview };
 Object.assign(window, exposed);
 
 // INIT
