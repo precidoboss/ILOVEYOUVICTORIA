@@ -752,8 +752,8 @@ function updateProfileUI() {
         if (posts)  posts.textContent  = d.bountiesPosted|| '0';
         if (level)  level.textContent  = 'Lv.' + (d.level || 1);
         if (streak) streak.textContent = (d.winStreak || '0') + '🔥';
-      }).catch(()=>{});
-    }).catch(()=>{});
+      });
+    });
   }
 }
 
@@ -1849,6 +1849,7 @@ function showPage(page) {
   if (page==='marketplace') loadMarketplace();
   if (page==='hireme-browse') loadHireMeBrowse();
   if (page==='streamer-browse') loadStreamerBrowse();
+  if (page==='nft-explorer') loadNFTExplorer();
   if (page==='admin' && account?.toLowerCase()===ADMIN_WALLET) loadAdminPage();
   else if (page==='admin') { toast('Admin access only', 'error'); showPage('home'); }
 }
@@ -3033,7 +3034,7 @@ async function hmRefreshNFTStats(wallet) {
       rep_score:       rep ? Number(rep.clipperRep) : 0,
       updated_at:      new Date().toISOString()
     };
-    await db.from('hireme_profiles').upsert({ wallet: wallet.toLowerCase(), ...fields }).catch(()=>{});
+    await db.from('hireme_profiles').upsert({ wallet: wallet.toLowerCase(), ...fields });
     return fields;
   } catch(e) { return {}; }
 }
@@ -3591,9 +3592,9 @@ async function hmMakeOffer(clipperAddr) {
     const lastId = Number(ids[ids.length-1]);
     const tx2 = await hireMeContract.counterOffer(lastId, ethers.parseEther(avax.toString()), clips, note);
     await tx2.wait();
-    if (db) await db.from('hm_messages').insert({offer_id:lastId,sender:account.toLowerCase(),recipient:clipperAddr.toLowerCase(),message:`📨 Offer: ${clips} clips for ${avax} AVAX${note?'. Note: '+note:''}`,msg_type:'offer',created_at:new Date().toISOString()}).catch(()=>{});
+    try { if (db) await db.from('hm_messages').insert({offer_id:lastId,sender:account.toLowerCase(),recipient:clipperAddr.toLowerCase(),message:`📨 Offer: ${clips} clips for ${avax} AVAX${note?'. Note: '+note:''}`,msg_type:'offer',created_at:new Date().toISOString()}); } catch(_e) {}
     document.getElementById('hm-clipper-modal')?.remove();
-    toast('✅ Offer sent! Clipper will see it in their Hire Me tab.','success');
+    toast('✅ Offer sent successfully! The clipper will see it in their Hire Me dashboard.', 'success');
     loadHireMePage();
   } catch(e) { toast(friendlyError(e),'error'); }
 }
@@ -3652,10 +3653,10 @@ async function _renderDealPage(offerId) {
   let otherProf = null, msgs = [], myBalance = 0;
   await Promise.all([
     db ? db.from('hireme_profiles').select('*').eq('wallet', other.toLowerCase()).maybeSingle()
-           .then(r => { otherProf = r.data; }).catch(()=>{}) : Promise.resolve(),
+           .then(r => { otherProf = r.data; }) : Promise.resolve(),
     db ? db.from('hm_messages').select('*').eq('offer_id', offerId).order('created_at',{ascending:true}).limit(150)
-           .then(r => { msgs = r.data||[]; }).catch(()=>{}) : Promise.resolve(),
-    isStreamer && signer ? signer.provider.getBalance(account).then(b => { myBalance = parseFloat(ethers.formatEther(b)); }).catch(()=>{}) : Promise.resolve(),
+           .then(r => { msgs = r.data||[]; }) : Promise.resolve(),
+    isStreamer && signer ? signer.provider.getBalance(account).then(b => { myBalance = parseFloat(ethers.formatEther(b)); }) : Promise.resolve(),
   ]);
 
   const otherName = otherProf?.username || other.slice(0,8)+'…';
@@ -4023,24 +4024,31 @@ async function _pollDMs(offerId) {
 
 // ── DM SEND ───────────────────────────────────────────────────────
 async function hmSendDM(offerId, recipientAddr) {
-  if (!db || !account) { toast('Connect to send messages', 'error'); return; }
+  if (!db || !account) { toast('Connect wallet to send messages', 'error'); return; }
   const input = document.getElementById(`hm-dm-input-${offerId}`);
   const msg   = input?.value.trim();
   if (!msg) return;
+  input.value = '';
+  // Optimistic append
+  const thread = document.getElementById('hm-dm-thread');
+  if (thread) {
+    const time = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+    thread.innerHTML += `<div style="display:flex;flex-direction:column;align-items:flex-end;margin-bottom:10px;">
+      <div style="max-width:75%;padding:10px 14px;border-radius:16px;font-size:0.84rem;line-height:1.55;word-break:break-word;background:rgba(232,53,10,0.2);border:1px solid rgba(255,255,255,0.07);border-bottom-right-radius:4px;">${escHtml(msg)}</div>
+      <div style="font-size:0.6rem;color:var(--muted);margin-top:4px;">You · ${time}</div>
+    </div>`;
+    thread.scrollTop = thread.scrollHeight;
+  }
   try {
-    input.value = '';
-    // Optimistic append
-    const thread = document.getElementById('hm-dm-thread');
-    if (thread) {
-      const time = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
-      thread.innerHTML += `<div style="display:flex;flex-direction:column;align-items:flex-end;margin-bottom:10px;">
-        <div style="max-width:75%;padding:10px 14px;border-radius:16px;font-size:0.84rem;line-height:1.55;word-break:break-word;background:rgba(232,53,10,0.2);border:1px solid rgba(255,255,255,0.07);border-bottom-right-radius:4px;">${escHtml(msg)}</div>
-        <div style="font-size:0.6rem;color:var(--muted);margin-top:4px;">You · ${time}</div>
-      </div>`;
-      thread.scrollTop = thread.scrollHeight;
-    }
-    await db.from('hm_messages').insert({offer_id: Number(offerId), sender: account.toLowerCase(), recipient: recipientAddr.toLowerCase(), message: msg, msg_type: 'text', created_at: new Date().toISOString()});
-  } catch(e) { toast('Message failed to send', 'error'); }
+    await db.from('hm_messages').insert({
+      offer_id: Number(offerId),
+      sender: account.toLowerCase(),
+      recipient: recipientAddr.toLowerCase(),
+      message: msg,
+      msg_type: 'text',
+      created_at: new Date().toISOString()
+    });
+  } catch(_e) { /* fire and forget */ }
 }
 
 // ── ON-CHAIN NEGOTIATION ACTIONS ──────────────────────────────────
@@ -4058,113 +4066,129 @@ async function hmCounterOffer(offerId) {
     const roHM = new ethers.Contract(HIREME_ADDRESS, HIREME_ABI, roP);
     const o = await roHM.getOffer(offerId);
     const rec = account.toLowerCase() === o.clipper.toLowerCase() ? o.streamer : o.clipper;
-    const isClipperSide = account.toLowerCase() === o.clipper.toLowerCase();
-    const counterMsg = `↕ Counter-offer from ${isClipperSide ? 'Clipper' : 'Streamer'}: ${clips} clip${clips!==1?'s':''} for ${avax} AVAX${note ? ' — ' + note : ''}`;
-    if (db) await db.from('hm_messages').insert({offer_id: offerId, sender: account.toLowerCase(), recipient: rec.toLowerCase(), message: counterMsg, msg_type: 'counter', created_at: new Date().toISOString()}).catch(()=>{});
+    const side = account.toLowerCase() === o.clipper.toLowerCase() ? 'Clipper' : 'Streamer';
+    const counterMsg = `↕ Counter from ${side}: ${clips} clip${clips!==1?'s':''} for ${avax} AVAX${note ? ' — ' + note : ''}`;
+    try { await db.from('hm_messages').insert({ offer_id: offerId, sender: account.toLowerCase(), recipient: rec.toLowerCase(), message: counterMsg, msg_type: 'counter', created_at: new Date().toISOString() }); } catch(_e) {}
     toast(`✅ Counter-offer sent — ${clips} clips for ${avax} AVAX`, 'success');
     await _renderDealPage(offerId);
   } catch(e) { toast(friendlyError(e), 'error'); }
 }
+
 async function hmAcceptOffer(offerId) {
   const roP = await getFujiProvider();
   const roHM = new ethers.Contract(HIREME_ADDRESS, HIREME_ABI, roP);
   const o = await roHM.getOffer(offerId).catch(() => null);
   if (!o) { toast('Failed to load offer details', 'error'); return; }
-  const isStr = o.streamer.toLowerCase() === account.toLowerCase();
-  const avax = o.avaxAmount;
-  if (isStr && (!avax || avax === 0n)) { toast('No AVAX amount agreed yet — use the counter form to set one first', 'error'); return; }
-  const avaxFormatted = ethers.formatEther(avax);
 
-  const doAccept = async () => {
+  // Capture everything in outer scope before any async callback
+  const amIStreamer = o.streamer.toLowerCase() === account.toLowerCase();
+  const avaxWei    = o.avaxAmount;
+  const avaxFmt    = parseFloat(ethers.formatEther(avaxWei || 0n)).toFixed(4);
+  const clipCount  = Number(o.clipCount);
+  const clipper    = o.clipper;
+  const streamer   = o.streamer;
+
+  if (amIStreamer && (!avaxWei || avaxWei === 0n)) {
+    toast('No AVAX amount set yet — counter-offer with a price first', 'error'); return;
+  }
+
+  async function doAccept() {
     try {
-      toast(isStr ? `Locking ${avaxFormatted} AVAX…` : 'Accepting terms…', 'pending');
-      const tx = await hireMeContract.acceptOffer(offerId, { value: isStr ? avax : 0n });
+      toast(amIStreamer ? `Locking ${avaxFmt} AVAX in escrow…` : 'Accepting terms…', 'pending');
+      const tx = await hireMeContract.acceptOffer(offerId, { value: amIStreamer ? avaxWei : 0n });
       await tx.wait();
-      const rec = isStr ? o.clipper : o.streamer;
-      if (db) await db.from('hm_messages').insert({
-        offer_id: offerId, sender: account.toLowerCase(), recipient: rec.toLowerCase(),
-        message: isStr
-          ? `🔒 Deal activated! ${avaxFormatted} AVAX locked in escrow. Clipper — submit your clips!`
-          : `✅ Clipper accepted the terms. Streamer — lock your AVAX to activate the deal.`,
-        msg_type: 'accept', created_at: new Date().toISOString()
-      }).catch(()=>{});
-      toast(isStr ? `🔒 ${avaxFormatted} AVAX locked — deal is now active!` : '✅ Terms accepted — waiting for streamer to lock AVAX.', 'success');
+      const rec = amIStreamer ? clipper : streamer;
+      const dmMsg = amIStreamer
+        ? `🔒 Deal activated! ${avaxFmt} AVAX locked in escrow. Clipper — you can now submit clips.`
+        : `✅ Clipper accepted terms. Streamer — lock your AVAX to activate the deal.`;
+      try { await db.from('hm_messages').insert({ offer_id: offerId, sender: account.toLowerCase(), recipient: rec.toLowerCase(), message: dmMsg, msg_type: 'accept', created_at: new Date().toISOString() }); } catch(_e) {}
+      toast(amIStreamer ? `🔒 ${avaxFmt} AVAX locked — deal is active!` : '✅ Terms accepted — waiting for streamer to lock AVAX.', 'success');
       await _renderDealPage(offerId);
     } catch(e) { toast(friendlyError(e), 'error'); }
-  };
+  }
 
-  if (isStr) {
+  if (amIStreamer) {
     hmConfirm(
-      `🔒 Lock ${avaxFormatted} AVAX?`,
-      `This will lock ${avaxFormatted} AVAX in escrow for ${Number(o.clipCount)} clip${Number(o.clipCount)!==1?'s':''}. The AVAX is only released when all clips are approved. If the deal is cancelled, 2% stays with the platform.`,
+      `🔒 Lock ${avaxFmt} AVAX?`,
+      `Locks ${avaxFmt} AVAX in escrow for ${clipCount} clip${clipCount!==1?'s':''}. Released only when all clips are approved. Cancelled deals incur a 2% fee.`,
       doAccept,
-      `Lock ${avaxFormatted} AVAX`
+      `Lock ${avaxFmt} AVAX`
     );
   } else {
     await doAccept();
   }
 }
+
 async function hmRejectOffer(offerId) {
   hmConfirm(
     '✗ Reject this offer?',
-    'This will end the negotiation entirely. Neither party can reopen it.',
-    async () => {
+    'This ends the negotiation entirely. Neither party can reopen it.',
+    async function() {
       try {
         toast('Rejecting offer…', 'pending');
         const tx = await hireMeContract.rejectOffer(offerId);
         await tx.wait();
-        toast('Offer rejected.', 'success');
+        toast('Offer rejected — negotiation closed.', 'success');
         await _renderDealPage(offerId);
       } catch(e) { toast(friendlyError(e), 'error'); }
     },
     'Reject Offer', true
   );
 }
+
 async function hmSubmitClip(offerId) {
-  const link=document.getElementById(`hm-clip-url-${offerId}`)?.value.trim();
-  if(!link||!link.startsWith('http')){toast('Enter a valid URL','error');return;}
-  if(!link.includes('x.com')&&!link.includes('twitter.com')&&!link.includes('youtube.com')&&!link.includes('youtu.be')){toast('Only X or YouTube links','error');return;}
-  try{
-    toast('Submitting clip…','pending');const tx=await hireMeContract.submitClip(offerId,link);await tx.wait();
-    const roP=await getFujiProvider();const roHM=new ethers.Contract(HIREME_ADDRESS,HIREME_ABI,roP);const o=await roHM.getOffer(offerId);
+  const link = document.getElementById(`hm-clip-url-${offerId}`)?.value.trim();
+  if (!link || !link.startsWith('http')) { toast('Enter a valid URL starting with https://', 'error'); return; }
+  const isValid = link.includes('x.com') || link.includes('twitter.com') || link.includes('youtube.com') || link.includes('youtu.be');
+  if (!isValid) { toast('Only X (twitter.com / x.com) or YouTube links are accepted', 'error'); return; }
+  try {
+    toast('Submitting clip on-chain…', 'pending');
+    const tx = await hireMeContract.submitClip(offerId, link);
+    await tx.wait();
+    const roP  = await getFujiProvider();
+    const roHM = new ethers.Contract(HIREME_ADDRESS, HIREME_ABI, roP);
+    const o    = await roHM.getOffer(offerId);
     const clipNum = (await roHM.getOfferClips(offerId)).length;
-    if (db) await db.from('hm_messages').insert({
-      offer_id: offerId, sender: account.toLowerCase(), recipient: o.streamer.toLowerCase(),
-      message: `📎 Clip #${clipNum} submitted — ${link}`,
-      msg_type: 'clip', created_at: new Date().toISOString()
-    }).catch(()=>{});
-    toast(`✅ Clip #${clipNum} submitted — waiting for approval.`, 'success');
+    try { await db.from('hm_messages').insert({ offer_id: offerId, sender: account.toLowerCase(), recipient: o.streamer.toLowerCase(), message: `📎 Clip #${clipNum} submitted — ${link}`, msg_type: 'clip', created_at: new Date().toISOString() }); } catch(_e) {}
+    toast(`✅ Clip #${clipNum} submitted — waiting for streamer to review.`, 'success');
     await _renderDealPage(offerId);
-  }catch(e){toast(friendlyError(e),'error');}
+  } catch(e) { toast(friendlyError(e), 'error'); }
 }
+
 async function hmApproveClip(offerId, clipIdx) {
-  try{
-    toast('Approving…','pending');const tx=await hireMeContract.approveClip(clipIdx,offerId);await tx.wait();
-    const roP=await getFujiProvider();const roHM=new ethers.Contract(HIREME_ADDRESS,HIREME_ABI,roP);const o=await roHM.getOffer(offerId);
-    const done=Number(o.status)===2;
-    if(db)await db.from('hm_messages').insert({offer_id:offerId,sender:account.toLowerCase(),recipient:o.clipper.toLowerCase(),message:done?`🎉 All done! Payout sent.`:`✅ Clip #${clipIdx+1} approved (${Number(o.approvedClips)}/${Number(o.clipCount)})`,msg_type:'approve',created_at:new Date().toISOString()}).catch(()=>{});
-    const approvedCount = Number(o.approvedClips);
-    const totalCount = Number(o.clipCount);
-    toast(done ? `🎉 All ${totalCount} clips approved — clipper has been paid!` : `✅ Clip #${clipIdx+1} approved (${approvedCount}/${totalCount} done).`, 'success');
+  try {
+    toast('Approving clip…', 'pending');
+    const tx = await hireMeContract.approveClip(clipIdx, offerId);
+    await tx.wait();
+    const roP  = await getFujiProvider();
+    const roHM = new ethers.Contract(HIREME_ADDRESS, HIREME_ABI, roP);
+    const o    = await roHM.getOffer(offerId);
+    const done = Number(o.status) === 2;
+    const approved = Number(o.approvedClips);
+    const total    = Number(o.clipCount);
+    const dmMsg = done ? `🎉 All ${total} clips approved — payout sent to clipper!` : `✅ Clip #${clipIdx+1} approved (${approved}/${total})`;
+    try { await db.from('hm_messages').insert({ offer_id: offerId, sender: account.toLowerCase(), recipient: o.clipper.toLowerCase(), message: dmMsg, msg_type: 'approve', created_at: new Date().toISOString() }); } catch(_e) {}
+    toast(done ? `🎉 All ${total} clips approved — clipper has been paid!` : `✅ Clip #${clipIdx+1} approved (${approved}/${total}).`, 'success');
     await _renderDealPage(offerId);
-  }catch(e){toast(friendlyError(e),'error');}
+  } catch(e) { toast(friendlyError(e), 'error'); }
 }
-// hmRejectClip defined below with reason modal
+
+// hmRejectClip is defined below (uses modal for reason)
 
 async function hmRequestCancel(offerId) {
   hmConfirm(
     '⚠️ Request cancellation?',
-    'The other party must agree before the deal actually cancels. They can also refuse and the deal continues. If they agree, 2% of the locked AVAX goes to the platform.',
-    async () => {
+    'The other party must agree before the deal cancels. They can also refuse, and the deal continues. If agreed, 2% of locked AVAX goes to the platform.',
+    async function() {
       try {
         toast('Sending cancel request…', 'pending');
         const tx = await hireMeContract.requestCancel(offerId);
         await tx.wait();
-        const roP = await getFujiProvider();
+        const roP  = await getFujiProvider();
         const roHM = new ethers.Contract(HIREME_ADDRESS, HIREME_ABI, roP);
-        const o = await roHM.getOffer(offerId);
-        const rec = account.toLowerCase() === o.clipper.toLowerCase() ? o.streamer : o.clipper;
-        if (db) await db.from('hm_messages').insert({offer_id: offerId, sender: account.toLowerCase(), recipient: rec.toLowerCase(), message: '⚠️ Cancellation requested — please agree or refuse below.', msg_type: 'cancel_request', created_at: new Date().toISOString()}).catch(()=>{});
+        const o    = await roHM.getOffer(offerId);
+        const rec  = account.toLowerCase() === o.clipper.toLowerCase() ? o.streamer : o.clipper;
+        try { await db.from('hm_messages').insert({ offer_id: offerId, sender: account.toLowerCase(), recipient: rec.toLowerCase(), message: '⚠️ Cancellation requested. Please agree or refuse below.', msg_type: 'cancel_request', created_at: new Date().toISOString() }); } catch(_e) {}
         toast('Cancel request sent — waiting for their response.', 'success');
         await _renderDealPage(offerId);
       } catch(e) { toast(friendlyError(e), 'error'); }
@@ -4172,13 +4196,14 @@ async function hmRequestCancel(offerId) {
     'Request Cancel', true
   );
 }
+
 async function hmAgreeCancel(offerId) {
   hmConfirm(
     'Agree to cancel this deal?',
-    'The streamer will get their AVAX refunded minus a 2% cancellation fee. This cannot be undone.',
-    async () => {
+    'The streamer gets their AVAX back minus a 2% cancellation fee. This cannot be undone.',
+    async function() {
       try {
-        toast('Cancelling deal…', 'pending');
+        toast('Processing cancellation…', 'pending');
         const tx = await hireMeContract.agreeCancelDeal(offerId);
         await tx.wait();
         toast('Deal cancelled — streamer refunded (minus 2% fee).', 'success');
@@ -4188,14 +4213,20 @@ async function hmAgreeCancel(offerId) {
     'Agree & Cancel', true
   );
 }
+
 async function hmRejectCancel(offerId) {
-  try{
-    toast('Rejecting cancel request…','pending');const tx=await hireMeContract.rejectCancelRequest(offerId);await tx.wait();
-    const roP=await getFujiProvider();const roHM=new ethers.Contract(HIREME_ADDRESS,HIREME_ABI,roP);const o=await roHM.getOffer(offerId);
-    const rec=account.toLowerCase()===o.clipper.toLowerCase()?o.streamer:o.clipper;
-    if(db)await db.from('hm_messages').insert({offer_id:offerId,sender:account.toLowerCase(),recipient:rec.toLowerCase(),message:'❌ Cancel request rejected — deal continues.',msg_type:'cancel_rejected',created_at:new Date().toISOString()}).catch(()=>{});
-    toast('Cancel rejected — deal continues!','success'); await _renderDealPage(offerId);
-  }catch(e){toast(friendlyError(e),'error');}
+  try {
+    toast('Rejecting cancel request…', 'pending');
+    const tx = await hireMeContract.rejectCancelRequest(offerId);
+    await tx.wait();
+    const roP  = await getFujiProvider();
+    const roHM = new ethers.Contract(HIREME_ADDRESS, HIREME_ABI, roP);
+    const o    = await roHM.getOffer(offerId);
+    const rec  = account.toLowerCase() === o.clipper.toLowerCase() ? o.streamer : o.clipper;
+    try { await db.from('hm_messages').insert({ offer_id: offerId, sender: account.toLowerCase(), recipient: rec.toLowerCase(), message: '❌ Cancel request rejected — deal continues.', msg_type: 'cancel_rejected', created_at: new Date().toISOString() }); } catch(_e) {}
+    toast('Cancel request rejected — deal continues.', 'success');
+    await _renderDealPage(offerId);
+  } catch(e) { toast(friendlyError(e), 'error'); }
 }
 
 // ── DM HTML BUILDER ───────────────────────────────────────────────
@@ -4218,19 +4249,16 @@ function _buildDMHTML(msgs, otherName) {
 
 // ── CLIP EMBED ─────────────────────────────────────────────────────
 function _buildClipEmbed(url) {
-  // YouTube embed
   const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
   if (ytMatch) {
     return `<div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:10px;margin-top:10px;background:#000;">
       <iframe src="https://www.youtube.com/embed/${ytMatch[1]}?rel=0&modestbranding=1" frameborder="0" allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture" allowfullscreen style="position:absolute;top:0;left:0;width:100%;height:100%;border-radius:10px;"></iframe>
     </div>`;
   }
-  // X/Twitter — oEmbed via twitframe proxy
   const twMatch = url.match(/(?:x\.com|twitter\.com)\/[^/]+\/status\/(\d+)/);
   if (twMatch) {
-    const encoded = encodeURIComponent(url);
     return `<div style="margin-top:10px;border-radius:10px;overflow:hidden;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.08);">
-      <iframe src="https://twitframe.com/show?url=${encoded}" width="100%" height="300" frameborder="0" scrolling="no" style="border-radius:10px;display:block;" loading="lazy"></iframe>
+      <iframe src="https://twitframe.com/show?url=${encodeURIComponent(url)}" width="100%" height="300" frameborder="0" scrolling="no" style="border-radius:10px;display:block;" loading="lazy"></iframe>
     </div>`;
   }
   return '';
@@ -4264,17 +4292,16 @@ async function hmRejectClip(offerId, clipIdx) {
     const roHM = new ethers.Contract(HIREME_ADDRESS, HIREME_ABI, roP);
     const o = await roHM.getOffer(offerId);
     // Log rejection as system DM so clipper sees it
-    await db.from('hm_messages').insert({
-      offer_id: Number(offerId),
-      sender: account.toLowerCase(),
-      recipient: o.clipper.toLowerCase(),
-      message: `❌ Clip #${clipIdx+1} rejected: ${reason}. Please submit a replacement.`,
-      msg_type: 'clip_rejected',
-      created_at: new Date().toISOString()
-    });
-    // Store rejection note in Supabase for local display
-    const key = `clip_rejection_${offerId}_${clipIdx}`;
-    await db.from('hm_clip_notes').upsert({deal_id: Number(offerId), clip_idx: clipIdx, note: reason, type: 'rejection', wallet: account.toLowerCase()}).catch(()=>{});
+    try {
+      await db.from('hm_messages').insert({
+        offer_id: Number(offerId),
+        sender: account.toLowerCase(),
+        recipient: o.clipper.toLowerCase(),
+        message: `❌ Clip #${clipIdx+1} rejected: ${reason}. Please submit a replacement.`,
+        msg_type: 'clip_rejected',
+        created_at: new Date().toISOString()
+      });
+    } catch(_e) {}
     toast('Clip rejected — clipper notified via DMs', 'success');
     await _renderDealPage(offerId);
   } catch(e) { toast(friendlyError(e), 'error'); }
@@ -4899,6 +4926,161 @@ function hmConfirm(message, details, onConfirm, confirmLabel = 'Confirm', danger
   </div>`;
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
   document.body.appendChild(modal);
+}
+
+// ── NFT EXPLORER ─────────────────────────────────────────────────
+let _nftexData = [];
+
+async function loadNFTExplorer() {
+  const grid = document.getElementById('nftex-grid');
+  const summary = document.getElementById('nftex-summary');
+  if (!grid) return;
+  grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--muted);"><div class="spinner"></div><p style="margin-top:12px;">Reading chain data…</p></div>';
+
+  try {
+    const roP = await getFujiProvider();
+    const roNft = new ethers.Contract(NFT_ADDRESS, NFT_ABI, roP);
+    const total = Number(await roNft.totalSupply());
+
+    if (summary) summary.textContent = `Loading ${total} NFT${total!==1?'s':''} from chain…`;
+
+    // Fetch all in parallel batches of 10
+    const ids = Array.from({length: total}, (_, i) => i + 1);
+    const results = [];
+    for (let i = 0; i < ids.length; i += 10) {
+      const batch = ids.slice(i, i + 10);
+      const batchData = await Promise.all(batch.map(async id => {
+        try {
+          const [owner, stats] = await Promise.all([
+            roNft.ownerOf(id),
+            roNft.nftStats(id),
+          ]);
+          // Look up username from Supabase
+          let username = null;
+          if (db) {
+            try {
+              const { data } = await db.from('profiles').select('username,x_handle').eq('wallet', owner.toLowerCase()).maybeSingle();
+              username = data?.username || null;
+            } catch(_e) {}
+          }
+          return {
+            id, owner,
+            username,
+            tier:   Number(stats.tier),
+            role:   Number(stats.role),
+            level:  Number(stats.level),
+            wins:   Number(stats.bountiesWon),
+            posted: Number(stats.bountiesPosted),
+            clips:  Number(stats.clipsSubmitted),
+            votes:  Number(stats.votesReceived),
+            streak: Number(stats.winStreak),
+            mintedAt: Number(stats.mintedAt),
+          };
+        } catch(e) { return null; }
+      }));
+      results.push(...batchData.filter(Boolean));
+      // Update summary as we go
+      if (summary) summary.textContent = `Loaded ${results.length}/${total} NFTs…`;
+    }
+
+    _nftexData = results;
+    if (summary) {
+      const genesis = results.filter(r => r.tier===1).length;
+      const early   = results.filter(r => r.tier===2).length;
+      const streamers = results.filter(r => r.role===0).length;
+      const clippers  = results.filter(r => r.role===1).length;
+      summary.innerHTML = `<strong style="color:var(--text);">${total} NFTs minted</strong> · <span style="color:var(--amber);">👑 ${genesis} Genesis</span> · <span style="color:var(--red);">⚡ ${early} Early Access</span> · <span style="color:var(--muted);">📡 ${streamers} Streamers · ✂️ ${clippers} Clippers</span>`;
+    }
+    nftexFilter();
+  } catch(e) {
+    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);">${friendlyError(e)}</div>`;
+  }
+}
+
+function nftexFilter() {
+  const search = (document.getElementById('nftex-search')?.value || '').toLowerCase();
+  const tier   = document.getElementById('nftex-tier')?.value || '';
+  const role   = document.getElementById('nftex-role')?.value || '';
+  const sort   = document.getElementById('nftex-sort')?.value || 'id';
+
+  let list = _nftexData.filter(n => {
+    if (tier && String(n.tier) !== tier) return false;
+    if (role && String(n.role) !== role) return false;
+    if (search) {
+      const hay = (n.owner + (n.username||'')).toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
+    return true;
+  });
+
+  const sortFns = {
+    id:    (a,b) => a.id - b.id,
+    level: (a,b) => b.level - a.level,
+    wins:  (a,b) => b.wins - a.wins,
+    rep:   (a,b) => (b.votes - a.votes),
+  };
+  list.sort(sortFns[sort] || sortFns.id);
+
+  const grid = document.getElementById('nftex-grid');
+  if (!grid) return;
+
+  if (list.length === 0) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);">No NFTs match your filters.</div>';
+    return;
+  }
+
+  const tierLabel = t => t===1 ? '<span style="color:var(--amber);font-weight:700;">👑 Genesis</span>' : '<span style="color:var(--red);font-weight:700;">⚡ Early Access</span>';
+  const roleLabel = r => r===0 ? '<span style="color:var(--orange);">📡 Streamer</span>' : '<span style="color:var(--success);">✂️ Clipper</span>';
+  const mintDate  = ts => ts > 0 ? new Date(ts*1000).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';
+
+  grid.innerHTML = list.map(n => {
+    const name    = n.username || n.owner.slice(0,10)+'…';
+    const init    = name[0]?.toUpperCase() || '#';
+    const isYou   = account && n.owner.toLowerCase() === account.toLowerCase();
+    return `<div style="background:var(--card);border:1px solid ${isYou?'rgba(232,53,10,0.4)':'var(--border)'};border-radius:14px;padding:16px;transition:all 0.18s;cursor:default;"
+      onmouseover="this.style.borderColor='rgba(232,53,10,0.35)';this.style.transform='translateY(-2px)'"
+      onmouseout="this.style.borderColor='${isYou?'rgba(232,53,10,0.4)':'var(--border)'}';this.style.transform='none'">
+
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <div id="nftex-av-${n.id}" style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--red),var(--orange));display:flex;align-items:center;justify-content:center;font-weight:700;color:white;font-size:0.9rem;overflow:hidden;flex-shrink:0;">${init}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            <span style="font-weight:800;font-size:0.88rem;">${escHtml(name)}</span>
+            ${isYou ? '<span style="background:rgba(232,53,10,0.15);color:var(--red);border:1px solid rgba(232,53,10,0.3);padding:1px 7px;border-radius:10px;font-size:0.6rem;font-weight:700;">YOU</span>' : ''}
+          </div>
+          <div style="font-family:var(--font-mono);font-size:0.65rem;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${n.owner}</div>
+        </div>
+        <span style="font-family:var(--font-display);font-size:1.3rem;color:rgba(255,255,255,0.2);">#${n.id}</span>
+      </div>
+
+      <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;">
+        ${tierLabel(n.tier)} · ${roleLabel(n.role)} · <span style="color:var(--muted);font-size:0.78rem;">Lv ${n.level}</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px;">
+        <div style="text-align:center;padding:8px 4px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;">
+          <div style="font-family:var(--font-display);font-size:1rem;color:var(--amber);">${n.wins}</div>
+          <div style="font-size:0.55rem;color:var(--muted);text-transform:uppercase;margin-top:1px;">Wins</div>
+        </div>
+        <div style="text-align:center;padding:8px 4px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;">
+          <div style="font-family:var(--font-display);font-size:1rem;color:var(--orange);">${n.clips}</div>
+          <div style="font-size:0.55rem;color:var(--muted);text-transform:uppercase;margin-top:1px;">Clips</div>
+        </div>
+        <div style="text-align:center;padding:8px 4px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;">
+          <div style="font-family:var(--font-display);font-size:1rem;color:var(--success);">${n.votes}</div>
+          <div style="font-size:0.55rem;color:var(--muted);text-transform:uppercase;margin-top:1px;">Votes</div>
+        </div>
+        <div style="text-align:center;padding:8px 4px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;">
+          <div style="font-family:var(--font-display);font-size:1rem;color:var(--red);">${n.streak}</div>
+          <div style="font-size:0.55rem;color:var(--muted);text-transform:uppercase;margin-top:1px;">Streak</div>
+        </div>
+      </div>
+
+      <div style="font-size:0.65rem;color:var(--muted);text-align:right;">Minted ${mintDate(n.mintedAt)}</div>
+    </div>`;
+  }).join('');
+
+  setTimeout(() => list.forEach(n => loadWalletNFTAvatar(n.owner, `nftex-av-${n.id}`)), 80);
 }
 
 // ── EXPOSE TO WINDOW
@@ -5535,7 +5717,7 @@ function mktFilterCards(query) {
 }
 
 
-const exposed = { connectWallet,disconnectWallet,showPage,switchTab,openModal,closeModal,selectRole,onboardNext,finishOnboarding,mintGenesis,mintEarlyAccess,saveProfile,postBounty,submitClip,voteOnClip,pickWinner,resolveVote,filterBounties,openBountyDetail,setMobileActive,loadInventory,openSubDetail,openHostProfile,openClipperProfile,openStreamViewer,addPendingWinner,removePendingWinner,confirmMultiWinners,confirmSingleWinner,postComment,openEditBounty,copyReferralLink,shareReferralLink,loadReferrals,loadRewardsPage,registerAsGenesisHolder,flagContent,adminDismissFlag,adminActionFlag,adminBanUser,adminForcePause,adminExportData,adminToggleMint,adminSetTreasuryNFT,adminSetTreasuryEscrow,adminSetEscrowNFT,adminSetNFTBountyContract,adminSetHireMeNFT,loadAdminPage,toggleMobileDrawer,closeMobileDrawer,loadClipFeed,loadStreamerDashboard,loadMarketplace,mktListNFT,mktDelistNFT,mktBuyNFT,mktUpdatePrice,mktEquipToken,mktUnequipToken,mktShowListModal,mktShowUpdateModal,mktSwitchTab,mktEquipFromInventory,updateSchedPreview,checkRewardVsBalance,loadWalletNFTAvatar,loadHireMePage,loadHireMeBrowse,hmBrowseFilter,hmBrowseRender,hmAddPOW,hmRemovePOW,hmViewClipper,hmMakeOffer,hmOpenOffer,hmCounterOffer,hmAcceptOffer,hmRejectOffer,hmSubmitClip,hmApproveClip,hmRequestCancel,hmAgreeCancel,hmRejectCancel,hmSendDM,hmSaveMyProfile,hmToggleAvailability,goBackFromDeal,loadStreamerBrowse,sbFilter,sbRender,sbViewStreamer,hmConfirm,hmAdjClips,hmAvaxInputChange,hmAvaxRangeChange,hmAvaxPreset,hmClipPreview };
+const exposed = { connectWallet,disconnectWallet,showPage,switchTab,openModal,closeModal,selectRole,onboardNext,finishOnboarding,mintGenesis,mintEarlyAccess,saveProfile,postBounty,submitClip,voteOnClip,pickWinner,resolveVote,filterBounties,openBountyDetail,setMobileActive,loadInventory,openSubDetail,openHostProfile,openClipperProfile,openStreamViewer,addPendingWinner,removePendingWinner,confirmMultiWinners,confirmSingleWinner,postComment,openEditBounty,copyReferralLink,shareReferralLink,loadReferrals,loadRewardsPage,registerAsGenesisHolder,flagContent,adminDismissFlag,adminActionFlag,adminBanUser,adminForcePause,adminExportData,adminToggleMint,adminSetTreasuryNFT,adminSetTreasuryEscrow,adminSetEscrowNFT,adminSetNFTBountyContract,adminSetHireMeNFT,loadAdminPage,toggleMobileDrawer,closeMobileDrawer,loadClipFeed,loadStreamerDashboard,loadMarketplace,mktListNFT,mktDelistNFT,mktBuyNFT,mktUpdatePrice,mktEquipToken,mktUnequipToken,mktShowListModal,mktShowUpdateModal,mktSwitchTab,mktEquipFromInventory,updateSchedPreview,checkRewardVsBalance,loadWalletNFTAvatar,loadHireMePage,loadHireMeBrowse,hmBrowseFilter,hmBrowseRender,hmAddPOW,hmRemovePOW,hmViewClipper,hmMakeOffer,hmOpenOffer,hmCounterOffer,hmAcceptOffer,hmRejectOffer,hmSubmitClip,hmApproveClip,hmRequestCancel,hmAgreeCancel,hmRejectCancel,hmSendDM,hmSaveMyProfile,hmToggleAvailability,goBackFromDeal,loadStreamerBrowse,sbFilter,sbRender,sbViewStreamer,hmConfirm,hmAdjClips,hmAvaxInputChange,hmAvaxRangeChange,hmAvaxPreset,hmClipPreview,loadNFTExplorer,nftexFilter };
 Object.assign(window, exposed);
 
 // INIT
@@ -6024,6 +6206,7 @@ function hideTxClapper() {
     <button class="btn btn-ghost btn-sm nav-desktop-only" onclick="showPage('streamer-browse')" style="font-size:0.7rem;">📺 Find Streamers</button>
     <button class="btn btn-ghost btn-sm nav-desktop-only" onclick="showPage('rewards')" style="font-size:0.7rem;">💰 Rewards</button>
     <button class="btn btn-ghost btn-sm nav-desktop-only" onclick="showPage('referrals')" style="font-size:0.7rem;">💸 Refer</button>
+    <button class="btn btn-ghost btn-sm nav-desktop-only" onclick="showPage('nft-explorer')" style="font-size:0.7rem;">🔍 NFTs</button>
     <button class="btn btn-ghost btn-sm nav-desktop-only" onclick="showPage('docs')" style="font-size:0.7rem;">Docs</button>
     <!-- Wallet address — hidden on small screens -->
     <span id="nav-addr" class="nav-addr" style="display:none"></span>
@@ -6422,6 +6605,7 @@ function hideTxClapper() {
     <button class="mobile-drawer-btn" onclick="showPage('rewards');closeMobileDrawer()"><span style="font-size:1.3rem;">💰</span><span>Rewards</span></button>
     <button class="mobile-drawer-btn" onclick="showPage('referrals');closeMobileDrawer()"><span style="font-size:1.3rem;">💸</span><span>Referrals</span></button>
     <button class="mobile-drawer-btn" onclick="showPage('marketplace');closeMobileDrawer()"><span style="font-size:1.3rem;">🛒</span><span>Market</span></button>
+    <button class="mobile-drawer-btn" onclick="showPage('nft-explorer');closeMobileDrawer()"><span style="font-size:1.3rem;">🔍</span><span>NFT Explorer</span></button>
     <button class="mobile-drawer-btn" onclick="showPage('docs');closeMobileDrawer()"><span style="font-size:1.3rem;">📖</span><span>Docs</span></button>
     <button id="mob-admin-btn" class="mobile-drawer-btn" style="display:none;" onclick="showPage('admin');closeMobileDrawer()"><span style="font-size:1.3rem;">⚙️</span><span>Admin</span></button>
     <button class="mobile-drawer-btn" style="color:var(--red);" onclick="disconnectWallet();closeMobileDrawer()"><span style="font-size:1.3rem;">🚪</span><span>Disconnect</span></button>
@@ -7193,7 +7377,105 @@ function hideTxClapper() {
 
     <!-- CONTRACTS V2 -->
     <div class="card" style="margin-bottom:16px;border-left:3px solid var(--red);">
-      <h3 style="color:var(--red);margin-bottom:6px;display:flex;align-items:center;gap:8px;"><img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_3_2026-02-24_07-10-44-removebg-preview.png" style="width:18px;height:18px;object-fit:contain;" onerror="this.style.display='none'"/> Smart Contracts V2 — Fuji Testnet</h3>
+      <h3 style="color:var(--red);margin-bottom:6px;display:flex;align-items:center;gap:8px;"><img src="https://raw.githubusercontent.com/precidoboss/my-game-sprites/main/photo_3_2026-02-24_07-10-44-removebg-preview.png" style="width:18px;height:18px;object-fit:contain;" onerror="this.style.display='none'"/> Smart Contracts — Fuji Testnet</h3>
+      <div style="font-size:0.7rem;color:var(--muted);margin-bottom:12px;">All contracts are live on Avalanche Fuji. Click any address to inspect on Snowtrace.</div>
+      <div style="display:flex;flex-direction:column;gap:7px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:9px;background:var(--dark);border-radius:5px;flex-wrap:wrap;gap:6px;">
+          <span style="font-weight:600;font-size:0.86rem;">ClipDAO NFT</span>
+          <a href="https://testnet.snowtrace.io/address/0x5424306e8Ac64B11E8bf1fA834D4e298FB2889d3" target="_blank" style="font-family:var(--font-mono);font-size:0.68rem;color:var(--orange);">0x5424306e...89d3 ↗</a>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:9px;background:var(--dark);border-radius:5px;flex-wrap:wrap;gap:6px;">
+          <span style="font-weight:600;font-size:0.86rem;">Bounty Escrow</span>
+          <a href="https://testnet.snowtrace.io/address/0x6938022B15Dd63A92eBCf6a5CC4449baB9584670" target="_blank" style="font-family:var(--font-mono);font-size:0.68rem;color:var(--orange);">0x6938022B...4670 ↗</a>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:9px;background:var(--dark);border-radius:5px;flex-wrap:wrap;gap:6px;">
+          <span style="font-weight:600;font-size:0.86rem;">Treasury</span>
+          <a href="https://testnet.snowtrace.io/address/0xB7f1391eC7500076378666fEd574aD0884892776" target="_blank" style="font-family:var(--font-mono);font-size:0.68rem;color:var(--orange);">0xB7f1391e...2776 ↗</a>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:9px;background:var(--dark);border-radius:5px;flex-wrap:wrap;gap:6px;">
+          <span style="font-weight:600;font-size:0.86rem;">Marketplace</span>
+          <a href="https://testnet.snowtrace.io/address/0xb3b2fA9aA6B915909FC95EF8E1A19e7065ab5A0E" target="_blank" style="font-family:var(--font-mono);font-size:0.68rem;color:var(--orange);">0xb3b2fA9a...5A0E ↗</a>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:9px;background:var(--dark);border-radius:5px;flex-wrap:wrap;gap:6px;">
+          <span style="font-weight:600;font-size:0.86rem;">HireMe Escrow</span>
+          <a href="https://testnet.snowtrace.io/address/0xf9634174b816b6Af5E8CfC1d6A2676d395274cbf" target="_blank" style="font-family:var(--font-mono);font-size:0.68rem;color:var(--orange);">0xf9634174...4cbf ↗</a>
+        </div>
+      </div>
+      <div style="margin-top:14px;padding:10px;background:rgba(255,150,0,0.06);border-radius:6px;">
+        <div style="font-size:0.72rem;font-weight:700;color:var(--amber);margin-bottom:6px;">🆕 Latest Features</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:0.71rem;color:var(--muted);">
+          <div>✅ Hire Me — direct clipper deals</div><div>✅ On-chain negotiation + escrow</div>
+          <div>✅ NFT Marketplace live</div><div>✅ Referrals auto-paid on-chain</div>
+          <div>✅ Evolving level &amp; stats</div><div>✅ Genesis revenue share</div>
+          <div>✅ Browse Clippers &amp; Streamers</div><div>✅ NFT Explorer — all holders</div>
+        </div>
+      </div>
+      <div style="margin-top:10px;padding:9px;background:rgba(232,53,10,0.06);border-radius:5px;font-size:0.79rem;color:var(--muted);">⚠️ Fuji Testnet only. Mainnet after audit. Get test AVAX: <a href="https://faucet.avax.network" target="_blank" style="color:var(--orange);">faucet.avax.network</a></div>
+    </div>
+
+    <!-- HIRE ME DOCS -->
+    <div class="card" style="margin-bottom:16px;border-left:3px solid #22c55e;">
+      <h3 style="color:#22c55e;margin-bottom:14px;">🤝 Hire Me — Direct Clipper Deals</h3>
+      <p style="color:var(--muted);font-size:0.86rem;line-height:1.7;margin-bottom:14px;">Hire Me lets streamers directly hire individual clippers outside the open bounty system. All terms are negotiated on-chain and payment is held in escrow until clips are approved.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
+        <div style="background:var(--dark);border-radius:8px;padding:12px;">
+          <div style="font-weight:700;color:var(--orange);font-size:0.82rem;margin-bottom:6px;">📡 For Streamers</div>
+          <div style="font-size:0.78rem;color:var(--muted);line-height:1.6;">1. Browse Clippers page<br>2. View clipper's portfolio (POW)<br>3. Send an offer with clip count + AVAX<br>4. Negotiate until both parties agree<br>5. Lock AVAX — deal activates<br>6. Review &amp; approve each submitted clip<br>7. All approved → clipper is auto-paid</div>
+        </div>
+        <div style="background:var(--dark);border-radius:8px;padding:12px;">
+          <div style="font-weight:700;color:var(--success);font-size:0.82rem;margin-bottom:6px;">✂️ For Clippers</div>
+          <div style="font-size:0.78rem;color:var(--muted);line-height:1.6;">1. Set your Hire Me profile to Available<br>2. Upload POW clips to your portfolio<br>3. Set your rate note &amp; bio<br>4. Wait for streamer offers<br>5. Counter-offer or accept terms<br>6. Submit clips one at a time<br>7. Get paid when all approved</div>
+        </div>
+      </div>
+      <div style="background:rgba(34,197,94,0.05);border:1px solid rgba(34,197,94,0.2);border-radius:8px;padding:12px;font-size:0.8rem;color:var(--muted);line-height:1.6;">
+        <strong style="color:#22c55e;">Cancellation:</strong> Either party can request cancellation at any time. The <em>other party</em> must agree for it to take effect. If agreed, the streamer gets their AVAX back minus a 2% penalty. If rejected, the deal continues.
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-sm" onclick="showPage('hireme-browse')" style="font-size:0.78rem;">Browse Clippers →</button>
+        <button class="btn btn-ghost btn-sm" onclick="showPage('streamer-browse')" style="font-size:0.78rem;">Browse Streamers →</button>
+      </div>
+    </div>
+
+    <!-- GENESIS REWARDS CALLOUT -->
+    <div class="card" style="margin-bottom:16px;border-left:3px solid var(--amber);background:linear-gradient(135deg,rgba(255,165,0,0.04),transparent);">
+      <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;">
+        <div style="font-size:2rem;">💰</div>
+        <div style="flex:1;min-width:200px;">
+          <h3 style="color:var(--amber);margin-bottom:4px;font-size:1rem;">Genesis Holder Revenue Share</h3>
+          <p style="color:var(--muted);font-size:0.84rem;line-height:1.6;margin-bottom:10px;">Genesis NFT holders receive 30% of all treasury fees every month, weighted by NFT level. The more active you are, the higher your level, the bigger your share.</p>
+          <button class="btn btn-ghost btn-sm" onclick="showPage('rewards')" style="font-size:0.78rem;">📊 Track My Rewards →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- NFT MARKETPLACE -->
+    <div class="card" style="margin-bottom:16px;border-left:3px solid var(--amber);">
+      <h3 style="color:var(--amber);margin-bottom:10px;">🛒 NFT Marketplace</h3>
+      <p style="color:var(--muted);font-size:0.86rem;line-height:1.7;margin-bottom:8px;">Buy and sell ClipDAO membership NFTs. High-level NFTs carry their stats, wins and reputation — making them genuinely more valuable. After purchase, buyers confirm their own identity on-chain.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-sm" onclick="showPage('marketplace')" style="font-size:0.78rem;">Browse Marketplace →</button>
+        <button class="btn btn-ghost btn-sm" onclick="showPage('nft-explorer')" style="font-size:0.78rem;">🔍 NFT Explorer →</button>
+      </div>
+    </div>
+
+    <!-- FAQ -->
+    <div class="card" style="border-left:3px solid var(--orange);">
+      <h3 style="color:var(--orange);margin-bottom:14px;">FAQ</h3>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div style="border-bottom:1px solid var(--border);padding-bottom:10px;"><div style="font-weight:700;margin-bottom:3px;font-size:0.92rem;">Do I need crypto to use ClipDAO?</div><div style="color:var(--muted);font-size:0.83rem;">You need AVAX on Avalanche Fuji. New users get 1 free trial action. To continue, mint an NFT for 0.1 AVAX (Early Access).</div></div>
+        <div style="border-bottom:1px solid var(--border);padding-bottom:10px;"><div style="font-weight:700;margin-bottom:3px;font-size:0.92rem;">Which wallet?</div><div style="color:var(--muted);font-size:0.83rem;">Core Wallet (built for Avalanche) or MetaMask. ClipDAO auto-adds Fuji testnet on connect.</div></div>
+        <div style="border-bottom:1px solid var(--border);padding-bottom:10px;"><div style="font-weight:700;margin-bottom:3px;font-size:0.92rem;">How does Hire Me differ from bounties?</div><div style="color:var(--muted);font-size:0.83rem;">Bounties are open competitions — any clipper can submit. Hire Me is a private deal between one streamer and one clipper with negotiated terms and dedicated escrow.</div></div>
+        <div style="border-bottom:1px solid var(--border);padding-bottom:10px;"><div style="font-weight:700;margin-bottom:3px;font-size:0.92rem;">Zero submissions bounty?</div><div style="color:var(--muted);font-size:0.83rem;">If zero submissions exist at deadline, you can cancel and your AVAX is fully refunded.</div></div>
+        <div><div style="font-weight:700;margin-bottom:3px;font-size:0.92rem;">Where to post clips?</div><div style="color:var(--muted);font-size:0.83rem;">Post to X (Twitter) or YouTube, then submit that public link. Clip must be from Blaze or Arena content.</div></div>
+      </div>
+    </div>
+
+    <div style="text-align:center;margin-top:36px;">
+      <button class="btn btn-primary" onclick="connectWallet()">🔥 Connect & Start</button>
+      <button class="btn btn-ghost" style="margin-left:10px;" onclick="showPage('mint')">Mint NFT</button>
+    </div>
+  </div>
+
       <div style="font-size:0.7rem;color:var(--muted);margin-bottom:12px;">All contracts are live and verified. Click any address to inspect on Snowtrace.</div>
       <div style="display:flex;flex-direction:column;gap:7px;">
         <div style="display:flex;justify-content:space-between;align-items:center;padding:9px;background:var(--dark);border-radius:5px;flex-wrap:wrap;gap:6px;">
@@ -7265,7 +7547,49 @@ function hideTxClapper() {
 </div>
 
 
-<!-- ==================== PAGE: MARKETPLACE ==================== -->
+<!-- ==================== PAGE: NFT EXPLORER ==================== -->
+<div id="page-nft-explorer" class="page">
+  <div style="max-width:1000px;margin:0 auto;padding:0 16px 80px;">
+    <div style="border-radius:0 0 18px 18px;overflow:hidden;margin-bottom:28px;max-height:160px;position:relative;">
+      <div style="height:160px;background:linear-gradient(135deg,#0d0000 0%,#1a0500 50%,#000 100%);"></div>
+      <div style="position:absolute;inset:0;display:flex;align-items:center;padding:0 28px;">
+        <div>
+          <div style="font-family:var(--font-mono);font-size:0.7rem;color:var(--red);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;">🔍 On-Chain</div>
+          <div style="font-family:var(--font-display);font-size:2.2rem;line-height:1;color:white;">NFT Explorer</div>
+          <div style="font-size:0.82rem;color:rgba(255,255,255,0.5);margin-top:6px;">All minted ClipDAO NFTs — owners, tiers, stats</div>
+        </div>
+      </div>
+    </div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div id="nftex-summary" style="font-size:0.82rem;color:var(--muted);flex:1;">Loading from chain…</div>
+      <button class="btn btn-ghost btn-sm" onclick="loadNFTExplorer()" style="font-size:0.78rem;">🔄 Refresh</button>
+      <input type="text" id="nftex-search" placeholder="Search wallet or username…" oninput="nftexFilter()" style="font-size:0.82rem;border-radius:9px;padding:7px 12px;width:220px;"/>
+      <select id="nftex-tier" onchange="nftexFilter()" style="font-size:0.82rem;border-radius:9px;padding:7px 12px;background:var(--dark);border:1px solid var(--border);color:var(--text);">
+        <option value="">All Tiers</option>
+        <option value="1">👑 Genesis</option>
+        <option value="2">⚡ Early Access</option>
+      </select>
+      <select id="nftex-role" onchange="nftexFilter()" style="font-size:0.82rem;border-radius:9px;padding:7px 12px;background:var(--dark);border:1px solid var(--border);color:var(--text);">
+        <option value="">All Roles</option>
+        <option value="0">📡 Streamers</option>
+        <option value="1">✂️ Clippers</option>
+      </select>
+      <select id="nftex-sort" onchange="nftexFilter()" style="font-size:0.82rem;border-radius:9px;padding:7px 12px;background:var(--dark);border:1px solid var(--border);color:var(--text);">
+        <option value="id">Token ID</option>
+        <option value="level">Level ↓</option>
+        <option value="wins">Wins ↓</option>
+        <option value="rep">Rep ↓</option>
+      </select>
+    </div>
+    <div id="nftex-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;">
+      <div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:var(--muted);">
+        <div class="spinner"></div><p style="margin-top:12px;">Loading NFTs from Avalanche Fuji…</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== PAGE: STREAMER BROWSE ==================== -->
 <div id="page-streamer-browse" class="page">
   <div style="max-width:1100px;margin:0 auto;padding:0 16px 80px;">
     <div style="border-radius:0 0 18px 18px;overflow:hidden;margin-bottom:28px;max-height:170px;position:relative;">
