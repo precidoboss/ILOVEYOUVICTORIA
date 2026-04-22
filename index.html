@@ -257,13 +257,24 @@
     justify-content: center;
     position: relative;
     width: 100%;
-    margin-top: -10px;
+    margin-top: -8px;
+  }
+
+  /* Glowing arena floor line */
+  #pedestal-area::after {
+    content: '';
+    position: absolute;
+    bottom: 18px; left: 8%; right: 8%;
+    height: 1px;
+    background: linear-gradient(to right, transparent, rgba(255,140,0,0.25), rgba(255,215,0,0.45), rgba(255,140,0,0.25), transparent);
+    box-shadow: 0 0 18px rgba(255,140,0,0.25);
+    pointer-events: none;
   }
 
   #miner-frame {
     position: relative;
-    width: 280px;
-    height: 280px;
+    width: 260px;
+    height: 260px;
     transform-style: preserve-3d;
   }
 
@@ -271,28 +282,28 @@
   #miner-frame::before {
     content: '';
     position: absolute;
-    inset: -16px;
-    background:
-      linear-gradient(135deg, #4a3020 0%, #2a1c10 50%, #3a2618 100%);
-    border-radius: 8px;
+    inset: -18px;
+    background: linear-gradient(145deg, #3a2818 0%, #1e1408 45%, #2e2010 100%);
+    border-radius: 10px;
     box-shadow:
-      0 0 0 3px #1a1008,
-      0 0 0 6px rgba(255,140,0,0.2),
-      0 0 40px rgba(255,100,0,0.3),
-      inset 0 0 20px rgba(0,0,0,0.8);
+      0 0 0 2px #120d06,
+      0 0 0 4px rgba(255,120,0,0.12),
+      0 0 50px rgba(255,100,0,0.18),
+      0 0 100px rgba(255,80,0,0.08),
+      inset 0 0 30px rgba(0,0,0,0.9);
   }
 
-  /* Rune decorations on corners */
+  /* Label beneath */
   #miner-frame::after {
-    content: '✦ IDENTIFY THE MINER ✦';
+    content: '✦  IDENTIFY THE MINER  ✦';
     position: absolute;
-    bottom: -46px;
+    bottom: -50px;
     left: 50%;
     transform: translateX(-50%);
     font-family: 'Share Tech Mono', monospace;
-    font-size: 11px;
-    letter-spacing: 4px;
-    color: var(--dim-gold);
+    font-size: 10px;
+    letter-spacing: 5px;
+    color: rgba(255,180,60,0.32);
     white-space: nowrap;
   }
 
@@ -302,36 +313,37 @@
     object-fit: contain;
     position: relative;
     z-index: 2;
-    border-radius: 4px;
-    filter: drop-shadow(0 0 20px rgba(255,140,0,0.5));
+    border-radius: 6px;
+    filter: drop-shadow(0 0 22px rgba(255,160,0,0.4));
     transition: transform 0.6s ease;
     image-rendering: pixelated;
-    background: radial-gradient(ellipse at center, rgba(255,100,0,0.05) 0%, transparent 80%);
+    background: radial-gradient(ellipse at center, rgba(255,100,0,0.04) 0%, transparent 80%);
   }
 
   #miner-img.reveal {
-    animation: miner-reveal 0.6s cubic-bezier(0.175,0.885,0.32,1.275);
+    animation: miner-reveal 0.5s cubic-bezier(0.175,0.885,0.32,1.275);
   }
   @keyframes miner-reveal {
-    0%{transform:scale(0.5) rotateY(90deg);opacity:0}
+    0%{transform:scale(0.55) rotateY(80deg);opacity:0}
     100%{transform:scale(1) rotateY(0);opacity:1}
   }
 
   /* Stat tags */
   #miner-stats-display {
     display: flex;
-    gap: 12px;
-    margin-top: 54px;
+    gap: 10px;
+    margin-top: 58px;
     justify-content: center;
+    flex-wrap: wrap;
   }
   .stat-chip {
-    background: rgba(255,100,0,0.12);
-    border: 1px solid rgba(255,100,0,0.25);
-    padding: 5px 14px;
+    background: rgba(255,100,0,0.07);
+    border: 1px solid rgba(255,100,0,0.18);
+    padding: 4px 14px;
     border-radius: 20px;
     font-family: 'Share Tech Mono', monospace;
-    font-size: 13px;
-    color: rgba(255,200,100,0.8);
+    font-size: 12px;
+    color: rgba(255,185,75,0.65);
     letter-spacing: 1px;
     backdrop-filter: blur(4px);
   }
@@ -355,149 +367,7 @@
   #diff-badge.extreme { color: var(--wrong-red); border-color: rgba(255,23,68,0.4); animation: pulse-red 0.8s infinite alternate; }
   @keyframes pulse-red { 0%{box-shadow:0 0 0 rgba(255,23,68,0)} 100%{box-shadow:0 0 12px rgba(255,23,68,0.5)} }
 
-  /* ── 3D PILLARS / ANSWER CHOICES ─────────────────── */
-  #pillars-section {
-    width: 100%;
-    max-width: 940px;
-    display: flex;
-    justify-content: center;
-    gap: 20px;
-    padding: 0 20px 20px;
-    position: relative;
-    z-index: 20;
-  }
-
-  .pillar-wrap {
-    flex: 1;
-    max-width: 280px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    cursor: pointer;
-    position: relative;
-    transform-style: preserve-3d;
-    transition: transform 0.15s ease;
-  }
-  .pillar-wrap:hover { transform: translateY(-6px); }
-  .pillar-wrap:active { transform: translateY(-2px); }
-
-  /* Pillar sides for 3D illusion */
-  .pillar-top {
-    width: 100%;
-    height: 16px;
-    background: linear-gradient(to bottom, #5a4030, #3a2820);
-    border-radius: 4px 4px 0 0;
-    box-shadow: 0 -4px 12px rgba(255,100,0,0.2);
-    position: relative;
-    border-top: 2px solid rgba(255,180,80,0.3);
-  }
-  .pillar-top::before {
-    content: '';
-    position: absolute;
-    bottom: 0; left: 0; right: 0;
-    height: 3px;
-    background: rgba(0,0,0,0.4);
-  }
-
-  .pillar-body {
-    width: 100%;
-    padding: 16px 14px;
-    background:
-      linear-gradient(180deg, var(--pillar-face) 0%, var(--pillar-base) 100%);
-    border-left: 3px solid var(--pillar-highlight);
-    border-right: 3px solid rgba(0,0,0,0.5);
-    position: relative;
-    text-align: center;
-    min-height: 70px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  /* Rune lines on pillar */
-  .pillar-body::before {
-    content: '';
-    position: absolute;
-    left: 10px; top: 6px; bottom: 6px;
-    width: 1px;
-    background: linear-gradient(to bottom, transparent, rgba(255,180,80,0.15), transparent);
-  }
-  .pillar-body::after {
-    content: '';
-    position: absolute;
-    right: 10px; top: 6px; bottom: 6px;
-    width: 1px;
-    background: linear-gradient(to bottom, transparent, rgba(255,180,80,0.15), transparent);
-  }
-
-  .pillar-text {
-    font-family: 'Cinzel', serif;
-    font-size: 13.5px;
-    font-weight: 600;
-    color: #d4b87a;
-    line-height: 1.3;
-    position: relative;
-    z-index: 2;
-    letter-spacing: 0.5px;
-  }
-
-  .pillar-base-block {
-    width: 100%;
-    height: 12px;
-    background: linear-gradient(to bottom, #2a1c10, #1a1008);
-    border-radius: 0 0 3px 3px;
-    box-shadow: 0 6px 20px rgba(0,0,0,0.6), 0 2px 0 rgba(255,140,0,0.1);
-  }
-
-  /* Pillar letter badge */
-  .pillar-letter {
-    position: absolute;
-    top: -22px;
-    left: 50%;
-    transform: translateX(-50%);
-    font-family: 'Cinzel Decorative', serif;
-    font-size: 14px;
-    color: var(--dim-gold);
-    background: var(--pillar-base);
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid rgba(255,180,80,0.3);
-    z-index: 5;
-  }
-
-  /* Pillar states */
-  .pillar-wrap.correct .pillar-body {
-    background: linear-gradient(180deg, rgba(0,100,50,0.4) 0%, rgba(0,60,30,0.4) 100%);
-    border-left-color: var(--correct-green);
-    box-shadow: 0 0 30px rgba(0,255,136,0.4);
-  }
-  .pillar-wrap.correct .pillar-text { color: var(--correct-green); text-shadow: 0 0 15px rgba(0,255,136,0.8); }
-
-  .pillar-wrap.wrong .pillar-body {
-    background: linear-gradient(180deg, rgba(120,0,0,0.5) 0%, rgba(80,0,0,0.5) 100%);
-    border-left-color: var(--wrong-red);
-    box-shadow: 0 0 30px rgba(255,23,68,0.4);
-    animation: wrong-shake 0.4s ease;
-  }
-  .pillar-wrap.wrong .pillar-text { color: var(--wrong-red); }
-
-  @keyframes wrong-shake {
-    0%{transform:translateX(0)} 20%{transform:translateX(-6px)} 40%{transform:translateX(6px)} 60%{transform:translateX(-4px)} 80%{transform:translateX(4px)} 100%{transform:translateX(0)}
-  }
-
-  .pillar-wrap.disabled { pointer-events: none; }
-
-  /* Glow on hover */
-  .pillar-wrap:not(.correct):not(.wrong):not(.disabled):hover .pillar-body {
-    background: linear-gradient(180deg, #3d2d1f 0%, #2a1e14 100%);
-    border-left-color: rgba(255,180,80,0.6);
-    box-shadow: 0 0 20px rgba(255,140,0,0.25);
-  }
-  .pillar-wrap:not(.correct):not(.wrong):not(.disabled):hover .pillar-text { color: #ffcc66; }
+  /* ── 3D PILLARS / ANSWER CHOICES — see improved styles below ── */
 
   /* ── FEEDBACK FLASH ───────────────────────────────── */
   #feedback-flash {
@@ -1429,36 +1299,506 @@
   .status-badge.exhausted { color: rgba(200,150,80,0.6); background: rgba(200,150,80,0.06); border: 1px solid rgba(200,150,80,0.15); }
 
   /* ── HOW TO PLAY PAGE ────────────────────────────── */
-  .how-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-    margin-bottom: 24px;
+  .how-hero {
+    text-align: center;
+    padding: 10px 0 32px;
   }
-  @media(max-width:600px){ .how-grid{grid-template-columns:1fr;} }
-  .how-card {
-    background: rgba(255,100,0,0.05);
-    border: 1px solid rgba(255,140,0,0.15);
-    border-radius: 7px;
-    padding: 20px 18px;
+  .how-hero-title {
+    font-family: 'Cinzel Decorative', serif;
+    font-size: clamp(18px,4vw,32px);
+    color: var(--gold);
+    text-shadow: 0 0 30px rgba(255,215,0,0.5);
+    margin-bottom: 8px;
   }
-  .how-card-icon { font-size: 26px; margin-bottom: 10px; display: block; }
-  .how-card-title {
+  .how-hero-sub {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 4px;
+    color: rgba(255,150,50,0.5);
+  }
+
+  /* Animated demo widget */
+  #demo-widget {
+    background: linear-gradient(135deg, rgba(10,8,4,0.95), rgba(20,14,8,0.95));
+    border: 1px solid rgba(255,180,60,0.3);
+    border-radius: 12px;
+    padding: 24px;
+    margin: 0 0 32px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 0 40px rgba(255,100,0,0.1), inset 0 0 60px rgba(0,0,0,0.5);
+  }
+  #demo-widget::before {
+    content: 'LIVE DEMO';
+    position: absolute;
+    top: 12px; right: 16px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 3px;
+    color: var(--fire);
+    background: rgba(255,100,0,0.1);
+    border: 1px solid rgba(255,100,0,0.25);
+    border-radius: 3px;
+    padding: 2px 8px;
+  }
+  .demo-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: rgba(255,150,50,0.5);
+    text-align: center;
+    margin-bottom: 14px;
+  }
+  #demo-inner {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    justify-content: center;
+  }
+  @media(max-width:580px){ #demo-inner{flex-direction:column;align-items:center;} }
+  #demo-left { flex-shrink: 0; display:flex; flex-direction:column; align-items:center; }
+  #demo-right { flex: 1; display:flex; flex-direction:column; min-width:0; }
+  #demo-img-loader {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 32px;
+    animation: spin-pick 1.5s linear infinite;
+    color: rgba(255,140,0,0.4);
+  }
+  #demo-miner-frame {
+    flex-shrink: 0;
+    width: 120px;
+    height: 120px;
+    background: linear-gradient(135deg, #2a1c10, #1a1008);
+    border: 2px solid rgba(255,140,0,0.3);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    box-shadow: 0 0 20px rgba(255,100,0,0.15);
+    overflow: hidden;
+  }
+  #demo-miner-img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    image-rendering: pixelated;
+    transition: opacity 0.4s ease;
+  }
+  #demo-miner-img.fading { opacity: 0; }
+  #demo-answers {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+  }
+  .demo-opt {
+    background: linear-gradient(90deg, rgba(42,32,24,0.9), rgba(30,22,14,0.9));
+    border: 1px solid rgba(255,140,0,0.2);
+    border-left: 3px solid rgba(255,140,0,0.4);
+    border-radius: 4px;
+    padding: 9px 14px;
+    font-family: 'Cinzel', serif;
+    font-size: 11px;
+    color: #d4b87a;
+    letter-spacing: 0.5px;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .demo-opt.demo-correct {
+    border-left-color: var(--correct-green);
+    background: linear-gradient(90deg, rgba(0,80,40,0.5), rgba(0,50,25,0.4));
+    color: var(--correct-green);
+    box-shadow: 0 0 20px rgba(0,255,136,0.2);
+  }
+  .demo-opt.demo-wrong {
+    border-left-color: var(--wrong-red);
+    background: linear-gradient(90deg, rgba(100,0,0,0.5), rgba(60,0,0,0.4));
+    color: var(--wrong-red);
+    opacity: 0.7;
+  }
+  .demo-opt.demo-cursor {
+    border-color: rgba(255,215,0,0.5);
+    background: linear-gradient(90deg, rgba(50,38,20,0.9), rgba(38,28,14,0.9));
+    color: var(--gold);
+    box-shadow: 0 0 12px rgba(255,215,0,0.15);
+  }
+  .demo-answer-label {
+    display: inline-block;
+    width: 16px; height: 16px;
+    background: rgba(255,140,0,0.15);
+    border: 1px solid rgba(255,140,0,0.3);
+    border-radius: 50%;
+    font-size: 9px;
+    text-align: center;
+    line-height: 16px;
+    margin-right: 8px;
+    font-family: 'Cinzel Decorative', serif;
+    color: var(--dim-gold);
+    vertical-align: middle;
+  }
+  #demo-status {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: rgba(255,150,50,0.5);
+    text-align: center;
+    margin-top: 12px;
+    min-height: 16px;
+  }
+  #demo-status.correct { color: var(--correct-green); }
+  #demo-status.wrong { color: var(--wrong-red); }
+
+  /* Steps flow */
+  .how-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin-bottom: 28px;
+    position: relative;
+  }
+  .how-steps::before {
+    content: '';
+    position: absolute;
+    left: 22px; top: 44px; bottom: 44px;
+    width: 2px;
+    background: linear-gradient(to bottom, rgba(255,140,0,0.3), rgba(255,140,0,0.1));
+  }
+  .how-step {
+    display: flex;
+    gap: 18px;
+    align-items: flex-start;
+    padding: 18px 20px;
+    background: rgba(255,100,0,0.04);
+    border: 1px solid rgba(255,140,0,0.12);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    transition: all 0.2s;
+    position: relative;
+  }
+  .how-step:hover { background: rgba(255,100,0,0.08); border-color: rgba(255,140,0,0.25); }
+  .how-step-num {
+    flex-shrink: 0;
+    width: 44px; height: 44px;
+    background: linear-gradient(135deg, rgba(255,140,0,0.2), rgba(255,80,0,0.12));
+    border: 1px solid rgba(255,140,0,0.35);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Cinzel Decorative', serif;
+    font-size: 16px;
+    color: var(--gold);
+    position: relative;
+    z-index: 1;
+  }
+  .how-step-body { flex: 1; min-width: 0; }
+  .how-step-title {
     font-family: 'Cinzel', serif;
     font-size: 14px;
     color: var(--gold);
-    margin-bottom: 8px;
+    margin-bottom: 5px;
     letter-spacing: 1px;
   }
-  .how-card-text {
+  .how-step-text {
     font-family: 'Share Tech Mono', monospace;
-    font-size: 12px;
-    color: rgba(200,160,80,0.7);
-    line-height: 1.7;
-    letter-spacing: 0.5px;
+    font-size: 11.5px;
+    color: rgba(200,165,90,0.75);
+    line-height: 1.75;
+    letter-spacing: 0.3px;
+  }
+  .how-step-text strong { color: rgba(255,200,100,0.9); }
+  .how-step-tag {
+    display: inline-block;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 2px;
+    padding: 2px 8px;
+    border-radius: 20px;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  .tag-free { background: rgba(0,255,136,0.08); border: 1px solid rgba(0,255,136,0.2); color: var(--correct-green); }
+  .tag-paid { background: rgba(255,215,0,0.08); border: 1px solid rgba(255,215,0,0.25); color: var(--gold); }
+  .tag-chain { background: rgba(255,100,0,0.1); border: 1px solid rgba(255,100,0,0.25); color: var(--fire); }
+
+  /* Prize splits row on how-to */
+  .how-prize-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+    margin: 12px 0 4px;
+  }
+  @media(max-width:500px){ .how-prize-row{grid-template-columns:1fr 1fr;} }
+  .how-prize-chip {
+    background: rgba(255,215,0,0.06);
+    border: 1px solid rgba(255,215,0,0.15);
+    border-radius: 6px;
+    padding: 8px 6px;
+    text-align: center;
+    font-family: 'Share Tech Mono', monospace;
+  }
+  .how-prize-chip-rank { font-size: 16px; margin-bottom: 3px; }
+  .how-prize-chip-pct { font-size: 13px; color: var(--gold); font-weight: bold; }
+  .how-prize-chip-label { font-size: 9px; letter-spacing: 1px; color: rgba(200,160,80,0.5); margin-top: 2px; }
+
+  /* Keyboard shortcut row */
+  .how-keys-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+  }
+  .how-key-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255,100,0,0.06);
+    border: 1px solid rgba(255,100,0,0.2);
+    border-radius: 6px;
+    padding: 8px 14px;
+  }
+  .how-key-badge {
+    background: rgba(255,215,0,0.15);
+    border: 1px solid rgba(255,215,0,0.3);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    color: var(--gold);
+    font-weight: bold;
+  }
+  .how-key-desc {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: rgba(200,160,80,0.6);
   }
 
-  /* ── PAID GAME HUD EXTRAS ────────────────────────── */
+  /* Credit footer */
+  .how-credit {
+    margin-top: 28px;
+    padding: 18px 24px;
+    background: linear-gradient(135deg, rgba(255,215,0,0.04), rgba(255,100,0,0.04));
+    border: 1px solid rgba(255,215,0,0.15);
+    border-radius: 8px;
+    text-align: center;
+  }
+  .how-credit-title {
+    font-family: 'Cinzel', serif;
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: rgba(255,150,50,0.5);
+    margin-bottom: 8px;
+  }
+  .how-credit-name {
+    font-family: 'Cinzel Decorative', serif;
+    font-size: 16px;
+    color: var(--gold);
+    text-shadow: 0 0 20px rgba(255,215,0,0.4);
+  }
+  .how-credit-sub {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: rgba(200,160,80,0.5);
+    margin-top: 5px;
+  }
+  .how-credit-link {
+    color: var(--fire);
+    text-decoration: none;
+    border-bottom: 1px solid rgba(255,100,0,0.3);
+    transition: color 0.2s;
+  }
+  .how-credit-link:hover { color: var(--gold); }
+
+  /* ── LEADERBOARD COUNTDOWN ───────────────────────── */
+  #lb-countdown-wrap {
+    background: linear-gradient(135deg, rgba(255,23,68,0.06), rgba(255,100,0,0.06));
+    border: 1px solid rgba(255,23,68,0.25);
+    border-radius: 8px;
+    padding: 14px 20px;
+    text-align: center;
+    margin-bottom: 20px;
+  }
+  #lb-countdown-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: rgba(255,150,50,0.6);
+    margin-bottom: 8px;
+  }
+  #lb-countdown-digits {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    align-items: center;
+  }
+  .cd-block {
+    background: rgba(255,23,68,0.1);
+    border: 1px solid rgba(255,23,68,0.3);
+    border-radius: 5px;
+    padding: 6px 12px;
+    min-width: 52px;
+    text-align: center;
+  }
+  .cd-num {
+    font-family: 'Cinzel Decorative', serif;
+    font-size: 22px;
+    color: var(--wrong-red);
+    text-shadow: 0 0 12px rgba(255,23,68,0.6);
+    line-height: 1;
+  }
+  .cd-unit {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 8px;
+    letter-spacing: 2px;
+    color: rgba(255,100,50,0.5);
+    margin-top: 2px;
+  }
+  .cd-sep {
+    font-family: 'Cinzel Decorative', serif;
+    font-size: 20px;
+    color: rgba(255,100,50,0.4);
+    margin-bottom: 10px;
+  }
+
+  /* ── IMPROVED PILLARS ────────────────────────────── */
+  #pillars-section {
+    width: 100%;
+    max-width: 960px;
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    padding: 0 16px 24px;
+    position: relative;
+    z-index: 20;
+  }
+  .pillar-wrap {
+    flex: 1;
+    max-width: 300px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    position: relative;
+    transform-style: preserve-3d;
+    transition: transform 0.18s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.18s;
+    filter: drop-shadow(0 6px 16px rgba(0,0,0,0.5));
+  }
+  .pillar-wrap:hover { transform: translateY(-8px) scale(1.02); filter: drop-shadow(0 12px 28px rgba(255,100,0,0.25)); }
+  .pillar-wrap:active { transform: translateY(-2px) scale(0.99); }
+  .pillar-top {
+    width: 100%;
+    height: 14px;
+    background: linear-gradient(to bottom, #6a5040, #3a2820);
+    border-radius: 6px 6px 0 0;
+    box-shadow: 0 -3px 8px rgba(255,100,0,0.15);
+    position: relative;
+    border-top: 2px solid rgba(255,200,100,0.35);
+  }
+  .pillar-top::after {
+    content: '';
+    position: absolute;
+    left: 8px; right: 8px; bottom: 0;
+    height: 2px;
+    background: rgba(0,0,0,0.5);
+  }
+  .pillar-body {
+    width: 100%;
+    padding: 18px 16px;
+    background: linear-gradient(180deg, #32241a 0%, #221610 60%, #1a100a 100%);
+    border-left: 3px solid rgba(255,160,60,0.35);
+    border-right: 3px solid rgba(0,0,0,0.6);
+    position: relative;
+    text-align: center;
+    min-height: 76px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+  }
+  .pillar-body::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(255,180,80,0.04) 0%, transparent 50%);
+    pointer-events: none;
+  }
+  /* Engraving lines */
+  .pillar-body::after {
+    content: '';
+    position: absolute;
+    left: 12px; right: 12px;
+    top: 6px; bottom: 6px;
+    border-left: 1px solid rgba(255,180,80,0.08);
+    border-right: 1px solid rgba(255,180,80,0.08);
+    pointer-events: none;
+  }
+  .pillar-text {
+    font-family: 'Cinzel', serif;
+    font-size: 13px;
+    font-weight: 600;
+    color: #d4b87a;
+    line-height: 1.35;
+    position: relative;
+    z-index: 2;
+    letter-spacing: 0.3px;
+  }
+  .pillar-base-block {
+    width: 108%;
+    height: 14px;
+    background: linear-gradient(to bottom, #2a1c10, #150e06);
+    border-radius: 0 0 5px 5px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.7), 0 2px 0 rgba(255,120,0,0.08);
+  }
+  .pillar-letter {
+    position: absolute;
+    top: -24px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'Cinzel Decorative', serif;
+    font-size: 13px;
+    color: var(--dim-gold);
+    background: linear-gradient(135deg, #2a1e12, #1a1208);
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid rgba(255,180,80,0.35);
+    box-shadow: 0 0 10px rgba(255,100,0,0.15);
+    z-index: 5;
+  }
+  /* Pillar hover glow arc */
+  .pillar-wrap:not(.correct):not(.wrong):not(.disabled):hover .pillar-body {
+    background: linear-gradient(180deg, #3e2e20 0%, #2e2016 60%, #201408 100%);
+    border-left-color: rgba(255,200,80,0.7);
+    box-shadow: inset 0 0 20px rgba(255,140,0,0.08), 0 0 30px rgba(255,120,0,0.2);
+  }
+  .pillar-wrap:not(.correct):not(.wrong):not(.disabled):hover .pillar-text { color: #ffe088; }
+  .pillar-wrap.correct .pillar-body {
+    background: linear-gradient(180deg, rgba(0,110,55,0.45), rgba(0,70,35,0.45));
+    border-left-color: var(--correct-green);
+    box-shadow: 0 0 40px rgba(0,255,136,0.35), inset 0 0 20px rgba(0,255,136,0.05);
+  }
+  .pillar-wrap.correct .pillar-text { color: var(--correct-green); text-shadow: 0 0 12px rgba(0,255,136,0.7); }
+  .pillar-wrap.wrong .pillar-body {
+    background: linear-gradient(180deg, rgba(130,0,0,0.5), rgba(80,0,0,0.5));
+    border-left-color: var(--wrong-red);
+    box-shadow: 0 0 40px rgba(255,23,68,0.35);
+    animation: wrong-shake 0.4s ease;
+  }
+  .pillar-wrap.wrong .pillar-text { color: var(--wrong-red); }
+  .pillar-wrap.disabled { pointer-events: none; }
   #paid-hud-extra {
     display: none;
     align-items: center;
@@ -1604,45 +1944,138 @@
 <!-- HOW TO PLAY PAGE -->
 <div class="page" id="page-howto">
   <div class="page-inner">
-    <div class="page-title">HOW TO PLAY</div>
-    <div class="page-sub">⛏ MASTER THE GROTTO TRIALS ⛏</div>
-    <div class="how-grid">
-      <div class="how-card">
-        <span class="how-card-icon">🔗</span>
-        <div class="how-card-title">1. CONNECT YOUR WALLET</div>
-        <div class="how-card-text">Connect MetaMask to either Avalanche C-Chain or The Grotto L1. Your wallet address becomes your unique identity. Choose a username for the leaderboard.</div>
+
+    <!-- HERO -->
+    <div class="how-hero">
+      <div class="how-hero-title">⛏ HOW TO PLAY</div>
+      <div class="how-hero-sub">MASTER THE GROTTO TRIALS · IDENTIFY MINERS · WIN TOKENS</div>
+    </div>
+
+    <!-- LIVE DEMO WIDGET -->
+    <div id="demo-widget">
+      <div class="demo-label">⚡ LIVE DEMO — REAL MINERS FROM THE CHAIN</div>
+      <div id="demo-inner">
+        <div id="demo-left">
+          <div id="demo-miner-frame">
+            <div id="demo-img-loader">⛏</div>
+            <img id="demo-miner-img" src="" alt="miner" style="display:none;" />
+          </div>
+          <div id="demo-miner-name" style="font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:2px;color:rgba(255,150,50,0.4);text-align:center;margin-top:8px;">LOADING...</div>
+        </div>
+        <div id="demo-right">
+          <div id="demo-question-label" style="font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:3px;color:rgba(255,150,50,0.5);margin-bottom:10px;">IDENTIFY THIS MINER:</div>
+          <div id="demo-answers">
+            <div class="demo-opt" id="demo-opt-0"><span class="demo-answer-label">A</span><span class="demo-opt-text">—</span></div>
+            <div class="demo-opt" id="demo-opt-1"><span class="demo-answer-label">B</span><span class="demo-opt-text">—</span></div>
+            <div class="demo-opt" id="demo-opt-2"><span class="demo-answer-label">C</span><span class="demo-opt-text">—</span></div>
+          </div>
+          <div id="demo-score-row" style="display:flex;justify-content:space-between;margin-top:10px;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:2px;">
+            <span style="color:rgba(255,150,50,0.5);">SCORE: <span id="demo-score" style="color:var(--gold);">0</span></span>
+            <span style="color:rgba(255,150,50,0.5);">STREAK: <span id="demo-streak" style="color:var(--fire);">×1</span></span>
+          </div>
+        </div>
       </div>
-      <div class="how-card">
-        <span class="how-card-icon">🆓</span>
-        <div class="how-card-title">2. FREE MODE</div>
-        <div class="how-card-text">Identify Grotto miner NFTs from their image. 10 rounds. 3 lives. Each wrong answer or timeout costs a life. Build streaks for score multipliers. A hint eliminates one wrong option.</div>
+      <div id="demo-status">CONNECTING TO CHAIN...</div>
+      <div id="demo-timer-bar" style="height:3px;background:rgba(255,255,255,0.06);border-radius:2px;margin-top:10px;overflow:hidden;"><div id="demo-timer-fill" style="height:100%;background:linear-gradient(to right,var(--gold),var(--fire));width:100%;transition:width 0.1s linear;"></div></div>
+    </div>
+
+    <!-- STEPS -->
+    <div class="how-steps">
+
+      <div class="how-step">
+        <div class="how-step-num">1</div>
+        <div class="how-step-body">
+          <div class="how-step-title">🔗 CONNECT YOUR WALLET</div>
+          <div class="how-step-text">
+            Connect MetaMask to <strong>The Grotto L1</strong> — Avalanche subnet, pay in <strong>$HERESY</strong> — or <strong>Avalanche C-Chain</strong>, pay in <strong>$hCASH</strong>.<br>
+            Choose a username that appears on the leaderboard. Use the <strong>🔀 SWITCH CHAIN</strong> button in the nav bar to switch networks at any time.
+          </div>
+          <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+            <span class="how-step-tag tag-chain">🌋 THE GROTTO L1</span>
+            <span class="how-step-tag tag-chain">🔺 AVALANCHE C-CHAIN</span>
+          </div>
+        </div>
       </div>
-      <div class="how-card">
-        <span class="how-card-icon">💀</span>
-        <div class="how-card-title">3. GROTTO TRIALS (PAID)</div>
-        <div class="how-card-text">Pay $1 worth of $HERESY (Grotto L1) or $hCASH (Avalanche C-Chain) to enter. Each $1 gives 3 chances. No limit on entries. Questions are harder — similar-looking options included. Identify as many miners as possible in 60 seconds.</div>
+
+      <div class="how-step">
+        <div class="how-step-num">2</div>
+        <div class="how-step-body">
+          <div class="how-step-title">🆓 FREE MODE <span class="how-step-tag tag-free">FREE</span></div>
+          <div class="how-step-text">
+            A <strong>Grotto Miner NFT</strong> image appears on the pedestal. Three stone pillars show possible names — pick the correct one before time runs out.<br><br>
+            <strong>10 rounds · 3 lives</strong> — each wrong answer or timeout costs a life. Difficulty scales with each round: Easy → Medium → Hard → Extreme.<br><br>
+            Build answer <strong>streaks</strong> for up to <strong>×5 score multipliers</strong>. You get one <strong>⛏ HINT</strong> per game — it eliminates a wrong option but costs 30 points. Reach round 10 alive to master the grotto.
+          </div>
+        </div>
       </div>
-      <div class="how-card">
-        <span class="how-card-icon">🏆</span>
-        <div class="how-card-title">4. WIN THE PRIZE POOL</div>
-        <div class="how-card-text">Top 5 players on the paid leaderboard split the prize pool. 5% platform fee is deducted. Rank 1 gets the largest share. Pool is distributed at the end of each season.</div>
+
+      <div class="how-step" style="background:rgba(255,215,0,0.03);border-color:rgba(255,215,0,0.18);">
+        <div class="how-step-num" style="border-color:rgba(255,215,0,0.4);background:linear-gradient(135deg,rgba(255,215,0,0.15),rgba(255,100,0,0.1));">💀</div>
+        <div class="how-step-body">
+          <div class="how-step-title">💀 GROTTO TRIALS <span class="how-step-tag tag-paid">PAID · WIN TOKENS</span></div>
+          <div class="how-step-text">
+            Pay <strong>$1 worth of tokens</strong> to unlock <strong>3 chances</strong>. No entry limit — buy as many chances as you need to beat the leaderboard.<br><br>
+            You get a single <strong>60-second window</strong> to identify as many miners as possible. No per-question timer — work at your own pace, but every second counts.<br><br>
+            Options are <strong>deliberately confusing</strong> — similar names, same categories. Your score from that 60-second run is submitted to the leaderboard. Only your <strong>best run</strong> counts.
+          </div>
+        </div>
       </div>
-      <div class="how-card">
-        <span class="how-card-icon">💰</span>
-        <div class="how-card-title">5. PRIZE DISTRIBUTION</div>
-        <div class="how-card-text">🥇 Rank 1: 40% · 🥈 Rank 2: 25% · 🥉 Rank 3: 15% · 4th: 12% · 5th: 8% of the net prize pool after 5% platform fee.</div>
+
+      <div class="how-step">
+        <div class="how-step-num">4</div>
+        <div class="how-step-body">
+          <div class="how-step-title">⛓ TOKENS &amp; PAYMENT <span class="how-step-tag tag-chain">ON-CHAIN</span></div>
+          <div class="how-step-text">
+            <strong>Grotto L1:</strong> <code style="color:rgba(255,150,50,0.8);font-size:10px;background:rgba(255,100,0,0.08);padding:1px 6px;border-radius:3px;">0.00085 $HERESY</code> = $1 USD<br>
+            Contract: <code style="color:rgba(255,150,50,0.5);font-size:10px;">0x432d38F83a50EC77C409D086e97448794cf76dCF</code><br><br>
+            <strong>Avalanche C-Chain:</strong> <code style="color:rgba(255,150,50,0.8);font-size:10px;background:rgba(255,100,0,0.08);padding:1px 6px;border-radius:3px;">18 $hCASH</code> = $1 USD<br><br>
+            Every payment is verified on-chain. Each transaction hash can only be used <strong>once</strong> — zero cheating possible.
+          </div>
+        </div>
       </div>
-      <div class="how-card">
-        <span class="how-card-icon">⚡</span>
-        <div class="how-card-title">6. TOKENS ACCEPTED</div>
-        <div class="how-card-text">On Grotto L1: 0.00085 $HERESY = $1. On Avalanche C-Chain: 18 $hCASH = $1. Payment is verified on-chain — each transaction can only be used once. No cheating possible.</div>
+
+      <div class="how-step">
+        <div class="how-step-num">5</div>
+        <div class="how-step-body">
+          <div class="how-step-title">🏆 WIN THE PRIZE POOL</div>
+          <div class="how-step-text">
+            The <strong>top 5 players</strong> by best paid trial score split the prize pool every 7 days. 5% platform fee deducted first. Improve your score with more chances — only your personal best counts toward ranking.
+          </div>
+          <div class="how-prize-row">
+            <div class="how-prize-chip"><div class="how-prize-chip-rank">🥇</div><div class="how-prize-chip-pct">40%</div><div class="how-prize-chip-label">RANK 1</div></div>
+            <div class="how-prize-chip"><div class="how-prize-chip-rank">🥈</div><div class="how-prize-chip-pct">25%</div><div class="how-prize-chip-label">RANK 2</div></div>
+            <div class="how-prize-chip"><div class="how-prize-chip-rank">🥉</div><div class="how-prize-chip-pct">15%</div><div class="how-prize-chip-label">RANK 3</div></div>
+            <div class="how-prize-chip"><div class="how-prize-chip-rank">4️⃣</div><div class="how-prize-chip-pct">12%</div><div class="how-prize-chip-label">RANK 4</div></div>
+            <div class="how-prize-chip"><div class="how-prize-chip-rank">5️⃣</div><div class="how-prize-chip-pct">8%</div><div class="how-prize-chip-label">RANK 5</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="how-step" style="background:rgba(255,215,0,0.03);border-color:rgba(255,215,0,0.15);">
+        <div class="how-step-num" style="border-color:rgba(255,215,0,0.3);">⌨</div>
+        <div class="how-step-body">
+          <div class="how-step-title">KEYBOARD SHORTCUTS <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:rgba(255,150,50,0.5);letter-spacing:2px;">(FREE MODE)</span></div>
+          <div class="how-keys-row">
+            <div class="how-key-chip"><span class="how-key-badge">1</span><span class="how-key-desc">PICK A</span></div>
+            <div class="how-key-chip"><span class="how-key-badge">2</span><span class="how-key-desc">PICK B</span></div>
+            <div class="how-key-chip"><span class="how-key-badge">3</span><span class="how-key-desc">PICK C</span></div>
+            <div class="how-key-chip"><span class="how-key-badge">H</span><span class="how-key-desc">USE HINT</span></div>
+            <div class="how-key-chip"><span class="how-key-badge">↵</span><span class="how-key-desc">START GAME</span></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- CREDIT FOOTER -->
+    <div class="how-credit">
+      <div class="how-credit-title">⛏ BUILT FOR THE COMMUNITY</div>
+      <div class="how-credit-name">Built by <a class="how-credit-link" href="https://twitter.com/precidobos" target="_blank" rel="noopener">@precidobos</a></div>
+      <div class="how-credit-sub">
+        for <a class="how-credit-link" href="https://hashcash.club" target="_blank" rel="noopener">hashcash.club</a> &nbsp;·&nbsp; <strong style="color:rgba(255,200,80,0.8);">HashAthon</strong> &nbsp;·&nbsp; Deployed on <strong style="color:rgba(255,200,80,0.8);">Grotto L1</strong> &nbsp;·&nbsp; Avalanche Subnet
       </div>
     </div>
-    <div class="how-card" style="background:rgba(255,215,0,0.04);border-color:rgba(255,215,0,0.2);margin-bottom:20px;">
-      <span class="how-card-icon">⌨️</span>
-      <div class="how-card-title">KEYBOARD SHORTCUTS (FREE MODE)</div>
-      <div class="how-card-text">Press <strong style="color:var(--gold)">1 / 2 / 3</strong> to select an answer · Press <strong style="color:var(--gold)">H</strong> to use a hint · Press <strong style="color:var(--gold)">Enter</strong> on intro screen to start</div>
-    </div>
+
   </div>
 </div>
 
@@ -1652,6 +2085,20 @@
   <div class="page-inner">
     <div class="page-title">LEADERBOARD</div>
     <div class="page-sub">⚔ GROTTO TRIALS — TOP MINERS ⚔</div>
+
+    <!-- PRIZE DISTRIBUTION COUNTDOWN -->
+    <div id="lb-countdown-wrap">
+      <div id="lb-countdown-label">⏳ PRIZE DISTRIBUTION IN</div>
+      <div id="lb-countdown-digits">
+        <div class="cd-block"><div class="cd-num" id="cd-days">—</div><div class="cd-unit">DAYS</div></div>
+        <div class="cd-sep">:</div>
+        <div class="cd-block"><div class="cd-num" id="cd-hours">—</div><div class="cd-unit">HRS</div></div>
+        <div class="cd-sep">:</div>
+        <div class="cd-block"><div class="cd-num" id="cd-mins">—</div><div class="cd-unit">MIN</div></div>
+        <div class="cd-sep">:</div>
+        <div class="cd-block"><div class="cd-num" id="cd-secs">—</div><div class="cd-unit">SEC</div></div>
+      </div>
+    </div>
     <div class="prize-pool-banner">
       <div class="prize-pool-amount" id="lb-prize-amount">$0.00</div>
       <div class="prize-pool-label">CURRENT NET PRIZE POOL (AFTER 5% FEE)</div>
@@ -2208,8 +2655,9 @@ function showPage(name) {
   const btn = document.querySelector(`.nav-btn[data-page="${name}"]`);
   if (btn) btn.classList.add('active');
 
-  if (name === 'leaderboard') loadLeaderboard();
+  if (name === 'leaderboard') { loadLeaderboard(); startCountdown(); }
   if (name === 'profile') loadProfile();
+  if (name === 'howto') { if (miners.length >= 3) startDemo(); }
 }
 
 function showScreen(id) {
@@ -3019,8 +3467,6 @@ function spawnDust() {
 // ══════════════════════════════════════════════════════
 async function init() {
   spawnDust();
-  // Show home page immediately (no loading screen on first load for page)
-  // But still fetch miners in background for game
   showPage('home');
   try {
     miners = await fetchMiners();
@@ -3561,8 +4007,178 @@ document.getElementById('retry-btn').addEventListener('click', startGame);
 document.getElementById('retry-intro-btn').addEventListener('click', ()=>showScreen('intro-screen'));
 document.getElementById('win-retry-btn').addEventListener('click', startGame);
 
+// ══════════════════════════════════════════════════════
+// LIVE DEMO (How to Play page)
+// ══════════════════════════════════════════════════════
+let demoInterval = null;
+let demoTimerInterval = null;
+let demoScore = 0;
+let demoStreak = 0;
+let demoPaused = false;
+
+function startDemo() {
+  if (miners.length < 3) {
+    // Miners not loaded yet — retry in 2s
+    setTimeout(startDemo, 2000);
+    return;
+  }
+  demoScore = 0; demoStreak = 0;
+  runDemoRound();
+}
+
+function runDemoRound() {
+  clearInterval(demoTimerInterval);
+  const pool = miners.filter(m => m.imageUrl);
+  if (pool.length < 3) return;
+
+  // Pick random correct miner
+  const correct = pool[Math.floor(Math.random() * pool.length)];
+  const wrongs = pool.filter(m => m.id !== correct.id).sort(() => Math.random() - 0.5).slice(0, 2);
+  const options = [correct, ...wrongs].sort(() => Math.random() - 0.5);
+  const correctIdx = options.findIndex(o => o.id === correct.id);
+
+  // Load image
+  const img = document.getElementById('demo-miner-img');
+  const loader = document.getElementById('demo-img-loader');
+  const status = document.getElementById('demo-status');
+  const minerNameEl = document.getElementById('demo-miner-name');
+
+  img.style.display = 'none';
+  if (loader) loader.style.display = 'flex';
+  status.className = '';
+  status.textContent = 'LOADING MINER...';
+  minerNameEl.textContent = '???';
+
+  const newImg = new Image();
+  newImg.onload = () => {
+    img.src = newImg.src;
+    img.style.display = 'block';
+    if (loader) loader.style.display = 'none';
+    status.textContent = 'WHICH MINER IS THIS?';
+  };
+  newImg.onerror = () => {
+    if (loader) loader.style.display = 'none';
+    img.src = 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"><rect fill="#251c15" width="120" height="120"/><text x="60" y="75" text-anchor="middle" fill="#ff6a00" font-size="40">⛏</text></svg>`);
+    img.style.display = 'block';
+    status.textContent = 'WHICH MINER IS THIS?';
+  };
+  newImg.src = correct.imageUrl;
+
+  // Set answer options
+  ['A','B','C'].forEach((letter, i) => {
+    const el = document.getElementById(`demo-opt-${i}`);
+    el.className = 'demo-opt';
+    el.querySelector('.demo-opt-text').textContent = options[i].name;
+    el.querySelector('.demo-answer-label').textContent = letter;
+  });
+  document.getElementById('demo-score').textContent = demoScore.toLocaleString();
+  document.getElementById('demo-streak').textContent = `×${Math.min(demoStreak + 1, 5)}`;
+
+  // Animate "cursor" hovering
+  let step = 0;
+  const STEP_DELAY = 600;
+  const sequence = [
+    // hover option 0
+    () => { ['demo-opt-0','demo-opt-1','demo-opt-2'].forEach(id => document.getElementById(id).classList.remove('demo-cursor')); document.getElementById('demo-opt-0').classList.add('demo-cursor'); },
+    // hover option 1
+    () => { document.getElementById('demo-opt-0').classList.remove('demo-cursor'); document.getElementById('demo-opt-1').classList.add('demo-cursor'); },
+    // hover correct
+    () => { document.getElementById('demo-opt-1').classList.remove('demo-cursor'); document.getElementById(`demo-opt-${correctIdx}`).classList.add('demo-cursor'); },
+    // click correct
+    () => {
+      document.getElementById(`demo-opt-${correctIdx}`).classList.remove('demo-cursor');
+      document.getElementById(`demo-opt-${correctIdx}`).classList.add('demo-correct');
+      // Mark wrongs
+      options.forEach((_, i) => { if (i !== correctIdx) document.getElementById(`demo-opt-${i}`).classList.add('demo-wrong'); });
+      demoStreak++;
+      const pts = 100 * Math.min(demoStreak, 5);
+      demoScore += pts;
+      minerNameEl.textContent = correct.name.toUpperCase();
+      status.className = 'correct';
+      status.textContent = `✓ CORRECT! +${pts} PTS · STREAK ×${Math.min(demoStreak, 5)}`;
+      document.getElementById('demo-score').textContent = demoScore.toLocaleString();
+      document.getElementById('demo-streak').textContent = `×${Math.min(demoStreak, 5)}`;
+    },
+    // next round
+    () => { runDemoRound(); }
+  ];
+
+  // Animated timer bar
+  let timerPct = 100;
+  document.getElementById('demo-timer-fill').style.width = '100%';
+  demoTimerInterval = setInterval(() => {
+    timerPct -= 1.2;
+    if (timerPct < 0) timerPct = 0;
+    const fill = document.getElementById('demo-timer-fill');
+    if (fill) {
+      fill.style.width = timerPct + '%';
+      if (timerPct < 30) fill.style.background = 'linear-gradient(to right,#cc0000,var(--wrong-red))';
+      else if (timerPct < 60) fill.style.background = 'linear-gradient(to right,var(--fire),var(--ember))';
+      else fill.style.background = 'linear-gradient(to right,var(--gold),var(--fire))';
+    }
+  }, 50);
+
+  // Run animation steps
+  function nextStep() {
+    if (step < sequence.length) {
+      const delay = step === sequence.length - 1 ? 1800 : STEP_DELAY;
+      demoInterval = setTimeout(() => { sequence[step](); step++; nextStep(); }, delay);
+    }
+  }
+  nextStep();
+}
+
+// Start demo when page is visited
+document.querySelector('.nav-btn[data-page="howto"]').addEventListener('click', () => {
+  clearTimeout(demoInterval);
+  clearInterval(demoTimerInterval);
+  setTimeout(startDemo, 400);
+});
+
+// ══════════════════════════════════════════════════════
+// LEADERBOARD COUNTDOWN — 7-day rolling from first Monday
+// ══════════════════════════════════════════════════════
+function startLeaderboardCountdown() {
+  function tick() {
+    const now = new Date();
+    // Find next occurrence of Monday 00:00 UTC, 7-day cycle
+    const dayMs = 86400000;
+    const weekMs = 7 * dayMs;
+    // Epoch reference: first Monday Jan 1 2024 00:00 UTC = 1704067200000 (it was a Monday)
+    const epochRef = 1704067200000;
+    const msSinceRef = now.getTime() - epochRef;
+    const msIntoCurrentWeek = ((msSinceRef % weekMs) + weekMs) % weekMs;
+    const msUntilNext = weekMs - msIntoCurrentWeek;
+
+    const d = Math.floor(msUntilNext / dayMs);
+    const h = Math.floor((msUntilNext % dayMs) / 3600000);
+    const m = Math.floor((msUntilNext % 3600000) / 60000);
+    const s = Math.floor((msUntilNext % 60000) / 1000);
+
+    const pad = n => String(n).padStart(2, '0');
+    const cdDays = document.getElementById('cd-days');
+    const cdHours = document.getElementById('cd-hours');
+    const cdMins = document.getElementById('cd-mins');
+    const cdSecs = document.getElementById('cd-secs');
+    if (cdDays) cdDays.textContent = d;
+    if (cdHours) cdHours.textContent = pad(h);
+    if (cdMins) cdMins.textContent = pad(m);
+    if (cdSecs) cdSecs.textContent = pad(s);
+
+    // Pulse red when under 24h
+    const wrap = document.getElementById('lb-countdown-wrap');
+    if (wrap) {
+      if (d === 0) wrap.style.borderColor = 'rgba(255,23,68,0.5)';
+      else wrap.style.borderColor = '';
+    }
+  }
+  tick();
+  setInterval(tick, 1000);
+}
+
 // ── START ──────────────────────────────────────────
 init();
+startLeaderboardCountdown();
 </script>
 </body>
 </html>
