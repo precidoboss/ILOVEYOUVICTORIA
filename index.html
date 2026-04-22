@@ -2575,15 +2575,14 @@ function startPaidRound() {
     queue.push(...shuffled.sort(() => Math.random()-0.5));
   }
 
-  // Show paid HUD elements, hide free-mode-only elements
+  // Show paid HUD elements
   document.getElementById('paid-hud-extra').style.display = 'flex';
   document.getElementById('streak-wrap').style.display = 'none';
   document.getElementById('hint-btn').style.display = 'none';
-  document.getElementById('hearts-wrap').style.display = 'none'; // no lives in paid
-  document.getElementById('timer-wrap').style.visibility = 'hidden'; // no per-Q timer
 
   updatePaidChancesHud();
   updateHUD();
+  updateHearts();
   buildProgressDots();
   showGame();
 
@@ -2614,6 +2613,13 @@ function startPaidCountdown() {
     timerEl.textContent = paidTimeLeft + 's';
     if (paidTimeLeft <= 10) timerEl.classList.add('danger');
     else timerEl.classList.remove('danger');
+    // Sync the timer bar to global countdown
+    if (appState.isPaidMode) {
+      maxTime = PAID_TOTAL_TIME;
+      timeLeft = paidTimeLeft;
+      updateTimerUI();
+      document.getElementById('timer-text').textContent = paidTimeLeft + 's';
+    }
     if (paidTimeLeft <= 0) {
       clearInterval(paidGameInterval);
       endPaidGame();
@@ -2652,12 +2658,10 @@ async function endPaidGame() {
     if (updatedSession) appState.activeSession = updatedSession;
   }
 
-  // Restore free-mode HUD elements
+  // Show paid game over screen
   document.getElementById('paid-hud-extra').style.display = 'none';
   document.getElementById('streak-wrap').style.display = '';
   document.getElementById('hint-btn').style.display = '';
-  document.getElementById('hearts-wrap').style.display = '';
-  document.getElementById('timer-wrap').style.visibility = 'visible';
 
   const chancesLeft = appState.activeSession
     ? Math.max(0, appState.activeSession.chances_max - appState.activeSession.chances_used)
@@ -2902,6 +2906,8 @@ function spawnDust() {
 // ══════════════════════════════════════════════════════
 async function init() {
   spawnDust();
+  // Show home page immediately (no loading screen on first load for page)
+  // But still fetch miners in background for game
   showPage('home');
   try {
     miners = await fetchMiners();
@@ -2911,52 +2917,13 @@ async function init() {
   }
   loadHomeStats();
 
-  // Auto-restore wallet + session if MetaMask was previously connected
+  // Check if MetaMask already connected
   if (typeof window.ethereum !== 'undefined') {
-    try {
-      const accounts = await window.ethereum.request({ method: 'eth_accounts' }); // no prompt
-      if (accounts && accounts.length > 0) {
-        const wallet = accounts[0].toLowerCase();
-        appState.wallet = wallet;
-
-        // Get chain
-        const chainIdHex = await window.ethereum.request({ method: 'eth_chainId' });
-        const chainId = parseInt(chainIdHex, 16);
-        if (chainId === 36463) appState.connectedChain = 'grotto';
-        else if (chainId === 43114) appState.connectedChain = 'avax';
-        else appState.connectedChain = 'avax'; // fallback
-
-        // Restore player from Supabase
-        const { data: player } = await sb.from('players').select('*').eq('wallet', wallet).single();
-        if (player) {
-          appState.player = player;
-          appState.username = player.username;
-          updateWalletBtn();
-        }
-
-        // Restore active paid session (most recent active one)
-        const { data: sessions } = await sb.from('paid_sessions')
-          .select('*')
-          .eq('wallet', wallet)
-          .eq('status', 'active')
-          .order('created_at', { ascending: false })
-          .limit(1);
-        if (sessions && sessions.length > 0) {
-          appState.activeSession = sessions[0];
-          paidSessionId = sessions[0].id;
-          paidChancesLeft = sessions[0].chances_max - sessions[0].chances_used;
-        }
-      }
-    } catch(e) {
-      console.warn('Auto-restore failed:', e);
-    }
-
     window.ethereum.on('accountsChanged', (accounts) => {
       if (accounts.length === 0) {
         appState.wallet = null;
         appState.username = null;
         appState.player = null;
-        appState.activeSession = null;
         updateWalletBtn();
         showToast('Wallet disconnected', 'error');
       }
@@ -3110,12 +3077,13 @@ function loadQuestion(isPaid) {
   });
 
   if (isPaid) {
-    // No per-question timer — only the 60s global countdown matters
+    // In paid mode: no per-question timer — mirror the global 60s countdown in the bar
     clearInterval(timerInterval);
-    document.getElementById('timer-wrap').style.visibility = 'hidden';
-    document.getElementById('timer-text').textContent = '';
+    maxTime = PAID_TOTAL_TIME;
+    timeLeft = paidTimeLeft;
+    updateTimerUI();
+    document.getElementById('timer-text').textContent = paidTimeLeft + 's';
   } else {
-    document.getElementById('timer-wrap').style.visibility = 'visible';
     maxTime = diff.time;
     if (bonusRound) maxTime = Math.floor(maxTime * 0.7);
     startTimer(maxTime);
@@ -3154,8 +3122,15 @@ function updateTimerUI() {
 
 function onTimeout() {
   if (questionLocked) return;
-  // In paid mode there is no per-question timer, so this should never fire
-  if (appState.isPaidMode) return;
+  // In paid mode there is no per-question timer — this should never fire
+  if (appState.isPaidMode) {
+    questionLocked = true;
+    setTimeout(() => {
+      currentQ++;
+      loadQuestion(true);
+    }, 400);
+    return;
+  }
   questionLocked = true;
   const msg = document.getElementById('timeout-msg');
   msg.classList.add('show');
@@ -3164,10 +3139,15 @@ function onTimeout() {
   streak = 0;
   updateHUD();
   roundResults.push('timeout');
-  updateProgressDot(currentQ, 'timeout');
+  if (!appState.isPaidMode) updateProgressDot(currentQ, 'timeout');
   setTimeout(() => {
     currentQ++;
-    loadQuestion(false);
+    if (appState.isPaidMode) {
+      if (lives <= 0) { endPaidGame(); return; }
+      loadQuestion(true);
+    } else {
+      loadQuestion(false);
+    }
   }, 1600);
 }
 
@@ -3191,15 +3171,13 @@ function answer(chosen, correct, options, diff, isPaid) {
     streak++;
     if (streak > maxStreak) maxStreak = streak;
 
+    const timeBonus = isPaid ? 0 : Math.floor((timeLeft / maxTime) * TIME_BONUS_MAX);
     const streakMult = Math.min(streak, 5);
     const diffMult = diff.scoreMult * (!isPaid && bonusRound ? 2 : 1);
-    // In paid mode: score based on streak only (no time bonus since no per-Q timer)
-    const pts = isPaid
-      ? Math.floor(BASE_SCORE * streakMult * diffMult)
-      : Math.floor((BASE_SCORE + Math.floor((timeLeft / maxTime) * TIME_BONUS_MAX)) * streakMult * diffMult);
+    const pts = Math.floor((BASE_SCORE + timeBonus) * streakMult * diffMult);
     score += pts;
 
-    showAnswerReveal('correct', `+${pts}`, streakMult > 1 ? `×${streakMult} STREAK BONUS` : 'CORRECT!');
+    showAnswerReveal('correct', `+${pts}`, streakMult > 1 ? `×${streakMult} STREAK BONUS` : `TIME BONUS +${timeBonus}`);
     showStreakPopup(streak);
     if (!isPaid) roundResults.push('correct');
     if (!isPaid) updateProgressDot(currentQ, 'correct');
@@ -3208,32 +3186,23 @@ function answer(chosen, correct, options, diff, isPaid) {
     pillarCorrect.classList.add('correct');
     flashFeedback('wrong');
     streak = 0;
-    if (!isPaid) loseLife(); // no lives in paid mode — only 60s timer ends the game
+    loseLife();
     showAnswerReveal('wrong', 'WRONG', `IT WAS: ${options[correct].name}`);
     if (!isPaid) roundResults.push('wrong');
     if (!isPaid) updateProgressDot(currentQ, 'wrong');
   }
 
   updateHUD();
-  if (!isPaid) updateHearts();
 
-  // Free mode: check death
-  if (!isPaid && lives <= 0) {
-    setTimeout(() => endGame(false), 2200);
+  // Check death
+  if (lives <= 0) {
+    if (isPaid) {
+      setTimeout(() => endPaidGame(), 2200);
+    } else {
+      setTimeout(() => endGame(false), 2200);
+    }
     return;
   }
-
-  // Next question delay — fast in paid mode
-  const delay = isPaid ? 700 : 2000;
-  setTimeout(() => {
-    hideAnswerReveal();
-    currentQ++;
-    if (isPaid) {
-      loadQuestion(true);
-    } else {
-      loadQuestion(false);
-    }
-  }, delay);
 
   setTimeout(() => {
     hideAnswerReveal();
