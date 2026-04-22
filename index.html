@@ -2018,7 +2018,7 @@ const CHAINS = {
   grotto: {
     name: 'The Grotto',
     chainId: 36463,
-    chainIdHex: '0x8E8F',
+    chainIdHex: '0x8E6F',
     rpc: 'https://subnets.avax.network/thegrotto/mainnet/rpc',
     explorer: 'https://explorer.avax.network/thegrotto',
     token: 'HERESY',
@@ -2575,14 +2575,15 @@ function startPaidRound() {
     queue.push(...shuffled.sort(() => Math.random()-0.5));
   }
 
-  // Show paid HUD elements
+  // Show paid HUD elements, hide free-mode-only elements
   document.getElementById('paid-hud-extra').style.display = 'flex';
   document.getElementById('streak-wrap').style.display = 'none';
   document.getElementById('hint-btn').style.display = 'none';
+  document.getElementById('hearts-wrap').style.display = 'none'; // no lives in paid
+  document.getElementById('timer-wrap').style.visibility = 'hidden'; // no per-Q timer
 
   updatePaidChancesHud();
   updateHUD();
-  updateHearts();
   buildProgressDots();
   showGame();
 
@@ -2651,10 +2652,12 @@ async function endPaidGame() {
     if (updatedSession) appState.activeSession = updatedSession;
   }
 
-  // Show paid game over screen
+  // Restore free-mode HUD elements
   document.getElementById('paid-hud-extra').style.display = 'none';
   document.getElementById('streak-wrap').style.display = '';
   document.getElementById('hint-btn').style.display = '';
+  document.getElementById('hearts-wrap').style.display = '';
+  document.getElementById('timer-wrap').style.visibility = 'visible';
 
   const chancesLeft = appState.activeSession
     ? Math.max(0, appState.activeSession.chances_max - appState.activeSession.chances_used)
@@ -2899,8 +2902,6 @@ function spawnDust() {
 // ══════════════════════════════════════════════════════
 async function init() {
   spawnDust();
-  // Show home page immediately (no loading screen on first load for page)
-  // But still fetch miners in background for game
   showPage('home');
   try {
     miners = await fetchMiners();
@@ -2910,13 +2911,52 @@ async function init() {
   }
   loadHomeStats();
 
-  // Check if MetaMask already connected
+  // Auto-restore wallet + session if MetaMask was previously connected
   if (typeof window.ethereum !== 'undefined') {
+    try {
+      const accounts = await window.ethereum.request({ method: 'eth_accounts' }); // no prompt
+      if (accounts && accounts.length > 0) {
+        const wallet = accounts[0].toLowerCase();
+        appState.wallet = wallet;
+
+        // Get chain
+        const chainIdHex = await window.ethereum.request({ method: 'eth_chainId' });
+        const chainId = parseInt(chainIdHex, 16);
+        if (chainId === 36463) appState.connectedChain = 'grotto';
+        else if (chainId === 43114) appState.connectedChain = 'avax';
+        else appState.connectedChain = 'avax'; // fallback
+
+        // Restore player from Supabase
+        const { data: player } = await sb.from('players').select('*').eq('wallet', wallet).single();
+        if (player) {
+          appState.player = player;
+          appState.username = player.username;
+          updateWalletBtn();
+        }
+
+        // Restore active paid session (most recent active one)
+        const { data: sessions } = await sb.from('paid_sessions')
+          .select('*')
+          .eq('wallet', wallet)
+          .eq('status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(1);
+        if (sessions && sessions.length > 0) {
+          appState.activeSession = sessions[0];
+          paidSessionId = sessions[0].id;
+          paidChancesLeft = sessions[0].chances_max - sessions[0].chances_used;
+        }
+      }
+    } catch(e) {
+      console.warn('Auto-restore failed:', e);
+    }
+
     window.ethereum.on('accountsChanged', (accounts) => {
       if (accounts.length === 0) {
         appState.wallet = null;
         appState.username = null;
         appState.player = null;
+        appState.activeSession = null;
         updateWalletBtn();
         showToast('Wallet disconnected', 'error');
       }
@@ -3069,9 +3109,17 @@ function loadQuestion(isPaid) {
     pillar.onclick = () => answer(i, correctIdx, options, diff, isPaid);
   });
 
-  maxTime = diff.time;
-  if (!isPaid && bonusRound) maxTime = Math.floor(maxTime * 0.7);
-  startTimer(maxTime);
+  if (isPaid) {
+    // No per-question timer — only the 60s global countdown matters
+    clearInterval(timerInterval);
+    document.getElementById('timer-wrap').style.visibility = 'hidden';
+    document.getElementById('timer-text').textContent = '';
+  } else {
+    document.getElementById('timer-wrap').style.visibility = 'visible';
+    maxTime = diff.time;
+    if (bonusRound) maxTime = Math.floor(maxTime * 0.7);
+    startTimer(maxTime);
+  }
 }
 
 // ══════════════════════════════════════════════════════
@@ -3106,6 +3154,8 @@ function updateTimerUI() {
 
 function onTimeout() {
   if (questionLocked) return;
+  // In paid mode there is no per-question timer, so this should never fire
+  if (appState.isPaidMode) return;
   questionLocked = true;
   const msg = document.getElementById('timeout-msg');
   msg.classList.add('show');
@@ -3114,15 +3164,10 @@ function onTimeout() {
   streak = 0;
   updateHUD();
   roundResults.push('timeout');
-  if (!appState.isPaidMode) updateProgressDot(currentQ, 'timeout');
+  updateProgressDot(currentQ, 'timeout');
   setTimeout(() => {
     currentQ++;
-    if (appState.isPaidMode) {
-      if (lives <= 0) { endPaidGame(); return; }
-      loadQuestion(true);
-    } else {
-      loadQuestion(false);
-    }
+    loadQuestion(false);
   }, 1600);
 }
 
@@ -3146,13 +3191,15 @@ function answer(chosen, correct, options, diff, isPaid) {
     streak++;
     if (streak > maxStreak) maxStreak = streak;
 
-    const timeBonus = Math.floor((timeLeft / maxTime) * TIME_BONUS_MAX);
     const streakMult = Math.min(streak, 5);
     const diffMult = diff.scoreMult * (!isPaid && bonusRound ? 2 : 1);
-    const pts = Math.floor((BASE_SCORE + timeBonus) * streakMult * diffMult);
+    // In paid mode: score based on streak only (no time bonus since no per-Q timer)
+    const pts = isPaid
+      ? Math.floor(BASE_SCORE * streakMult * diffMult)
+      : Math.floor((BASE_SCORE + Math.floor((timeLeft / maxTime) * TIME_BONUS_MAX)) * streakMult * diffMult);
     score += pts;
 
-    showAnswerReveal('correct', `+${pts}`, streakMult > 1 ? `×${streakMult} STREAK BONUS` : `TIME BONUS +${timeBonus}`);
+    showAnswerReveal('correct', `+${pts}`, streakMult > 1 ? `×${streakMult} STREAK BONUS` : 'CORRECT!');
     showStreakPopup(streak);
     if (!isPaid) roundResults.push('correct');
     if (!isPaid) updateProgressDot(currentQ, 'correct');
@@ -3161,23 +3208,32 @@ function answer(chosen, correct, options, diff, isPaid) {
     pillarCorrect.classList.add('correct');
     flashFeedback('wrong');
     streak = 0;
-    loseLife();
+    if (!isPaid) loseLife(); // no lives in paid mode — only 60s timer ends the game
     showAnswerReveal('wrong', 'WRONG', `IT WAS: ${options[correct].name}`);
     if (!isPaid) roundResults.push('wrong');
     if (!isPaid) updateProgressDot(currentQ, 'wrong');
   }
 
   updateHUD();
+  if (!isPaid) updateHearts();
 
-  // Check death
-  if (lives <= 0) {
-    if (isPaid) {
-      setTimeout(() => endPaidGame(), 2200);
-    } else {
-      setTimeout(() => endGame(false), 2200);
-    }
+  // Free mode: check death
+  if (!isPaid && lives <= 0) {
+    setTimeout(() => endGame(false), 2200);
     return;
   }
+
+  // Next question delay — fast in paid mode
+  const delay = isPaid ? 700 : 2000;
+  setTimeout(() => {
+    hideAnswerReveal();
+    currentQ++;
+    if (isPaid) {
+      loadQuestion(true);
+    } else {
+      loadQuestion(false);
+    }
+  }, delay);
 
   setTimeout(() => {
     hideAnswerReveal();
