@@ -6,7 +6,7 @@
 <title>THE GROTTO — HashCash Miner Quiz</title>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700;900&family=Cinzel:wght@400;600&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
   :root {
     --fire: #ff6a00;
@@ -881,17 +881,22 @@
     margin-bottom: 4px;
   }
 
-  /* ── NAV BAR ──────────────────────────────────────────── */
-  #nav-bar {
+  /* ══════════════════════════════════════════════════
+     NEW FEATURE STYLES
+  ══════════════════════════════════════════════════ */
+
+  /* ── NAV BAR ─────────────────────────────────────── */
+  #top-nav {
     position: fixed;
     top: 0; left: 0; right: 0;
     z-index: 500;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 28px;
-    background: linear-gradient(to bottom, rgba(5,3,2,0.95), transparent);
-    backdrop-filter: blur(4px);
+    padding: 10px 24px;
+    background: rgba(5,3,2,0.92);
+    border-bottom: 1px solid rgba(255,140,0,0.15);
+    backdrop-filter: blur(8px);
   }
   #nav-logo {
     font-family: 'Cinzel Decorative', serif;
@@ -912,74 +917,100 @@
     letter-spacing: 2px;
     color: rgba(220,180,100,0.7);
     background: transparent;
-    border: 1px solid rgba(255,150,50,0.25);
+    border: 1px solid rgba(255,140,0,0.2);
     padding: 6px 14px;
     border-radius: 3px;
     cursor: pointer;
     transition: all 0.2s;
+    text-transform: uppercase;
   }
-  .nav-btn:hover { color: var(--gold); border-color: var(--dim-gold); background: rgba(255,180,0,0.06); }
-  .nav-btn.active { color: var(--gold); border-color: var(--gold); }
+  .nav-btn:hover { color: var(--gold); border-color: rgba(255,140,0,0.5); background: rgba(255,140,0,0.06); }
+  .nav-btn.active { color: var(--gold); border-color: var(--gold); background: rgba(255,215,0,0.08); }
   #wallet-btn {
     font-family: 'Share Tech Mono', monospace;
     font-size: 11px;
     letter-spacing: 2px;
-    background: linear-gradient(135deg, rgba(255,180,0,0.15), rgba(255,100,0,0.15));
-    border: 1px solid rgba(255,180,0,0.4);
-    color: var(--gold);
+    background: linear-gradient(135deg, rgba(255,150,0,0.2), rgba(255,80,0,0.15));
+    border: 1px solid rgba(255,140,0,0.4);
+    color: var(--fire);
     padding: 7px 16px;
     border-radius: 3px;
     cursor: pointer;
     transition: all 0.2s;
   }
-  #wallet-btn:hover { background: linear-gradient(135deg, rgba(255,180,0,0.25), rgba(255,100,0,0.25)); box-shadow: 0 0 16px rgba(255,180,0,0.3); }
-  #wallet-btn.connected { color: var(--correct-green); border-color: rgba(0,255,136,0.4); background: rgba(0,80,40,0.2); }
+  #wallet-btn:hover { background: linear-gradient(135deg, rgba(255,150,0,0.35), rgba(255,80,0,0.25)); border-color: var(--fire); }
+  #wallet-btn.connected { color: var(--correct-green); border-color: rgba(0,255,136,0.4); background: rgba(0,255,136,0.06); }
 
-  /* ── HOMEPAGE ─────────────────────────────────────────── */
-  #home-screen {
+  /* ── PAGE SYSTEM ─────────────────────────────────── */
+  .page {
     position: fixed;
     inset: 0;
     z-index: 400;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
     overflow-y: auto;
-    background:
-      radial-gradient(ellipse 80% 60% at 50% 100%, rgba(255,80,0,0.2) 0%, transparent 70%),
-      rgba(5,3,2,0.98);
     padding: 80px 20px 40px;
+    display: none;
+    background:
+      radial-gradient(ellipse 60% 40% at 50% 100%, rgba(255,80,0,0.15) 0%, transparent 70%),
+      rgba(5,3,2,0.98);
   }
-  #home-hero { text-align: center; margin-bottom: 40px; }
-  #home-hero .screen-title { font-size: clamp(36px,8vw,80px); }
-  #home-hero .screen-sub { font-size: 14px; margin-bottom: 10px; }
-  #home-tagline {
+  .page.active { display: block; }
+  .page-inner {
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  .page-title {
+    font-family: 'Cinzel Decorative', serif;
+    font-size: clamp(22px, 5vw, 42px);
+    color: var(--gold);
+    text-shadow: 0 0 30px rgba(255,215,0,0.5);
+    text-align: center;
+    margin-bottom: 6px;
+  }
+  .page-sub {
     font-family: 'Share Tech Mono', monospace;
     font-size: 12px;
-    color: rgba(200,150,50,0.5);
-    letter-spacing: 3px;
+    letter-spacing: 4px;
+    color: rgba(255,150,50,0.6);
+    text-align: center;
     margin-bottom: 30px;
   }
-  #home-modes {
-    display: flex;
-    gap: 20px;
-    flex-wrap: wrap;
-    justify-content: center;
-    margin-bottom: 40px;
-    max-width: 820px;
-    width: 100%;
+
+  /* ── HOMEPAGE ────────────────────────────────────── */
+  #home-hero {
+    text-align: center;
+    padding: 20px 0 30px;
   }
+  #home-hero .hero-title {
+    font-family: 'Cinzel Decorative', serif;
+    font-size: clamp(32px, 8vw, 72px);
+    color: var(--gold);
+    text-shadow: 0 0 60px rgba(255,215,0,0.6), 0 0 120px rgba(255,100,0,0.3);
+    line-height: 1;
+    margin-bottom: 10px;
+    animation: golden-pulse 2s infinite alternate;
+  }
+  #home-hero .hero-sub {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 14px;
+    letter-spacing: 5px;
+    color: rgba(255,150,50,0.7);
+    margin-bottom: 32px;
+  }
+  .mode-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin: 30px 0;
+  }
+  @media(max-width:600px){ .mode-cards{grid-template-columns:1fr;} }
   .mode-card {
-    flex: 1;
-    min-width: 260px;
-    max-width: 380px;
-    background: rgba(255,100,0,0.05);
-    border: 1px solid rgba(255,150,50,0.2);
+    background: rgba(255,100,0,0.06);
+    border: 1px solid rgba(255,140,0,0.2);
     border-radius: 8px;
     padding: 28px 24px;
     text-align: center;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.25s;
     position: relative;
     overflow: hidden;
   }
@@ -987,65 +1018,85 @@
     content: '';
     position: absolute;
     inset: 0;
-    background: linear-gradient(135deg, rgba(255,180,0,0.04), transparent);
+    background: linear-gradient(135deg, transparent 60%, rgba(255,140,0,0.05));
     pointer-events: none;
   }
-  .mode-card:hover { border-color: rgba(255,180,0,0.5); transform: translateY(-4px); box-shadow: 0 8px 32px rgba(255,100,0,0.2); }
-  .mode-card.paid { border-color: rgba(255,215,0,0.35); }
-  .mode-card.paid:hover { border-color: var(--gold); box-shadow: 0 8px 40px rgba(255,215,0,0.25); }
-  .mode-badge {
-    display: inline-block;
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 9px;
-    letter-spacing: 3px;
-    padding: 3px 10px;
-    border-radius: 2px;
-    margin-bottom: 12px;
-  }
-  .mode-badge.free { color: var(--correct-green); border: 1px solid rgba(0,255,136,0.3); background: rgba(0,80,40,0.2); }
-  .mode-badge.premium { color: var(--gold); border: 1px solid rgba(255,215,0,0.4); background: rgba(80,60,0,0.3); }
-  .mode-title {
+  .mode-card:hover { border-color: rgba(255,180,0,0.5); background: rgba(255,100,0,0.1); transform: translateY(-4px); box-shadow: 0 8px 32px rgba(255,100,0,0.15); }
+  .mode-card.paid-card { border-color: rgba(255,215,0,0.3); }
+  .mode-card.paid-card:hover { border-color: var(--gold); box-shadow: 0 8px 40px rgba(255,215,0,0.2); }
+  .mode-card-icon { font-size: 36px; margin-bottom: 12px; display: block; }
+  .mode-card-title {
     font-family: 'Cinzel Decorative', serif;
-    font-size: 20px;
+    font-size: 18px;
     color: var(--gold);
-    margin-bottom: 10px;
-    text-shadow: 0 0 20px rgba(255,215,0,0.4);
+    margin-bottom: 8px;
   }
-  .mode-desc {
+  .mode-card-desc {
     font-family: 'Share Tech Mono', monospace;
-    font-size: 12px;
-    color: rgba(200,160,80,0.7);
-    line-height: 1.7;
-    margin-bottom: 18px;
-    letter-spacing: 0.5px;
-  }
-  .mode-cost {
-    font-family: 'Cinzel', serif;
-    font-size: 13px;
-    color: var(--fire);
+    font-size: 11px;
+    color: rgba(220,180,100,0.6);
     letter-spacing: 1px;
-    margin-bottom: 16px;
+    line-height: 1.6;
+  }
+  .mode-card-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, #ffcc00, #ff8800);
+    color: #0a0806;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    margin-top: 12px;
+    font-weight: bold;
+  }
+  .home-stats-row {
+    display: grid;
+    grid-template-columns: repeat(3,1fr);
+    gap: 14px;
+    margin: 24px 0;
+  }
+  @media(max-width:500px){ .home-stats-row{grid-template-columns:1fr 1fr;} }
+  .home-stat {
+    background: rgba(255,100,0,0.05);
+    border: 1px solid rgba(255,140,0,0.15);
+    border-radius: 6px;
+    padding: 14px;
+    text-align: center;
+  }
+  .home-stat-val {
+    font-family: 'Cinzel Decorative', serif;
+    font-size: 22px;
+    color: var(--gold);
+    line-height: 1;
+  }
+  .home-stat-lbl {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: rgba(255,150,50,0.5);
+    margin-top: 4px;
   }
 
-  /* ── MODAL BASE ───────────────────────────────────────── */
+  /* ── WALLET MODAL ────────────────────────────────── */
   .modal-overlay {
     position: fixed;
     inset: 0;
-    z-index: 600;
-    background: rgba(5,3,2,0.92);
-    backdrop-filter: blur(6px);
-    display: flex;
+    z-index: 900;
+    background: rgba(0,0,0,0.85);
+    display: none;
     align-items: center;
     justify-content: center;
     padding: 20px;
   }
+  .modal-overlay.open { display: flex; }
   .modal-box {
-    background: linear-gradient(135deg, #1a1208, #0d0a05);
-    border: 1px solid rgba(255,150,50,0.3);
+    background: linear-gradient(135deg, #1a1208, #0e0a06);
+    border: 1px solid rgba(255,180,80,0.3);
     border-radius: 10px;
     padding: 36px 32px;
-    max-width: 460px;
     width: 100%;
+    max-width: 460px;
     position: relative;
     box-shadow: 0 0 60px rgba(255,100,0,0.2);
   }
@@ -1055,930 +1106,723 @@
     color: var(--gold);
     text-align: center;
     margin-bottom: 6px;
-    text-shadow: 0 0 20px rgba(255,215,0,0.4);
   }
   .modal-sub {
     font-family: 'Share Tech Mono', monospace;
     font-size: 11px;
-    color: rgba(200,150,50,0.5);
+    letter-spacing: 3px;
+    color: rgba(255,150,50,0.5);
     text-align: center;
-    letter-spacing: 2px;
     margin-bottom: 24px;
   }
   .modal-close {
     position: absolute;
-    top: 12px; right: 16px;
-    background: transparent;
+    top: 14px; right: 18px;
+    background: none;
     border: none;
-    color: rgba(200,150,50,0.4);
-    font-size: 18px;
+    color: rgba(255,150,50,0.5);
+    font-size: 20px;
     cursor: pointer;
-    transition: color 0.2s;
+    line-height: 1;
   }
-  .modal-close:hover { color: var(--gold); }
-  .chain-option {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    padding: 14px 18px;
-    border: 1px solid rgba(255,150,50,0.2);
-    border-radius: 6px;
-    cursor: pointer;
-    margin-bottom: 12px;
-    transition: all 0.2s;
-    background: rgba(255,100,0,0.04);
-  }
-  .chain-option:hover { border-color: var(--gold); background: rgba(255,180,0,0.08); }
-  .chain-icon { font-size: 28px; }
-  .chain-name { font-family: 'Cinzel', serif; font-size: 14px; color: var(--gold); }
-  .chain-detail { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: rgba(200,150,50,0.5); letter-spacing: 1px; margin-top: 2px; }
-
-  /* ── FORM INPUTS ─────────────────────────────────────── */
-  .grotto-input {
-    width: 100%;
-    background: rgba(255,100,0,0.06);
-    border: 1px solid rgba(255,150,50,0.25);
-    border-radius: 4px;
-    padding: 12px 16px;
+  .modal-close:hover { color: var(--fire); }
+  .form-group { margin-bottom: 18px; }
+  .form-label {
     font-family: 'Share Tech Mono', monospace;
-    font-size: 13px;
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: rgba(255,180,80,0.6);
+    display: block;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+  }
+  .form-input {
+    width: 100%;
+    background: rgba(255,100,0,0.07);
+    border: 1px solid rgba(255,140,0,0.25);
+    border-radius: 4px;
+    padding: 11px 16px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 14px;
     color: #e8d5b0;
     outline: none;
     transition: border-color 0.2s;
-    margin-bottom: 14px;
-    letter-spacing: 1px;
   }
-  .grotto-input:focus { border-color: rgba(255,180,0,0.5); box-shadow: 0 0 10px rgba(255,150,0,0.15); }
-  .grotto-input::placeholder { color: rgba(200,150,50,0.3); }
-  .input-hint {
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 10px;
-    color: rgba(200,150,50,0.4);
-    letter-spacing: 1px;
-    margin-top: -10px;
-    margin-bottom: 14px;
-  }
-
-  /* ── PAYMENT MODAL ───────────────────────────────────── */
-  #pay-modal .token-row {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 18px;
-  }
-  .token-choice {
-    flex: 1;
-    padding: 14px 10px;
-    border: 1px solid rgba(255,150,50,0.2);
-    border-radius: 6px;
-    text-align: center;
-    cursor: pointer;
-    transition: all 0.2s;
-    background: rgba(255,100,0,0.04);
-  }
-  .token-choice:hover, .token-choice.selected { border-color: var(--gold); background: rgba(255,180,0,0.1); }
-  .token-choice .t-name { font-family: 'Cinzel Decorative', serif; font-size: 13px; color: var(--gold); }
-  .token-choice .t-chain { font-family: 'Share Tech Mono', monospace; font-size: 9px; color: rgba(200,150,50,0.5); letter-spacing: 1px; margin-top: 3px; }
-  .token-choice .t-amount { font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--fire); margin-top: 5px; }
-  #pay-status {
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 11px;
-    letter-spacing: 2px;
-    text-align: center;
-    min-height: 20px;
-    margin: 10px 0;
-    color: var(--fire);
-  }
-  #pay-status.ok { color: var(--correct-green); }
-  #pay-status.err { color: var(--wrong-red); }
-  #tx-confirm-box {
-    background: rgba(0,50,20,0.3);
-    border: 1px solid rgba(0,255,136,0.2);
-    border-radius: 6px;
-    padding: 12px 16px;
-    margin-bottom: 14px;
-    display: none;
-  }
-  #tx-confirm-box.show { display: block; }
-  #tx-hash-link {
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 10px;
-    color: rgba(0,255,136,0.6);
-    word-break: break-all;
-    letter-spacing: 1px;
-  }
-
-  /* ── PAID MODE GAME ──────────────────────────────────── */
-  #paid-game-wrap {
-    position: fixed;
-    inset: 0;
-    z-index: 350;
-    display: none;
-    flex-direction: column;
-    align-items: center;
-  }
-  #paid-hud {
-    width: 100%;
-    max-width: 900px;
-    padding: 14px 30px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    position: relative;
-    z-index: 20;
-  }
-  #paid-timer-wrap {
-    width: 100%;
-    max-width: 900px;
-    padding: 0 30px;
-    position: relative;
-    z-index: 20;
-  }
-  #paid-timer-track {
-    height: 10px;
-    background: rgba(255,255,255,0.08);
-    border-radius: 4px;
-    overflow: hidden;
-    border: 1px solid rgba(255,215,0,0.2);
-  }
-  #paid-timer-fill {
-    height: 100%;
-    background: linear-gradient(to right, var(--gold), var(--fire));
-    border-radius: 4px;
-    transition: width 0.1s linear;
-    box-shadow: 0 0 12px rgba(255,200,0,0.5);
-  }
-  #paid-timer-text {
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 13px;
-    color: var(--gold);
-    text-align: right;
-    margin-top: 3px;
-    letter-spacing: 3px;
-  }
-  #paid-tries-wrap {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-  }
-  .paid-try {
-    font-size: 22px;
-    filter: drop-shadow(0 0 6px #ffd700);
-    transition: all 0.3s;
-  }
-  .paid-try.used {
-    filter: grayscale(1) brightness(0.3);
-    transform: scale(0.8);
-  }
-  #paid-score-val {
-    font-family: 'Cinzel Decorative', serif;
-    font-size: 28px;
-    color: var(--gold);
-    text-shadow: 0 0 20px rgba(255,215,0,0.7);
-  }
-  #paid-answered-val {
-    font-family: 'Cinzel Decorative', serif;
-    font-size: 22px;
-    color: var(--fire);
-    text-shadow: 0 0 15px rgba(255,106,0,0.8);
-  }
-  #paid-question-area {
-    width: 100%;
-    max-width: 860px;
-    padding: 14px 30px;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 14px;
-    overflow: hidden;
-  }
-  #paid-question-text {
-    font-family: 'Cinzel', serif;
-    font-size: clamp(14px,2.5vw,20px);
-    color: #e8d5b0;
-    text-align: center;
-    line-height: 1.5;
-    min-height: 60px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 16px 20px;
-    background: rgba(255,100,0,0.05);
-    border: 1px solid rgba(255,150,50,0.15);
-    border-radius: 8px;
-  }
-  .paid-opt-grid {
+  .form-input:focus { border-color: rgba(255,180,0,0.6); }
+  .form-input::placeholder { color: rgba(200,150,80,0.3); }
+  .chain-select {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 10px;
   }
-  .paid-opt {
-    font-family: 'Cinzel', serif;
-    font-size: 13px;
-    padding: 14px 16px;
+  .chain-opt {
     background: rgba(255,100,0,0.06);
-    border: 1px solid rgba(255,150,50,0.2);
-    border-radius: 6px;
-    cursor: pointer;
-    color: #d4b87a;
+    border: 1px solid rgba(255,140,0,0.2);
+    border-radius: 4px;
+    padding: 12px;
     text-align: center;
-    transition: all 0.15s;
-    line-height: 1.4;
-    position: relative;
-  }
-  .paid-opt:hover { background: rgba(255,180,0,0.1); border-color: rgba(255,180,0,0.5); color: var(--gold); transform: translateY(-2px); }
-  .paid-opt.correct { background: rgba(0,80,40,0.5); border-color: var(--correct-green); color: var(--correct-green); pointer-events: none; }
-  .paid-opt.wrong { background: rgba(80,0,0,0.5); border-color: var(--wrong-red); color: var(--wrong-red); pointer-events: none; }
-  .paid-opt.disabled { pointer-events: none; opacity: 0.5; }
-  .paid-opt-letter {
-    position: absolute;
-    top: 4px; left: 8px;
-    font-size: 9px;
-    color: rgba(200,150,50,0.4);
+    cursor: pointer;
+    transition: all 0.2s;
     font-family: 'Share Tech Mono', monospace;
+    color: rgba(220,180,100,0.6);
+    font-size: 12px;
     letter-spacing: 1px;
   }
-  #paid-combo-notice {
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 10px;
-    color: rgba(255,215,0,0.6);
-    text-align: center;
-    letter-spacing: 3px;
-    min-height: 16px;
-  }
-
-  /* ── HOW TO PLAY ─────────────────────────────────────── */
-  #how-screen {
-    position: fixed;
-    inset: 0;
-    z-index: 400;
-    display: none;
-    flex-direction: column;
-    align-items: center;
-    overflow-y: auto;
-    background: rgba(5,3,2,0.98);
-    padding: 80px 20px 60px;
-  }
-  .how-section {
-    max-width: 680px;
-    width: 100%;
-    margin-bottom: 28px;
-    background: rgba(255,100,0,0.04);
-    border: 1px solid rgba(255,150,50,0.15);
-    border-radius: 8px;
-    padding: 24px 28px;
-  }
-  .how-section-title {
-    font-family: 'Cinzel Decorative', serif;
-    font-size: 15px;
-    color: var(--gold);
-    letter-spacing: 2px;
-    margin-bottom: 14px;
-    text-shadow: 0 0 16px rgba(255,215,0,0.4);
-  }
-  .how-item {
-    display: flex;
-    gap: 14px;
-    margin-bottom: 10px;
-    align-items: flex-start;
-  }
-  .how-num {
-    font-family: 'Cinzel Decorative', serif;
-    font-size: 14px;
-    color: var(--fire);
-    min-width: 24px;
-    text-align: center;
-    margin-top: 2px;
-  }
-  .how-text {
+  .chain-opt:hover { border-color: rgba(255,180,0,0.4); }
+  .chain-opt.selected { border-color: var(--gold); color: var(--gold); background: rgba(255,215,0,0.08); }
+  .chain-opt .chain-icon { font-size: 22px; display: block; margin-bottom: 6px; }
+  .modal-error {
     font-family: 'Share Tech Mono', monospace;
     font-size: 12px;
-    color: rgba(220,180,100,0.75);
-    line-height: 1.7;
-    letter-spacing: 0.5px;
-  }
-  .how-text strong { color: var(--gold); font-style: normal; }
-
-  /* ── LEADERBOARD ─────────────────────────────────────── */
-  #lb-screen {
-    position: fixed;
-    inset: 0;
-    z-index: 400;
-    display: none;
-    flex-direction: column;
-    align-items: center;
-    overflow-y: auto;
-    background: rgba(5,3,2,0.98);
-    padding: 80px 20px 60px;
-  }
-  #prize-pool-banner {
-    max-width: 600px;
-    width: 100%;
-    background: linear-gradient(135deg, rgba(255,215,0,0.1), rgba(255,100,0,0.08));
-    border: 1px solid rgba(255,215,0,0.3);
-    border-radius: 8px;
-    padding: 18px 24px;
+    color: var(--wrong-red);
     text-align: center;
-    margin-bottom: 24px;
+    margin: -8px 0 14px;
+    min-height: 18px;
+    letter-spacing: 1px;
   }
-  #prize-pool-label {
+  .modal-success {
     font-family: 'Share Tech Mono', monospace;
-    font-size: 10px;
-    letter-spacing: 4px;
-    color: rgba(200,150,50,0.5);
-    margin-bottom: 4px;
+    font-size: 12px;
+    color: var(--correct-green);
+    text-align: center;
+    margin: -8px 0 14px;
+    min-height: 18px;
+    letter-spacing: 1px;
   }
-  #prize-pool-val {
+
+  /* ── PAID MODE MODAL ─────────────────────────────── */
+  #paid-modal .token-info {
+    background: rgba(255,215,0,0.04);
+    border: 1px solid rgba(255,215,0,0.15);
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin-bottom: 18px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    color: rgba(220,180,100,0.7);
+    letter-spacing: 1px;
+    line-height: 1.8;
+  }
+  #paid-modal .token-info strong { color: var(--gold); }
+  .chances-display {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin: 16px 0;
+  }
+  .chance-dot {
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: rgba(255,215,0,0.7);
+    box-shadow: 0 0 10px rgba(255,215,0,0.4);
+    transition: all 0.3s;
+  }
+  .chance-dot.used {
+    background: rgba(255,255,255,0.08);
+    box-shadow: none;
+  }
+  .tx-status {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-align: center;
+    padding: 10px;
+    border-radius: 4px;
+    margin-bottom: 14px;
+    display: none;
+  }
+  .tx-status.pending { display: block; color: #ff8800; background: rgba(255,136,0,0.08); border: 1px solid rgba(255,136,0,0.2); animation: loading-dots 1s infinite; }
+  .tx-status.confirmed { display: block; color: var(--correct-green); background: rgba(0,255,136,0.06); border: 1px solid rgba(0,255,136,0.2); }
+  .tx-status.failed { display: block; color: var(--wrong-red); background: rgba(255,23,68,0.06); border: 1px solid rgba(255,23,68,0.2); }
+
+  /* ── LEADERBOARD PAGE ────────────────────────────── */
+  .prize-pool-banner {
+    background: linear-gradient(135deg, rgba(255,215,0,0.08), rgba(255,100,0,0.06));
+    border: 1px solid rgba(255,215,0,0.25);
+    border-radius: 8px;
+    padding: 20px 28px;
+    text-align: center;
+    margin-bottom: 28px;
+  }
+  .prize-pool-amount {
     font-family: 'Cinzel Decorative', serif;
-    font-size: 32px;
+    font-size: 38px;
     color: var(--gold);
     text-shadow: 0 0 30px rgba(255,215,0,0.6);
+    line-height: 1;
   }
-  #prize-pool-sub {
+  .prize-pool-label {
     font-family: 'Share Tech Mono', monospace;
-    font-size: 10px;
-    color: rgba(200,150,50,0.4);
-    margin-top: 4px;
-    letter-spacing: 2px;
+    font-size: 11px;
+    letter-spacing: 4px;
+    color: rgba(255,150,50,0.6);
+    margin-top: 6px;
   }
-  #prize-dist {
+  .prize-split-row {
     display: flex;
     gap: 8px;
     justify-content: center;
+    margin-top: 14px;
     flex-wrap: wrap;
-    margin-top: 12px;
   }
-  .prize-rank-chip {
+  .prize-split-chip {
     font-family: 'Share Tech Mono', monospace;
     font-size: 10px;
-    color: rgba(200,150,50,0.6);
-    background: rgba(255,150,0,0.08);
-    border: 1px solid rgba(255,150,0,0.2);
-    padding: 4px 10px;
-    border-radius: 3px;
     letter-spacing: 1px;
+    background: rgba(255,140,0,0.1);
+    border: 1px solid rgba(255,140,0,0.2);
+    border-radius: 20px;
+    padding: 4px 12px;
+    color: rgba(220,180,100,0.7);
   }
-  #lb-table-wrap {
-    max-width: 660px;
-    width: 100%;
-    overflow: hidden;
-    border: 1px solid rgba(255,150,50,0.2);
-    border-radius: 8px;
-  }
-  #lb-table {
+  .lb-table {
     width: 100%;
     border-collapse: collapse;
+  }
+  .lb-table th {
     font-family: 'Share Tech Mono', monospace;
-    font-size: 12px;
-    color: rgba(200,160,80,0.8);
-  }
-  #lb-table thead tr {
-    background: rgba(255,100,0,0.1);
-    border-bottom: 1px solid rgba(255,150,50,0.2);
-  }
-  #lb-table th {
-    padding: 12px 16px;
-    text-align: left;
     font-size: 10px;
     letter-spacing: 3px;
-    color: rgba(255,180,50,0.5);
+    color: rgba(255,150,50,0.5);
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid rgba(255,140,0,0.15);
     text-transform: uppercase;
   }
-  #lb-table td { padding: 11px 16px; border-bottom: 1px solid rgba(255,100,0,0.08); }
-  #lb-table tr:last-child td { border-bottom: none; }
-  #lb-table tr:hover td { background: rgba(255,100,0,0.05); }
-  .lb-rank-1 td { color: var(--gold) !important; }
-  .lb-rank-2 td { color: #c0c0c0 !important; }
-  .lb-rank-3 td { color: #cd7f32 !important; }
-  .lb-rank-badge { font-size: 16px; }
-  .lb-you { background: rgba(255,150,0,0.07) !important; }
-  #lb-refresh-btn {
+  .lb-table td {
     font-family: 'Share Tech Mono', monospace;
-    font-size: 10px;
-    letter-spacing: 2px;
-    color: rgba(200,150,50,0.5);
-    background: transparent;
-    border: 1px solid rgba(255,150,50,0.2);
-    padding: 6px 16px;
-    border-radius: 3px;
-    cursor: pointer;
-    margin-top: 14px;
-    transition: all 0.2s;
+    font-size: 13px;
+    color: rgba(220,180,100,0.8);
+    padding: 12px 12px;
+    border-bottom: 1px solid rgba(255,100,0,0.08);
+    vertical-align: middle;
   }
-  #lb-refresh-btn:hover { color: var(--gold); border-color: var(--gold); }
-
-  /* ── PROFILE PAGE ────────────────────────────────────── */
-  #profile-screen {
-    position: fixed;
-    inset: 0;
-    z-index: 400;
-    display: none;
-    flex-direction: column;
-    align-items: center;
-    overflow-y: auto;
-    background: rgba(5,3,2,0.98);
-    padding: 80px 20px 60px;
-  }
-  #profile-card {
-    max-width: 600px;
-    width: 100%;
-    background: rgba(255,100,0,0.05);
-    border: 1px solid rgba(255,150,50,0.2);
-    border-radius: 10px;
-    padding: 28px 28px;
-    margin-bottom: 24px;
-    text-align: center;
-  }
-  #profile-avatar {
-    font-size: 48px;
-    margin-bottom: 10px;
-  }
-  #profile-username {
-    font-family: 'Cinzel Decorative', serif;
-    font-size: 22px;
-    color: var(--gold);
-    text-shadow: 0 0 20px rgba(255,215,0,0.4);
-    margin-bottom: 4px;
-  }
-  #profile-address {
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 10px;
-    color: rgba(200,150,50,0.4);
-    letter-spacing: 2px;
-    margin-bottom: 18px;
-    word-break: break-all;
-  }
-  #profile-stats {
-    display: flex;
-    gap: 14px;
-    justify-content: center;
-    flex-wrap: wrap;
-    margin-bottom: 20px;
-  }
-  .profile-stat-chip {
-    background: rgba(255,100,0,0.08);
-    border: 1px solid rgba(255,150,50,0.2);
-    border-radius: 6px;
-    padding: 10px 16px;
-    text-align: center;
-    min-width: 90px;
-  }
-  .profile-stat-val {
+  .lb-table tr:first-child td { color: var(--gold); }
+  .lb-rank {
     font-family: 'Cinzel Decorative', serif;
     font-size: 18px;
+    color: rgba(255,180,80,0.4);
+  }
+  .lb-rank.r1 { color: #ffd700; text-shadow: 0 0 12px rgba(255,215,0,0.7); }
+  .lb-rank.r2 { color: #c0c0c0; }
+  .lb-rank.r3 { color: #cd7f32; }
+  .lb-username { color: var(--gold) !important; letter-spacing: 1px; }
+  .lb-score { color: var(--fire) !important; font-size: 15px !important; }
+  .lb-prize { color: var(--correct-green) !important; }
+  .lb-empty {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    color: rgba(200,150,80,0.4);
+    letter-spacing: 3px;
+    text-align: center;
+    padding: 40px;
+  }
+
+  /* ── PROFILE PAGE ────────────────────────────────── */
+  .profile-header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    background: rgba(255,100,0,0.06);
+    border: 1px solid rgba(255,140,0,0.2);
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin-bottom: 24px;
+  }
+  .profile-avatar {
+    font-size: 40px;
+    width: 60px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255,100,0,0.1);
+    border: 1px solid rgba(255,140,0,0.3);
+    border-radius: 50%;
+  }
+  .profile-name {
+    font-family: 'Cinzel Decorative', serif;
+    font-size: 20px;
     color: var(--gold);
   }
-  .profile-stat-label {
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 9px;
-    color: rgba(200,150,50,0.4);
-    letter-spacing: 2px;
-    margin-top: 3px;
-  }
-  #edit-name-row {
-    display: flex;
-    gap: 10px;
-    max-width: 300px;
-    margin: 0 auto;
-  }
-  #edit-name-input {
-    flex: 1;
-    background: rgba(255,100,0,0.06);
-    border: 1px solid rgba(255,150,50,0.25);
-    border-radius: 4px;
-    padding: 8px 12px;
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 12px;
-    color: #e8d5b0;
-    outline: none;
-    letter-spacing: 1px;
-  }
-  #edit-name-input:focus { border-color: rgba(255,180,0,0.5); }
-  #edit-name-btn {
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 10px;
-    letter-spacing: 1px;
-    color: var(--deep);
-    background: linear-gradient(135deg, #ffcc00, #ff8800);
-    border: none;
-    padding: 8px 14px;
-    border-radius: 4px;
-    cursor: pointer;
-    white-space: nowrap;
-  }
-  #edit-name-msg {
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 10px;
-    text-align: center;
-    margin-top: 8px;
-    min-height: 16px;
-    letter-spacing: 1px;
-    color: var(--correct-green);
-  }
-  .history-table-wrap {
-    max-width: 600px;
-    width: 100%;
-    border: 1px solid rgba(255,150,50,0.15);
-    border-radius: 8px;
-    overflow: hidden;
-    margin-bottom: 20px;
-  }
-  .history-table-title {
+  .profile-wallet {
     font-family: 'Share Tech Mono', monospace;
     font-size: 11px;
-    letter-spacing: 3px;
-    color: rgba(200,150,50,0.5);
-    padding: 12px 16px;
-    background: rgba(255,100,0,0.07);
-    border-bottom: 1px solid rgba(255,150,50,0.15);
+    color: rgba(200,150,80,0.5);
+    letter-spacing: 1px;
+    margin-top: 4px;
+    word-break: break-all;
+  }
+  .profile-chain-badge {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    background: rgba(255,140,0,0.1);
+    border: 1px solid rgba(255,140,0,0.25);
+    color: var(--fire);
+    margin-top: 6px;
+    display: inline-block;
+  }
+  .section-header {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 4px;
+    color: rgba(255,150,50,0.5);
     text-transform: uppercase;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255,100,0,0.12);
   }
   .history-table {
     width: 100%;
     border-collapse: collapse;
+    margin-bottom: 30px;
+  }
+  .history-table th {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: rgba(255,150,50,0.4);
+    padding: 6px 10px;
+    text-align: left;
+    border-bottom: 1px solid rgba(255,100,0,0.12);
+  }
+  .history-table td {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    color: rgba(200,160,80,0.7);
+    padding: 10px 10px;
+    border-bottom: 1px solid rgba(255,100,0,0.06);
+    vertical-align: top;
+  }
+  .tx-link {
+    color: var(--fire);
+    text-decoration: none;
+    font-size: 10px;
+    letter-spacing: 1px;
+  }
+  .tx-link:hover { color: var(--gold); text-decoration: underline; }
+  .status-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    letter-spacing: 1px;
+  }
+  .status-badge.active { color: var(--correct-green); background: rgba(0,255,136,0.08); border: 1px solid rgba(0,255,136,0.2); }
+  .status-badge.exhausted { color: rgba(200,150,80,0.6); background: rgba(200,150,80,0.06); border: 1px solid rgba(200,150,80,0.15); }
+
+  /* ── HOW TO PLAY PAGE ────────────────────────────── */
+  .how-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  @media(max-width:600px){ .how-grid{grid-template-columns:1fr;} }
+  .how-card {
+    background: rgba(255,100,0,0.05);
+    border: 1px solid rgba(255,140,0,0.15);
+    border-radius: 7px;
+    padding: 20px 18px;
+  }
+  .how-card-icon { font-size: 26px; margin-bottom: 10px; display: block; }
+  .how-card-title {
+    font-family: 'Cinzel', serif;
+    font-size: 14px;
+    color: var(--gold);
+    margin-bottom: 8px;
+    letter-spacing: 1px;
+  }
+  .how-card-text {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    color: rgba(200,160,80,0.7);
+    line-height: 1.7;
+    letter-spacing: 0.5px;
+  }
+
+  /* ── PAID GAME HUD EXTRAS ────────────────────────── */
+  #paid-hud-extra {
+    display: none;
+    align-items: center;
+    gap: 14px;
     font-family: 'Share Tech Mono', monospace;
     font-size: 11px;
-    color: rgba(200,160,80,0.7);
-  }
-  .history-table td { padding: 9px 14px; border-bottom: 1px solid rgba(255,100,0,0.06); }
-  .history-table tr:last-child td { border-bottom: none; }
-  .history-table .ok { color: var(--correct-green); }
-  .history-table .fail { color: var(--wrong-red); }
-
-  /* ── USERNAME MODAL ──────────────────────────────────── */
-  #username-modal { display: none; }
-
-  /* ── PAID RESULT SCREEN ──────────────────────────────── */
-  #paid-result-screen {
-    position: fixed;
-    inset: 0;
-    z-index: 360;
-    display: none;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    background: rgba(5,3,2,0.97);
-    padding: 30px;
-    text-align: center;
-  }
-  #paid-result-score {
-    font-family: 'Cinzel Decorative', serif;
-    font-size: 64px;
-    color: var(--gold);
-    text-shadow: 0 0 30px rgba(255,215,0,0.7);
-    line-height: 1;
-    margin: 10px 0;
-  }
-  #paid-result-stats {
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 13px;
-    color: rgba(220,180,100,0.7);
+    color: rgba(255,215,0,0.7);
     letter-spacing: 2px;
-    margin-bottom: 20px;
-    line-height: 2;
   }
+  #paid-timer-big {
+    font-family: 'Cinzel Decorative', serif;
+    font-size: 28px;
+    color: var(--gold);
+    text-shadow: 0 0 20px rgba(255,215,0,0.6);
+    line-height: 1;
+    animation: timer-pulse 1s infinite alternate;
+  }
+  @keyframes timer-pulse { 0%{text-shadow:0 0 10px rgba(255,215,0,0.4)} 100%{text-shadow:0 0 30px rgba(255,215,0,0.9)} }
+  #paid-timer-big.danger { color: var(--wrong-red); text-shadow: 0 0 20px rgba(255,23,68,0.8); }
+  #paid-chances-hud { display: flex; gap: 6px; align-items: center; }
 
-  /* ── TOAST ───────────────────────────────────────────── */
+  /* ── LOADING SPINNER ─────────────────────────────── */
+  .spin-loader {
+    display: inline-block;
+    width: 20px; height: 20px;
+    border: 2px solid rgba(255,140,0,0.2);
+    border-top-color: var(--fire);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+    margin-right: 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── TOAST NOTIFICATION ──────────────────────────── */
   #toast {
     position: fixed;
     bottom: 30px;
     left: 50%;
-    transform: translateX(-50%) translateY(80px);
-    z-index: 700;
-    background: rgba(20,12,5,0.95);
-    border: 1px solid rgba(255,150,50,0.3);
+    transform: translateX(-50%) translateY(20px);
+    z-index: 1000;
+    background: rgba(20,12,6,0.95);
+    border: 1px solid rgba(255,140,0,0.3);
     border-radius: 6px;
     padding: 12px 24px;
     font-family: 'Share Tech Mono', monospace;
-    font-size: 12px;
-    letter-spacing: 2px;
+    font-size: 13px;
     color: var(--gold);
-    transition: transform 0.3s ease;
+    letter-spacing: 1px;
+    pointer-events: none;
+    opacity: 0;
+    transition: all 0.3s ease;
     white-space: nowrap;
-    box-shadow: 0 4px 24px rgba(255,100,0,0.2);
+    box-shadow: 0 4px 30px rgba(0,0,0,0.5);
   }
-  #toast.show { transform: translateX(-50%) translateY(0); }
-  #toast.err { color: var(--wrong-red); border-color: rgba(255,23,68,0.3); }
-  #toast.ok { color: var(--correct-green); border-color: rgba(0,255,136,0.3); }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #toast.error { border-color: rgba(255,23,68,0.4); color: var(--wrong-red); }
+  #toast.success { border-color: rgba(0,255,136,0.3); color: var(--correct-green); }
 
-  /* Scrollbar styling */
-  ::-webkit-scrollbar { width: 4px; }
-  ::-webkit-scrollbar-track { background: rgba(255,100,0,0.05); }
-  ::-webkit-scrollbar-thumb { background: rgba(255,150,50,0.3); border-radius: 2px; }
-
+  /* ── NOT-CONNECTED GATE ──────────────────────────── */
+  .connect-gate {
+    text-align: center;
+    padding: 60px 20px;
+  }
+  .connect-gate-icon { font-size: 48px; margin-bottom: 16px; }
+  .connect-gate-text {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    letter-spacing: 3px;
+    color: rgba(200,150,80,0.5);
+    margin-bottom: 24px;
+    line-height: 1.8;
+  }
 </style>
 </head>
 <body>
 
-<!-- ══════════════════════════════════════════════ -->
-<!-- NAV BAR -->
-<div id="nav-bar" style="display:none;">
-  <div id="nav-logo" onclick="showPage('home')">⛏ THE GROTTO</div>
-  <div id="nav-links">
-    <button class="nav-btn" onclick="showPage('how')">HOW TO PLAY</button>
-    <button class="nav-btn" onclick="showPage('lb')">LEADERBOARD</button>
-    <button class="nav-btn" id="profile-nav-btn" onclick="showPage('profile')" style="display:none;">MY PROFILE</button>
-    <button id="wallet-btn" onclick="openWalletModal()">CONNECT WALLET</button>
-  </div>
-</div>
-
 <!-- TOAST -->
 <div id="toast"></div>
 
-<!-- ══════════════════════════════════════════════ -->
-<!-- HOME SCREEN -->
-<div id="home-screen" style="display:none;">
-  <div id="home-hero">
-    <div class="screen-title">THE GROTTO</div>
-    <div class="screen-sub">⛏ HashCash Miner Trials ⛏</div>
-    <div class="stone-divider"></div>
-    <div id="home-tagline">PROVE YOUR KNOWLEDGE. CLAIM YOUR GOLD.</div>
+<!-- TOP NAV -->
+<nav id="top-nav">
+  <div id="nav-logo" onclick="showPage('home')">⛏ THE GROTTO</div>
+  <div id="nav-links">
+    <button class="nav-btn active" data-page="home" onclick="showPage('home')">HOME</button>
+    <button class="nav-btn" data-page="howto" onclick="showPage('howto')">HOW TO PLAY</button>
+    <button class="nav-btn" data-page="leaderboard" onclick="showPage('leaderboard')">LEADERBOARD</button>
+    <button class="nav-btn" data-page="profile" onclick="showPage('profile')">MY PROFILE</button>
+    <button id="wallet-btn" onclick="openWalletFlow()">⚡ CONNECT WALLET</button>
   </div>
-  <div id="home-modes">
-    <div class="mode-card" onclick="startFreeMode()">
-      <div class="mode-badge free">FREE TO PLAY</div>
-      <div class="mode-title">FREE TRIAL</div>
-      <div class="mode-desc">Identify HashCash miner NFTs from their images across 10 escalating rounds. Three lives, one hint, infinite glory.</div>
-      <div class="mode-cost">NO ENTRY FEE</div>
-      <button class="btn-primary" style="font-size:13px;padding:12px 32px;" onclick="startFreeMode()">ENTER THE GROTTO</button>
+</nav>
+
+<!-- ══════════════════════════════════════════════════ -->
+<!-- HOME PAGE -->
+<div class="page active" id="page-home">
+  <div class="page-inner">
+    <div id="home-hero">
+      <div class="hero-title">THE GROTTO</div>
+      <div class="hero-sub">⛏ HASHCASH MINER TRIALS ⛏</div>
+      <div class="stone-divider" style="margin-bottom:28px;"></div>
     </div>
-    <div class="mode-card paid" onclick="openPayModal()">
-      <div class="mode-badge premium">⚔ PAID MODE</div>
-      <div class="mode-title">INFERNO TRIAL</div>
-      <div class="mode-desc">Pay $1 in $HERESY or $HCASH. Answer as many questions as possible in <strong style="color:var(--fire)">60 seconds</strong>. 3 attempts per entry — no limits on entries. Compete for the prize pool.</div>
-      <div class="mode-cost">$1 ENTRY — TOP 5 SHARE THE POOL</div>
-      <button class="btn-primary" style="font-size:13px;padding:12px 32px;background:linear-gradient(135deg,#ffd700,#ff6a00);" onclick="openPayModal()">ENTER INFERNO</button>
+    <div class="mode-cards">
+      <div class="mode-card" onclick="launchFreeMode()">
+        <span class="mode-card-icon">🆓</span>
+        <div class="mode-card-title">FREE MODE</div>
+        <div class="mode-card-desc">
+          Identify Grotto miners from their NFT images.<br>
+          10 rounds · 3 lives · No entry fee.<br>
+          Compete for fun and practice.
+        </div>
+        <div class="mode-card-badge" style="background:linear-gradient(135deg,#444,#222);color:#ccc;">FREE ENTRY</div>
+      </div>
+      <div class="mode-card paid-card" onclick="launchPaidMode()">
+        <span class="mode-card-icon">💀</span>
+        <div class="mode-card-title">GROTTO TRIALS</div>
+        <div class="mode-card-desc">
+          Harder questions · confusing options.<br>
+          1 minute · 3 chances per $1 entry.<br>
+          Top 5 share the prize pool!
+        </div>
+        <div class="mode-card-badge">$1 ENTRY · WIN REAL TOKENS</div>
+      </div>
     </div>
-  </div>
-  <div class="stone-divider"></div>
-  <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:rgba(200,150,50,0.35);letter-spacing:3px;text-align:center;margin-top:16px;">
-    CONNECT YOUR WALLET TO ACCESS PAID MODE &amp; LEADERBOARD
+    <div class="home-stats-row">
+      <div class="home-stat">
+        <div class="home-stat-val" id="home-total-entries">—</div>
+        <div class="home-stat-lbl">TOTAL ENTRIES</div>
+      </div>
+      <div class="home-stat">
+        <div class="home-stat-val" id="home-prize-pool">—</div>
+        <div class="home-stat-lbl">PRIZE POOL</div>
+      </div>
+      <div class="home-stat">
+        <div class="home-stat-val" id="home-players">—</div>
+        <div class="home-stat-lbl">PLAYERS</div>
+      </div>
+    </div>
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════════ -->
-<!-- HOW TO PLAY SCREEN -->
-<div id="how-screen">
-  <div class="screen-title" style="font-size:clamp(22px,5vw,42px);margin-bottom:6px;">HOW TO PLAY</div>
-  <div class="screen-sub" style="margin-bottom:28px;">⛏ GROTTO TRIALS — RULES &amp; MECHANICS ⛏</div>
-
-  <div class="how-section">
-    <div class="how-section-title">🔥 FREE TRIAL MODE</div>
-    <div class="how-item"><div class="how-num">1</div><div class="how-text">You are shown an image of a HashCash miner NFT — identify it by choosing the correct name from 3 options (pillars A, B, C or keys 1/2/3).</div></div>
-    <div class="how-item"><div class="how-num">2</div><div class="how-text">You have <strong>3 lives</strong>. A wrong answer or timeout costs one life. Lose all three and the Grotto claims you.</div></div>
-    <div class="how-item"><div class="how-num">3</div><div class="how-text">There are <strong>10 rounds per game</strong>. Difficulty escalates: Easy → Medium → Hard → Extreme. The timer shrinks each tier.</div></div>
-    <div class="how-item"><div class="how-num">4</div><div class="how-text">Answer faster for <strong>time bonus points</strong>. Chain correct answers for a <strong>streak multiplier</strong> (up to ×5). Every 5th round is a double-points Speed Bonus Round.</div></div>
-    <div class="how-item"><div class="how-num">5</div><div class="how-text">Press <strong>H</strong> or the Hint button once per game to eliminate one wrong option at the cost of 30 points.</div></div>
-  </div>
-
-  <div class="how-section">
-    <div class="how-section-title">⚔ INFERNO TRIAL (PAID MODE)</div>
-    <div class="how-item"><div class="how-num">1</div><div class="how-text">Pay <strong>$1 worth of $HERESY</strong> (0.00085 HERESY on The Grotto L1) or <strong>$1 worth of $HCASH</strong> (18 HCASH on Avalanche) to enter.</div></div>
-    <div class="how-item"><div class="how-num">2</div><div class="how-text">Each $1 entry gives you <strong>3 attempts</strong>. An attempt = one 60-second blitz round. You can buy unlimited entries.</div></div>
-    <div class="how-item"><div class="how-num">3</div><div class="how-text">Questions fire one after another for 60 seconds. Answer as many as possible. Some questions are <strong>double questions</strong> — read carefully, both parts must match your answer.</div></div>
-    <div class="how-item"><div class="how-num">4</div><div class="how-text">Questions are <strong>extremely hard</strong> — hashrate stats, power figures, rarity tiers, chain data, NFT IDs, and combined multi-fact queries.</div></div>
-    <div class="how-item"><div class="how-num">5</div><div class="how-text">Your <strong>highest score</strong> across all attempts in one entry is submitted to the leaderboard. The <strong>top 5 scores</strong> split the prize pool after a 5% platform fee.</div></div>
-    <div class="how-item"><div class="how-num">6</div><div class="how-text">Prize pool split: <strong>🥇 40% · 🥈 25% · 🥉 15% · 4th 12% · 5th 8%</strong> of the post-fee pool.</div></div>
-    <div class="how-item"><div class="how-num">7</div><div class="how-text">Payments go to the admin treasury. Transaction hash is verified on-chain before your session starts — it <strong>cannot be faked or replayed</strong>.</div></div>
-  </div>
-
-  <div class="how-section">
-    <div class="how-section-title">🏆 LEADERBOARD &amp; PROFILE</div>
-    <div class="how-item"><div class="how-num">1</div><div class="how-text">Connect your wallet and register a <strong>unique username</strong> to appear on the leaderboard. Usernames are permanent per address.</div></div>
-    <div class="how-item"><div class="how-num">2</div><div class="how-text">Your <strong>Profile page</strong> shows all your payment history, game sessions, and scores. Full audit trail.</div></div>
-    <div class="how-item"><div class="how-num">3</div><div class="how-text">The leaderboard shows the <strong>current prize pool</strong> (net of 5% fee) and how much each of the top 5 ranks will receive.</div></div>
-  </div>
-
-  <button class="btn-primary" style="font-size:14px;padding:12px 36px;" onclick="showPage('home')">BACK TO HOME</button>
-</div>
-
-<!-- ══════════════════════════════════════════════ -->
-<!-- LEADERBOARD SCREEN -->
-<div id="lb-screen">
-  <div class="screen-title" style="font-size:clamp(22px,5vw,42px);margin-bottom:6px;">LEADERBOARD</div>
-  <div class="screen-sub" style="margin-bottom:20px;">⛏ INFERNO TRIAL RANKINGS ⛏</div>
-  <div id="prize-pool-banner">
-    <div id="prize-pool-label">CURRENT PRIZE POOL (AFTER 5% FEE)</div>
-    <div id="prize-pool-val">—</div>
-    <div id="prize-pool-sub">SPLIT BETWEEN TOP 5 PLAYERS</div>
-    <div id="prize-dist">
-      <div class="prize-rank-chip">🥇 40%</div>
-      <div class="prize-rank-chip">🥈 25%</div>
-      <div class="prize-rank-chip">🥉 15%</div>
-      <div class="prize-rank-chip">4th · 12%</div>
-      <div class="prize-rank-chip">5th · 8%</div>
+<!-- ══════════════════════════════════════════════════ -->
+<!-- HOW TO PLAY PAGE -->
+<div class="page" id="page-howto">
+  <div class="page-inner">
+    <div class="page-title">HOW TO PLAY</div>
+    <div class="page-sub">⛏ MASTER THE GROTTO TRIALS ⛏</div>
+    <div class="how-grid">
+      <div class="how-card">
+        <span class="how-card-icon">🔗</span>
+        <div class="how-card-title">1. CONNECT YOUR WALLET</div>
+        <div class="how-card-text">Connect MetaMask to either Avalanche C-Chain or The Grotto L1. Your wallet address becomes your unique identity. Choose a username for the leaderboard.</div>
+      </div>
+      <div class="how-card">
+        <span class="how-card-icon">🆓</span>
+        <div class="how-card-title">2. FREE MODE</div>
+        <div class="how-card-text">Identify Grotto miner NFTs from their image. 10 rounds. 3 lives. Each wrong answer or timeout costs a life. Build streaks for score multipliers. A hint eliminates one wrong option.</div>
+      </div>
+      <div class="how-card">
+        <span class="how-card-icon">💀</span>
+        <div class="how-card-title">3. GROTTO TRIALS (PAID)</div>
+        <div class="how-card-text">Pay $1 worth of $HERESY (Grotto L1) or $hCASH (Avalanche C-Chain) to enter. Each $1 gives 3 chances. No limit on entries. Questions are harder — similar-looking options included. Identify as many miners as possible in 60 seconds.</div>
+      </div>
+      <div class="how-card">
+        <span class="how-card-icon">🏆</span>
+        <div class="how-card-title">4. WIN THE PRIZE POOL</div>
+        <div class="how-card-text">Top 5 players on the paid leaderboard split the prize pool. 5% platform fee is deducted. Rank 1 gets the largest share. Pool is distributed at the end of each season.</div>
+      </div>
+      <div class="how-card">
+        <span class="how-card-icon">💰</span>
+        <div class="how-card-title">5. PRIZE DISTRIBUTION</div>
+        <div class="how-card-text">🥇 Rank 1: 40% · 🥈 Rank 2: 25% · 🥉 Rank 3: 15% · 4th: 12% · 5th: 8% of the net prize pool after 5% platform fee.</div>
+      </div>
+      <div class="how-card">
+        <span class="how-card-icon">⚡</span>
+        <div class="how-card-title">6. TOKENS ACCEPTED</div>
+        <div class="how-card-text">On Grotto L1: 0.00085 $HERESY = $1. On Avalanche C-Chain: 18 $hCASH = $1. Payment is verified on-chain — each transaction can only be used once. No cheating possible.</div>
+      </div>
+    </div>
+    <div class="how-card" style="background:rgba(255,215,0,0.04);border-color:rgba(255,215,0,0.2);margin-bottom:20px;">
+      <span class="how-card-icon">⌨️</span>
+      <div class="how-card-title">KEYBOARD SHORTCUTS (FREE MODE)</div>
+      <div class="how-card-text">Press <strong style="color:var(--gold)">1 / 2 / 3</strong> to select an answer · Press <strong style="color:var(--gold)">H</strong> to use a hint · Press <strong style="color:var(--gold)">Enter</strong> on intro screen to start</div>
     </div>
   </div>
-  <div id="lb-table-wrap">
-    <table id="lb-table">
+</div>
+
+<!-- ══════════════════════════════════════════════════ -->
+<!-- LEADERBOARD PAGE -->
+<div class="page" id="page-leaderboard">
+  <div class="page-inner">
+    <div class="page-title">LEADERBOARD</div>
+    <div class="page-sub">⚔ GROTTO TRIALS — TOP MINERS ⚔</div>
+    <div class="prize-pool-banner">
+      <div class="prize-pool-amount" id="lb-prize-amount">$0.00</div>
+      <div class="prize-pool-label">CURRENT NET PRIZE POOL (AFTER 5% FEE)</div>
+      <div class="prize-split-row">
+        <span class="prize-split-chip">🥇 40%</span>
+        <span class="prize-split-chip">🥈 25%</span>
+        <span class="prize-split-chip">🥉 15%</span>
+        <span class="prize-split-chip">4th: 12%</span>
+        <span class="prize-split-chip">5th: 8%</span>
+      </div>
+    </div>
+    <div id="lb-loading" style="text-align:center;padding:30px;font-family:'Share Tech Mono',monospace;font-size:12px;color:rgba(255,150,50,0.5);letter-spacing:3px;">
+      <span class="spin-loader"></span>LOADING...
+    </div>
+    <table class="lb-table" id="lb-table" style="display:none;">
       <thead>
         <tr>
-          <th>#</th>
+          <th>RANK</th>
           <th>PLAYER</th>
+          <th>CHAIN</th>
           <th>BEST SCORE</th>
-          <th>ANSWERED</th>
+          <th>RUNS</th>
           <th>PRIZE SHARE</th>
         </tr>
       </thead>
-      <tbody id="lb-tbody">
-        <tr><td colspan="5" style="text-align:center;padding:24px;color:rgba(200,150,50,0.3);font-family:'Share Tech Mono',monospace;letter-spacing:2px;">LOADING...</td></tr>
-      </tbody>
+      <tbody id="lb-tbody"></tbody>
     </table>
-  </div>
-  <button id="lb-refresh-btn" onclick="loadLeaderboard()">↻ REFRESH</button>
-  <div style="height:20px;"></div>
-</div>
-
-<!-- ══════════════════════════════════════════════ -->
-<!-- PROFILE SCREEN -->
-<div id="profile-screen">
-  <div class="screen-title" style="font-size:clamp(20px,4vw,36px);margin-bottom:6px;">MY PROFILE</div>
-  <div class="screen-sub" style="margin-bottom:24px;">⛏ GROTTO ADVENTURER ⛏</div>
-  <div id="profile-card">
-    <div id="profile-avatar">⛏</div>
-    <div id="profile-username">—</div>
-    <div id="profile-address">Not connected</div>
-    <div id="profile-stats">
-      <div class="profile-stat-chip">
-        <div class="profile-stat-val" id="ps-entries">0</div>
-        <div class="profile-stat-label">ENTRIES</div>
-      </div>
-      <div class="profile-stat-chip">
-        <div class="profile-stat-val" id="ps-games">0</div>
-        <div class="profile-stat-label">GAMES</div>
-      </div>
-      <div class="profile-stat-chip">
-        <div class="profile-stat-val" id="ps-best">0</div>
-        <div class="profile-stat-label">BEST SCORE</div>
-      </div>
-      <div class="profile-stat-chip">
-        <div class="profile-stat-val" id="ps-answered">0</div>
-        <div class="profile-stat-label">ANSWERED</div>
-      </div>
-    </div>
-    <div id="edit-name-row">
-      <input id="edit-name-input" class="grotto-input" style="margin-bottom:0;" placeholder="NEW USERNAME" maxlength="20" />
-      <button id="edit-name-btn" onclick="updateUsername()">SAVE</button>
-    </div>
-    <div id="edit-name-msg"></div>
-  </div>
-
-  <div class="history-table-wrap">
-    <div class="history-table-title">PAYMENT HISTORY</div>
-    <table class="history-table" id="pay-history-table">
-      <thead>
-        <tr style="background:rgba(255,100,0,0.07);">
-          <td style="font-size:9px;letter-spacing:2px;color:rgba(200,150,50,0.4);padding:8px 14px;">DATE</td>
-          <td style="font-size:9px;letter-spacing:2px;color:rgba(200,150,50,0.4);">TOKEN</td>
-          <td style="font-size:9px;letter-spacing:2px;color:rgba(200,150,50,0.4);">AMOUNT</td>
-          <td style="font-size:9px;letter-spacing:2px;color:rgba(200,150,50,0.4);">TX</td>
-        </tr>
-      </thead>
-      <tbody id="pay-history-body">
-        <tr><td colspan="4" style="text-align:center;color:rgba(200,150,50,0.3);padding:16px;">No payments yet</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div class="history-table-wrap">
-    <div class="history-table-title">GAME HISTORY</div>
-    <table class="history-table" id="game-history-table">
-      <thead>
-        <tr style="background:rgba(255,100,0,0.07);">
-          <td style="font-size:9px;letter-spacing:2px;color:rgba(200,150,50,0.4);padding:8px 14px;">DATE</td>
-          <td style="font-size:9px;letter-spacing:2px;color:rgba(200,150,50,0.4);">MODE</td>
-          <td style="font-size:9px;letter-spacing:2px;color:rgba(200,150,50,0.4);">SCORE</td>
-          <td style="font-size:9px;letter-spacing:2px;color:rgba(200,150,50,0.4);">ANSWERED</td>
-        </tr>
-      </thead>
-      <tbody id="game-history-body">
-        <tr><td colspan="4" style="text-align:center;color:rgba(200,150,50,0.3);padding:16px;">No games yet</td></tr>
-      </tbody>
-    </table>
+    <div class="lb-empty" id="lb-empty" style="display:none;">NO PAID ENTRIES YET — BE THE FIRST TO ENTER THE TRIALS</div>
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════════ -->
-<!-- WALLET MODAL -->
-<div class="modal-overlay" id="wallet-modal" style="display:none;">
+<!-- ══════════════════════════════════════════════════ -->
+<!-- PROFILE PAGE -->
+<div class="page" id="page-profile">
+  <div class="page-inner">
+    <div class="page-title">MY PROFILE</div>
+    <div class="page-sub">⛏ YOUR GROTTO HISTORY ⛏</div>
+    <div id="profile-connect-gate" class="connect-gate" style="display:none;">
+      <div class="connect-gate-icon">🔒</div>
+      <div class="connect-gate-text">CONNECT YOUR WALLET<br>TO VIEW YOUR PROFILE</div>
+      <button class="btn-primary" onclick="openWalletFlow()">CONNECT WALLET</button>
+    </div>
+    <div id="profile-content" style="display:none;">
+      <div class="profile-header">
+        <div class="profile-avatar">⛏</div>
+        <div>
+          <div class="profile-name" id="profile-username">—</div>
+          <div class="profile-wallet" id="profile-wallet-addr">—</div>
+          <div class="profile-chain-badge" id="profile-chain-badge">—</div>
+        </div>
+        <div style="margin-left:auto;">
+          <button class="btn-secondary" onclick="openEditName()" style="font-size:11px;padding:7px 16px;">✏ EDIT NAME</button>
+        </div>
+      </div>
+      <div class="section-header">PAYMENT HISTORY</div>
+      <div id="payment-history-loading" style="font-family:'Share Tech Mono',monospace;font-size:12px;color:rgba(255,150,50,0.4);letter-spacing:2px;padding:20px 0;"><span class="spin-loader"></span>LOADING...</div>
+      <table class="history-table" id="payment-history-table" style="display:none;">
+        <thead>
+          <tr>
+            <th>DATE</th>
+            <th>TOKEN</th>
+            <th>AMOUNT</th>
+            <th>CHANCES</th>
+            <th>BEST SCORE</th>
+            <th>STATUS</th>
+            <th>TX</th>
+          </tr>
+        </thead>
+        <tbody id="payment-history-tbody"></tbody>
+      </table>
+      <div id="payment-history-empty" style="display:none;font-family:'Share Tech Mono',monospace;font-size:12px;color:rgba(200,150,80,0.4);letter-spacing:2px;padding:20px 0;">NO PAID ENTRIES YET</div>
+      <div class="section-header" style="margin-top:20px;">GAME HISTORY</div>
+      <div id="game-history-loading" style="font-family:'Share Tech Mono',monospace;font-size:12px;color:rgba(255,150,50,0.4);letter-spacing:2px;padding:20px 0;"><span class="spin-loader"></span>LOADING...</div>
+      <table class="history-table" id="game-history-table" style="display:none;">
+        <thead>
+          <tr>
+            <th>DATE</th>
+            <th>MODE</th>
+            <th>SCORE</th>
+            <th>CORRECT</th>
+            <th>STREAK</th>
+            <th>RESULT</th>
+          </tr>
+        </thead>
+        <tbody id="game-history-tbody"></tbody>
+      </table>
+      <div id="game-history-empty" style="display:none;font-family:'Share Tech Mono',monospace;font-size:12px;color:rgba(200,150,80,0.4);letter-spacing:2px;padding:20px 0;">NO GAMES PLAYED YET</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════ -->
+<!-- WALLET CONNECT MODAL -->
+<div class="modal-overlay" id="wallet-modal">
   <div class="modal-box">
     <button class="modal-close" onclick="closeModal('wallet-modal')">✕</button>
     <div class="modal-title">CONNECT WALLET</div>
-    <div class="modal-sub">CHOOSE YOUR CHAIN TO CONNECT</div>
-    <div class="chain-option" onclick="connectWallet('grotto')">
-      <div class="chain-icon">🌋</div>
-      <div>
-        <div class="chain-name">THE GROTTO L1</div>
-        <div class="chain-detail">CHAIN ID: 36463 · PAY WITH $HERESY</div>
+    <div class="modal-sub">CHOOSE YOUR CHAIN TO PLAY</div>
+    <div class="form-group">
+      <div class="form-label">SELECT CHAIN</div>
+      <div class="chain-select">
+        <div class="chain-opt selected" data-chain="grotto" onclick="selectChain('grotto')">
+          <span class="chain-icon">🌋</span>
+          THE GROTTO L1<br>
+          <span style="font-size:10px;opacity:0.7;">$HERESY</span>
+        </div>
+        <div class="chain-opt" data-chain="avax" onclick="selectChain('avax')">
+          <span class="chain-icon">🔺</span>
+          AVALANCHE C-CHAIN<br>
+          <span style="font-size:10px;opacity:0.7;">$hCASH</span>
+        </div>
       </div>
     </div>
-    <div class="chain-option" onclick="connectWallet('avax')">
-      <div class="chain-icon">🔺</div>
-      <div>
-        <div class="chain-name">AVALANCHE C-CHAIN</div>
-        <div class="chain-detail">CHAIN ID: 43114 · PAY WITH $HCASH</div>
-      </div>
-    </div>
-    <div id="wallet-connect-status" style="font-family:'Share Tech Mono',monospace;font-size:10px;color:rgba(200,150,50,0.5);text-align:center;margin-top:12px;letter-spacing:2px;min-height:18px;"></div>
+    <div class="modal-error" id="wallet-modal-error"></div>
+    <button class="btn-primary" id="connect-wallet-btn" onclick="doConnectWallet()" style="width:100%;font-size:15px;">
+      CONNECT METAMASK
+    </button>
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════════ -->
-<!-- USERNAME MODAL -->
-<div class="modal-overlay" id="username-modal">
+<!-- REGISTER USERNAME MODAL -->
+<div class="modal-overlay" id="register-modal">
   <div class="modal-box">
+    <button class="modal-close" onclick="closeModal('register-modal')">✕</button>
     <div class="modal-title">CHOOSE YOUR NAME</div>
-    <div class="modal-sub">YOUR IDENTITY IN THE GROTTO — CHOOSE WISELY</div>
-    <input id="username-input" class="grotto-input" placeholder="ENTER USERNAME (MAX 20 CHARS)" maxlength="20" />
-    <div class="input-hint">LETTERS, NUMBERS, UNDERSCORES ONLY. UNIQUE PER WALLET.</div>
-    <div id="username-status" style="font-family:'Share Tech Mono',monospace;font-size:11px;color:rgba(255,23,68,0.8);text-align:center;margin-bottom:12px;min-height:16px;letter-spacing:1px;"></div>
-    <button class="btn-primary" style="font-size:14px;padding:12px 32px;width:100%;" onclick="registerUsername()">CLAIM NAME</button>
+    <div class="modal-sub">THIS NAME APPEARS ON THE LEADERBOARD</div>
+    <div class="form-group">
+      <label class="form-label">USERNAME</label>
+      <input class="form-input" id="register-username-input" placeholder="e.g. GROTTO_KING" maxlength="24" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'')">
+    </div>
+    <div class="modal-error" id="register-error"></div>
+    <button class="btn-primary" id="register-btn" onclick="doRegister()" style="width:100%;font-size:15px;">ENTER THE GROTTO</button>
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════════ -->
-<!-- PAYMENT MODAL -->
-<div class="modal-overlay" id="pay-modal" style="display:none;">
+<!-- EDIT NAME MODAL -->
+<div class="modal-overlay" id="editname-modal">
   <div class="modal-box">
-    <button class="modal-close" onclick="closeModal('pay-modal')">✕</button>
-    <div class="modal-title">INFERNO ENTRY</div>
-    <div class="modal-sub">SELECT TOKEN &amp; CONFIRM PAYMENT</div>
-    <div class="token-row">
-      <div class="token-choice" id="tok-heresy" onclick="selectToken('heresy')">
-        <div class="t-name">$HERESY</div>
-        <div class="t-chain">THE GROTTO L1</div>
-        <div class="t-amount">0.00085 HERESY</div>
-      </div>
-      <div class="token-choice" id="tok-hcash" onclick="selectToken('hcash')">
-        <div class="t-name">$HCASH</div>
-        <div class="t-chain">AVALANCHE</div>
-        <div class="t-amount">18 HCASH</div>
-      </div>
+    <button class="modal-close" onclick="closeModal('editname-modal')">✕</button>
+    <div class="modal-title">CHANGE USERNAME</div>
+    <div class="modal-sub">NAMES CANNOT BE REUSED</div>
+    <div class="form-group">
+      <label class="form-label">NEW USERNAME</label>
+      <input class="form-input" id="editname-input" placeholder="NEW_NAME" maxlength="24" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'')">
     </div>
-    <div id="pay-status"></div>
-    <div id="tx-confirm-box">
-      <div style="font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:3px;color:rgba(0,255,136,0.5);margin-bottom:6px;">TRANSACTION CONFIRMED ON-CHAIN ✓</div>
-      <div id="tx-hash-link"></div>
-    </div>
-    <button class="btn-primary" style="font-size:14px;padding:13px 32px;width:100%;" id="pay-confirm-btn" onclick="executePayment()">PAY &amp; ENTER</button>
-    <div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:rgba(200,150,50,0.3);text-align:center;margin-top:10px;letter-spacing:1px;line-height:1.6;">
-      PAYMENT VERIFIED ON-CHAIN BEFORE GAME STARTS<br>EACH $1 GIVES 3 ATTEMPTS · 60s PER ATTEMPT
-    </div>
+    <div class="modal-error" id="editname-error"></div>
+    <button class="btn-primary" id="editname-btn" onclick="doEditName()" style="width:100%;font-size:15px;">SAVE NAME</button>
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════════ -->
-<!-- PAID GAME UI -->
-<div id="paid-game-wrap">
-  <div id="paid-hud">
-    <div id="paid-tries-wrap">
-      <span class="paid-try" data-t="0">💎</span>
-      <span class="paid-try" data-t="1">💎</span>
-      <span class="paid-try" data-t="2">💎</span>
+<!-- PAID MODE ENTRY MODAL -->
+<div class="modal-overlay" id="paid-modal">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeModal('paid-modal')">✕</button>
+    <div class="modal-title">GROTTO TRIALS</div>
+    <div class="modal-sub">PAY TO ENTER — 3 CHANCES PER $1</div>
+    <div class="token-info" id="paid-token-info">
+      Loading token info...
     </div>
-    <div style="text-align:center;">
-      <div style="font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:3px;color:rgba(200,150,50,0.4);">INFERNO TRIAL</div>
-      <div id="paid-attempt-label" style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--fire);letter-spacing:2px;">ATTEMPT 1 / 3</div>
+    <div class="form-group">
+      <div class="form-label">ACTIVE SESSION CHANCES</div>
+      <div class="chances-display" id="paid-chances-display">
+        <div class="chance-dot"></div>
+        <div class="chance-dot"></div>
+        <div class="chance-dot"></div>
+      </div>
+      <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:rgba(200,150,80,0.5);text-align:center;letter-spacing:2px;" id="paid-session-status">NO ACTIVE SESSION</div>
     </div>
-    <div style="text-align:center;">
-      <div style="font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:3px;color:var(--dim-gold);">SCORE</div>
-      <div id="paid-score-val">0</div>
-    </div>
-    <div style="text-align:right;">
-      <div style="font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:3px;color:var(--dim-gold);">ANSWERED</div>
-      <div id="paid-answered-val">0</div>
-    </div>
-  </div>
-  <div id="paid-timer-wrap">
-    <div id="paid-timer-track"><div id="paid-timer-fill"></div></div>
-    <div id="paid-timer-text">60s</div>
-  </div>
-  <div id="paid-question-area">
-    <div id="paid-combo-notice"></div>
-    <div id="paid-question-text">Loading question...</div>
-    <div class="paid-opt-grid" id="paid-opts-grid">
-      <div class="paid-opt" id="popt-0" onclick="paidAnswer(0)"><span class="paid-opt-letter">A</span></div>
-      <div class="paid-opt" id="popt-1" onclick="paidAnswer(1)"><span class="paid-opt-letter">B</span></div>
-      <div class="paid-opt" id="popt-2" onclick="paidAnswer(2)"><span class="paid-opt-letter">C</span></div>
-      <div class="paid-opt" id="popt-3" onclick="paidAnswer(3)"><span class="paid-opt-letter">D</span></div>
-    </div>
+    <div class="tx-status" id="tx-status-msg">CONFIRMING TRANSACTION...</div>
+    <div class="modal-error" id="paid-modal-error"></div>
+    <button class="btn-primary" id="paid-play-btn" onclick="startPaidRound()" style="width:100%;font-size:15px;display:none;">▶ USE A CHANCE</button>
+    <button class="btn-primary" id="paid-pay-btn" onclick="doPaidEntry()" style="width:100%;font-size:15px;">PAY $1 — GET 3 CHANCES</button>
+    <button class="btn-secondary" onclick="closeModal('paid-modal')" style="width:100%;margin-top:10px;">CANCEL</button>
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════════ -->
-<!-- PAID RESULT SCREEN -->
-<div id="paid-result-screen">
-  <div class="screen-title" id="paid-result-title">TIME'S UP!</div>
-  <div class="screen-sub">INFERNO TRIAL COMPLETE</div>
+<!-- PAID GAME OVER SCREEN -->
+<div class="screen" id="paid-gameover-screen" style="display:none;">
+  <div class="screen-title" style="color:var(--fire);">TRIAL COMPLETE</div>
+  <div class="screen-sub" id="paid-go-sub">—</div>
   <div class="stone-divider"></div>
-  <div id="paid-result-score">0</div>
-  <div id="paid-result-stats"></div>
-  <div id="paid-result-attempts-left" style="font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--fire);letter-spacing:2px;margin-bottom:20px;"></div>
-  <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">
-    <button class="btn-primary" id="paid-retry-btn" style="font-size:14px;padding:12px 28px;" onclick="startNextAttempt()">USE NEXT ATTEMPT</button>
-    <button class="btn-secondary" onclick="showPage('lb')">VIEW LEADERBOARD</button>
-    <button class="btn-secondary" onclick="showPage('home')">HOME</button>
-  </div>
+  <div id="paid-final-score" style="font-family:'Cinzel Decorative',serif;font-size:64px;color:var(--gold);text-shadow:0 0 30px rgba(255,215,0,0.7);line-height:1;margin:10px 0;">0</div>
+  <div id="paid-final-stats" style="font-family:'Share Tech Mono',monospace;font-size:13px;color:rgba(220,180,100,0.7);letter-spacing:2px;margin-bottom:20px;line-height:2;"></div>
+  <div id="paid-chances-remaining" style="font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--gold);letter-spacing:3px;margin-bottom:20px;"></div>
+  <button class="btn-primary" id="paid-use-chance-btn" onclick="usePaidChance()" style="display:none;">USE ANOTHER CHANCE</button>
+  <button class="btn-primary" id="paid-buy-more-btn" onclick="openPaidModal()" style="margin-top:12px;">BUY MORE CHANCES ($1)</button>
+  <button class="btn-secondary" onclick="showPage('home')" style="margin-top:12px;">BACK TO HOME</button>
 </div>
 
 <!-- CAVE ATMOSPHERE -->
@@ -2065,7 +1909,6 @@
   <div id="highscore-note"></div>
   <button class="btn-primary" id="retry-btn">DESCEND AGAIN</button>
   <button class="btn-secondary" id="retry-intro-btn">VIEW RULES</button>
-  <button class="btn-secondary" onclick="showPage('home')" style="margin-top:6px;">HOME</button>
 </div>
 
 <!-- WIN SCREEN -->
@@ -2078,7 +1921,6 @@
   <div id="final-stats-win" style="font-family:'Share Tech Mono',monospace;font-size:13px;color:rgba(220,180,100,0.7);letter-spacing:2px;margin-bottom:6px;line-height:2;"></div>
   <div id="highscore-note-win" style="font-family:'Cinzel Decorative',serif;font-size:16px;color:var(--gold);text-shadow:0 0 20px rgba(255,215,0,0.8);margin-bottom:24px;min-height:24px;"></div>
   <button class="btn-primary" id="win-retry-btn">CHALLENGE AGAIN</button>
-  <button class="btn-secondary" onclick="showPage('home')" style="margin-top:6px;">HOME</button>
 </div>
 
 <!-- ══════════════════════════════════════════════ -->
@@ -2104,6 +1946,13 @@
     <div id="streak-wrap">
       <div id="streak-label">STREAK</div>
       <div id="streak-val">×1</div>
+    </div>
+    <div id="paid-hud-extra">
+      <div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:2px;color:rgba(255,215,0,0.5);">TIME LEFT</div>
+        <div id="paid-timer-big">60s</div>
+      </div>
+      <div id="paid-chances-hud"></div>
     </div>
   </div>
   <div id="diff-badge" class="easy">EASY</div>
@@ -2154,10 +2003,70 @@
 </div>
 
 <script>
+// ══════════════════════════════════════════════════════
+// CONFIG
+// ══════════════════════════════════════════════════════
 const API_KEY = 'hc_live_C9jUxh9Knr3Qn-ZEo4SSO-ga0SLjFFjX';
 const API_BASE = 'https://api.hashcash.club/api/v1/public';
 
-// ── GAME STATE ─────────────────────────────────────────
+const SUPABASE_URL = 'https://uhaimupppjjswfbotkkv.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVoYWltdXBwcGpqc3dmYm90a2t2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MDU4MjQsImV4cCI6MjA5MjM4MTgyNH0.smHuPcFn955KTA8JO6Xe77rCrwW19f2ii3gbgsN65Vk';
+
+const ADMIN_WALLET = '0xc27a7ffdd5729c5530781BFd2B0d218a846a0899';
+
+const CHAINS = {
+  grotto: {
+    name: 'The Grotto',
+    chainId: 36463,
+    chainIdHex: '0x8E8F',
+    rpc: 'https://subnets.avax.network/thegrotto/mainnet/rpc',
+    explorer: 'https://explorer.avax.network/thegrotto',
+    token: 'HERESY',
+    tokenAddress: '0x432d38F83a50EC77C409D086e97448794cf76dCF',
+    tokenAmount: '850000000000000',     // 0.00085 * 1e18
+    tokenAmountDisplay: '0.00085',
+    nativeCurrency: { name:'HERESY', symbol:'HERESY', decimals:18 }
+  },
+  avax: {
+    name: 'Avalanche C-Chain',
+    chainId: 43114,
+    chainIdHex: '0xA86A',
+    rpc: 'https://api.avax.network/ext/bc/C/rpc',
+    explorer: 'https://snowtrace.io',
+    token: 'hCASH',
+    tokenAddress: '0xBa5444409257967E5E50b113C395A766B0678C03',
+    tokenAmount: '18000000000000000000', // 18 * 1e18
+    tokenAmountDisplay: '18',
+    nativeCurrency: { name:'Avalanche', symbol:'AVAX', decimals:18 }
+  }
+};
+
+// ERC-20 minimal ABI for transfer + balanceOf
+const ERC20_ABI = [
+  'function transfer(address to, uint256 amount) returns (bool)',
+  'function balanceOf(address owner) view returns (uint256)',
+  'function decimals() view returns (uint8)'
+];
+
+// ══════════════════════════════════════════════════════
+// SUPABASE CLIENT
+// ══════════════════════════════════════════════════════
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+// ══════════════════════════════════════════════════════
+// APP STATE
+// ══════════════════════════════════════════════════════
+let appState = {
+  wallet: null,
+  username: null,
+  chain: 'grotto',          // selected chain in wallet modal
+  connectedChain: null,     // actual connected chain
+  player: null,             // supabase player row
+  activeSession: null,      // active paid session
+  isPaidMode: false
+};
+
+// ── FREE MODE GAME STATE ────────────────────────────
 let miners = [];
 let queue = [];
 let currentQ = 0;
@@ -2171,29 +2080,51 @@ let timerInterval = null;
 let timeLeft = 20;
 let maxTime = 20;
 let questionLocked = false;
-let roundResults = []; // 'correct','wrong','timeout'
+let roundResults = [];
 let bonusRound = false;
 
+// ── PAID MODE STATE ─────────────────────────────────
+let paidGameInterval = null;
+let paidTimeLeft = 60;
+let paidScore = 0;
+let paidCorrect = 0;
+let paidStreak = 0;
+let paidMaxStreak = 0;
+let paidSessionId = null;   // UUID of current paid session
+let paidChancesLeft = 0;
+
 const TOTAL_ROUNDS = 10;
+const PAID_TOTAL_TIME = 60;
 const BASE_SCORE = 100;
 const TIME_BONUS_MAX = 50;
 
-// Difficulty tiers
 const DIFF = [
-  { name:'EASY',    time:25, options:3, scoreMult:1.0,  minRound:0  },
-  { name:'MEDIUM',  time:20, options:3, scoreMult:1.3,  minRound:3  },
-  { name:'HARD',    time:15, options:3, scoreMult:1.7,  minRound:6  },
-  { name:'EXTREME', time:10, options:3, scoreMult:2.5,  minRound:8  },
+  { name:'EASY',    time:25, options:3, scoreMult:1.0, minRound:0 },
+  { name:'MEDIUM',  time:20, options:3, scoreMult:1.3, minRound:3 },
+  { name:'HARD',    time:15, options:3, scoreMult:1.7, minRound:6 },
+  { name:'EXTREME', time:10, options:3, scoreMult:2.5, minRound:8 },
+];
+
+// PAID mode difficulty — harder, confusing options
+const PAID_DIFF = [
+  { name:'HARD',    time:12, options:3, scoreMult:2.0, minRound:0 },
+  { name:'EXTREME', time:8,  options:3, scoreMult:3.0, minRound:5 },
 ];
 
 function getDiff() {
-  for (let i = DIFF.length-1; i >= 0; i--) {
+  for (let i = DIFF.length-1; i >= 0; i--)
     if (currentQ >= DIFF[i].minRound) return DIFF[i];
-  }
   return DIFF[0];
 }
+function getPaidDiff() {
+  for (let i = PAID_DIFF.length-1; i >= 0; i--)
+    if (currentQ >= PAID_DIFF[i].minRound) return PAID_DIFF[i];
+  return PAID_DIFF[0];
+}
 
-// ── LOCAL STORAGE ──────────────────────────────────────
+// ══════════════════════════════════════════════════════
+// LOCAL STORAGE
+// ══════════════════════════════════════════════════════
 function getBest() { return parseInt(localStorage.getItem('grotto_best')||'0'); }
 function setBest(s) { localStorage.setItem('grotto_best', s); }
 function getHS() { try { return JSON.parse(localStorage.getItem('grotto_hs')||'[]'); } catch{return[];} }
@@ -2205,7 +2136,564 @@ function addHS(entry) {
   localStorage.setItem('grotto_hs', JSON.stringify(hs));
 }
 
-// ── FETCH MINERS ───────────────────────────────────────
+// ══════════════════════════════════════════════════════
+// TOAST
+// ══════════════════════════════════════════════════════
+function showToast(msg, type='', dur=3000) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show' + (type ? ' '+type : '');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.className = '', dur);
+}
+
+// ══════════════════════════════════════════════════════
+// PAGE NAVIGATION
+// ══════════════════════════════════════════════════════
+function showPage(name) {
+  // Hide all pages
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  // Hide all game screens
+  ['loading-screen','intro-screen','gameover-screen','win-screen','paid-gameover-screen'].forEach(s => {
+    const el = document.getElementById(s);
+    if (el) el.style.display = 'none';
+  });
+  document.getElementById('game-wrap').style.display = 'none';
+
+  const page = document.getElementById('page-'+name);
+  if (page) page.classList.add('active');
+  const btn = document.querySelector(`.nav-btn[data-page="${name}"]`);
+  if (btn) btn.classList.add('active');
+
+  if (name === 'leaderboard') loadLeaderboard();
+  if (name === 'profile') loadProfile();
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  ['loading-screen','intro-screen','gameover-screen','win-screen','paid-gameover-screen'].forEach(s => {
+    const el = document.getElementById(s);
+    if (el) el.style.display = (s===id) ? 'flex' : 'none';
+  });
+  document.getElementById('game-wrap').style.display = (id==='game') ? 'flex' : 'none';
+}
+
+function showGame() {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  ['loading-screen','intro-screen','gameover-screen','win-screen','paid-gameover-screen'].forEach(s => {
+    const el = document.getElementById(s);
+    if (el) el.style.display = 'none';
+  });
+  document.getElementById('game-wrap').style.display = 'flex';
+}
+
+// ══════════════════════════════════════════════════════
+// MODAL HELPERS
+// ══════════════════════════════════════════════════════
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function setModalError(elId, msg) {
+  const el = document.getElementById(elId);
+  if (el) el.textContent = msg;
+}
+function clearModalError(elId) {
+  const el = document.getElementById(elId);
+  if (el) el.textContent = '';
+}
+
+// ══════════════════════════════════════════════════════
+// WALLET FLOW
+// ══════════════════════════════════════════════════════
+function openWalletFlow() {
+  if (appState.wallet) {
+    showToast('Already connected: ' + shortAddr(appState.wallet));
+    return;
+  }
+  clearModalError('wallet-modal-error');
+  openModal('wallet-modal');
+}
+
+function selectChain(chain) {
+  appState.chain = chain;
+  document.querySelectorAll('.chain-opt').forEach(el => {
+    el.classList.toggle('selected', el.dataset.chain === chain);
+  });
+}
+
+async function doConnectWallet() {
+  if (typeof window.ethereum === 'undefined') {
+    setModalError('wallet-modal-error', 'MetaMask not found — install it first!');
+    return;
+  }
+  const btn = document.getElementById('connect-wallet-btn');
+  btn.textContent = 'CONNECTING...';
+  btn.disabled = true;
+  clearModalError('wallet-modal-error');
+
+  try {
+    // Request accounts
+    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    const wallet = accounts[0].toLowerCase();
+
+    // Switch/add chain
+    await switchToChain(appState.chain);
+
+    appState.wallet = wallet;
+    appState.connectedChain = appState.chain;
+
+    closeModal('wallet-modal');
+
+    // Check if registered in Supabase
+    const { data: player } = await sb.from('players').select('*').eq('wallet', wallet).single();
+
+    if (player) {
+      appState.player = player;
+      appState.username = player.username;
+      updateWalletBtn();
+      showToast(`Welcome back, ${player.username}!`, 'success');
+    } else {
+      // New user — ask for username
+      setTimeout(() => openModal('register-modal'), 300);
+    }
+  } catch(e) {
+    setModalError('wallet-modal-error', e.message || 'Connection failed');
+  } finally {
+    btn.textContent = 'CONNECT METAMASK';
+    btn.disabled = false;
+  }
+}
+
+async function switchToChain(chainKey) {
+  const cfg = CHAINS[chainKey];
+  try {
+    await window.ethereum.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: cfg.chainIdHex }]
+    });
+  } catch(err) {
+    // Chain not added — add it
+    if (err.code === 4902 || err.code === -32603) {
+      await window.ethereum.request({
+        method: 'wallet_addEthereumChain',
+        params: [{
+          chainId: cfg.chainIdHex,
+          chainName: cfg.name,
+          nativeCurrency: cfg.nativeCurrency,
+          rpcUrls: [cfg.rpc],
+          blockExplorerUrls: [cfg.explorer]
+        }]
+      });
+    } else {
+      throw err;
+    }
+  }
+}
+
+function updateWalletBtn() {
+  const btn = document.getElementById('wallet-btn');
+  if (appState.wallet) {
+    btn.textContent = `✓ ${appState.username || shortAddr(appState.wallet)}`;
+    btn.classList.add('connected');
+  } else {
+    btn.textContent = '⚡ CONNECT WALLET';
+    btn.classList.remove('connected');
+  }
+}
+
+function shortAddr(addr) {
+  return addr ? addr.slice(0,6)+'...'+addr.slice(-4) : '';
+}
+
+// ══════════════════════════════════════════════════════
+// REGISTRATION
+// ══════════════════════════════════════════════════════
+async function doRegister() {
+  const input = document.getElementById('register-username-input');
+  const name = input.value.trim();
+  if (name.length < 3) {
+    setModalError('register-error', 'Minimum 3 characters');
+    return;
+  }
+  const btn = document.getElementById('register-btn');
+  btn.textContent = 'CHECKING...';
+  btn.disabled = true;
+  clearModalError('register-error');
+  try {
+    const { data: taken } = await sb.rpc('is_username_taken', { p_username: name });
+    if (taken) {
+      setModalError('register-error', 'That name is already taken');
+      return;
+    }
+    const { error } = await sb.from('players').insert({
+      wallet: appState.wallet,
+      username: name,
+      chain: appState.connectedChain
+    });
+    if (error) throw error;
+
+    appState.username = name;
+    const { data: player } = await sb.from('players').select('*').eq('wallet', appState.wallet).single();
+    appState.player = player;
+    closeModal('register-modal');
+    updateWalletBtn();
+    showToast(`Welcome, ${name}! You may now enter the trials.`, 'success', 4000);
+    loadHomeStats();
+  } catch(e) {
+    setModalError('register-error', e.message || 'Registration failed');
+  } finally {
+    btn.textContent = 'ENTER THE GROTTO';
+    btn.disabled = false;
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// EDIT USERNAME
+// ══════════════════════════════════════════════════════
+function openEditName() {
+  document.getElementById('editname-input').value = '';
+  clearModalError('editname-error');
+  openModal('editname-modal');
+}
+
+async function doEditName() {
+  const input = document.getElementById('editname-input');
+  const name = input.value.trim();
+  if (name.length < 3) {
+    setModalError('editname-error', 'Minimum 3 characters');
+    return;
+  }
+  const btn = document.getElementById('editname-btn');
+  btn.textContent = 'SAVING...';
+  btn.disabled = true;
+  clearModalError('editname-error');
+  try {
+    const { data: taken } = await sb.rpc('is_username_taken', { p_username: name });
+    if (taken) {
+      setModalError('editname-error', 'That name is already taken');
+      return;
+    }
+    const { error } = await sb.from('players').update({ username: name, updated_at: new Date().toISOString() }).eq('wallet', appState.wallet);
+    if (error) throw error;
+    appState.username = name;
+    appState.player.username = name;
+    closeModal('editname-modal');
+    updateWalletBtn();
+    document.getElementById('profile-username').textContent = name;
+    showToast('Username updated!', 'success');
+  } catch(e) {
+    setModalError('editname-error', e.message || 'Update failed');
+  } finally {
+    btn.textContent = 'SAVE NAME';
+    btn.disabled = false;
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// PAID MODE — ENTRY PAYMENT
+// ══════════════════════════════════════════════════════
+function openPaidModal() {
+  if (!appState.wallet) {
+    showToast('Connect your wallet first!', 'error');
+    openWalletFlow();
+    return;
+  }
+  if (!appState.username) {
+    showToast('Complete registration first!', 'error');
+    return;
+  }
+  updatePaidModalUI();
+  openModal('paid-modal');
+}
+
+function updatePaidModalUI() {
+  const chain = appState.connectedChain || 'grotto';
+  const cfg = CHAINS[chain];
+  document.getElementById('paid-token-info').innerHTML =
+    `Chain: <strong>${cfg.name}</strong><br>
+     Token: <strong>$${cfg.token}</strong><br>
+     Amount: <strong>${cfg.tokenAmountDisplay} $${cfg.token} = $1 USD</strong><br>
+     Recipient: <strong>${shortAddr(ADMIN_WALLET)}</strong><br>
+     Each $1 entry gives you <strong>3 chances</strong> to play.<br>
+     No limit on entries!`;
+
+  const session = appState.activeSession;
+  clearModalError('paid-modal-error');
+  document.getElementById('tx-status-msg').className = 'tx-status';
+
+  if (session && session.status === 'active') {
+    const used = session.chances_used;
+    const max = session.chances_max;
+    const left = max - used;
+    renderChanceDots(left, max);
+    document.getElementById('paid-session-status').textContent = `${left} CHANCE${left!==1?'S':''} REMAINING`;
+    document.getElementById('paid-play-btn').style.display = 'block';
+    document.getElementById('paid-pay-btn').textContent = 'BUY MORE — $1 FOR 3 CHANCES';
+  } else {
+    renderChanceDots(0, 3);
+    document.getElementById('paid-session-status').textContent = 'NO ACTIVE SESSION';
+    document.getElementById('paid-play-btn').style.display = 'none';
+    document.getElementById('paid-pay-btn').textContent = 'PAY $1 — GET 3 CHANCES';
+  }
+}
+
+function renderChanceDots(left, max) {
+  const wrap = document.getElementById('paid-chances-display');
+  wrap.innerHTML = '';
+  for (let i = 0; i < max; i++) {
+    const d = document.createElement('div');
+    d.className = 'chance-dot' + (i >= left ? ' used' : '');
+    wrap.appendChild(d);
+  }
+}
+
+async function doPaidEntry() {
+  const btn = document.getElementById('paid-pay-btn');
+  const statusEl = document.getElementById('tx-status-msg');
+  clearModalError('paid-modal-error');
+
+  if (!appState.wallet) { showToast('Connect wallet first', 'error'); return; }
+
+  const chain = appState.connectedChain;
+  const cfg = CHAINS[chain];
+
+  btn.disabled = true;
+  btn.textContent = 'WAITING FOR METAMASK...';
+
+  try {
+    // Ensure correct chain
+    await switchToChain(chain);
+
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const signer = await provider.getSigner();
+
+    // Check balance
+    const tokenContract = new ethers.Contract(cfg.tokenAddress, ERC20_ABI, signer);
+    const balance = await tokenContract.balanceOf(appState.wallet);
+    const required = BigInt(cfg.tokenAmount);
+
+    if (balance < required) {
+      setModalError('paid-modal-error', `Insufficient $${cfg.token} balance. Need ${cfg.tokenAmountDisplay} $${cfg.token}.`);
+      return;
+    }
+
+    statusEl.textContent = 'CONFIRM IN METAMASK...';
+    statusEl.className = 'tx-status pending';
+
+    // Send token transfer to admin wallet
+    const tx = await tokenContract.transfer(ADMIN_WALLET, required);
+
+    statusEl.textContent = 'TRANSACTION SENT — CONFIRMING ON CHAIN...';
+
+    // Wait for 1 confirmation
+    const receipt = await tx.wait(1);
+    const txHash = receipt.hash.toLowerCase();
+
+    // Anti-cheat: verify tx_hash not already used
+    const { data: alreadyUsed } = await sb.rpc('is_tx_hash_used', { p_tx_hash: txHash });
+    if (alreadyUsed) {
+      setModalError('paid-modal-error', 'This transaction was already used!');
+      statusEl.className = 'tx-status failed';
+      return;
+    }
+
+    statusEl.textContent = 'CONFIRMED! CREATING SESSION...';
+    statusEl.className = 'tx-status confirmed';
+
+    // Record session in Supabase
+    const { data: session, error: sessionErr } = await sb.from('paid_sessions').insert({
+      wallet: appState.wallet,
+      chain: chain,
+      token: cfg.token,
+      tx_hash: txHash,
+      amount_paid: cfg.tokenAmountDisplay,
+      usd_value: 1,
+      block_number: receipt.blockNumber,
+      chances_used: 0,
+      chances_max: 3,
+      status: 'active'
+    }).select().single();
+
+    if (sessionErr) throw sessionErr;
+
+    appState.activeSession = session;
+    paidSessionId = session.id;
+    paidChancesLeft = 3;
+
+    updatePaidModalUI();
+    showToast('Payment confirmed! 3 chances unlocked.', 'success', 4000);
+    loadHomeStats();
+
+  } catch(e) {
+    statusEl.className = 'tx-status failed';
+    statusEl.textContent = 'TRANSACTION FAILED';
+    setModalError('paid-modal-error', e.reason || e.message || 'Payment failed. Try again.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'BUY MORE — $1 FOR 3 CHANCES';
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// PAID GAME START
+// ══════════════════════════════════════════════════════
+function startPaidRound() {
+  if (!appState.activeSession || appState.activeSession.status !== 'active') {
+    showToast('No active session', 'error');
+    return;
+  }
+  const left = appState.activeSession.chances_max - appState.activeSession.chances_used;
+  if (left <= 0) {
+    showToast('No chances left — buy more!', 'error');
+    return;
+  }
+
+  closeModal('paid-modal');
+  appState.isPaidMode = true;
+
+  // Reset paid state
+  paidScore = 0;
+  paidCorrect = 0;
+  paidStreak = 0;
+  paidMaxStreak = 0;
+  paidTimeLeft = PAID_TOTAL_TIME;
+  currentQ = 0;
+  lives = 3;
+  score = 0;
+  streak = 0;
+  maxStreak = 0;
+  correctCount = 0;
+  hintUsed = false;
+  roundResults = [];
+
+  // Build unlimited queue for paid mode
+  const shuffled = [...miners].sort(() => Math.random()-0.5);
+  queue = [];
+  // Repeat miners pool to fill 1 minute
+  while (queue.length < 60) {
+    queue.push(...shuffled.sort(() => Math.random()-0.5));
+  }
+
+  // Show paid HUD elements
+  document.getElementById('paid-hud-extra').style.display = 'flex';
+  document.getElementById('streak-wrap').style.display = 'none';
+  document.getElementById('hint-btn').style.display = 'none';
+
+  updatePaidChancesHud();
+  updateHUD();
+  updateHearts();
+  buildProgressDots();
+  showGame();
+
+  // Start 60-second countdown
+  startPaidCountdown();
+  loadQuestion(true);
+}
+
+function updatePaidChancesHud() {
+  const wrap = document.getElementById('paid-chances-hud');
+  wrap.innerHTML = '';
+  if (!appState.activeSession) return;
+  const left = appState.activeSession.chances_max - appState.activeSession.chances_used;
+  for (let i = 0; i < 3; i++) {
+    const d = document.createElement('div');
+    d.className = 'chance-dot' + (i >= left ? ' used' : '');
+    d.style.width = '12px'; d.style.height = '12px';
+    wrap.appendChild(d);
+  }
+}
+
+function startPaidCountdown() {
+  clearInterval(paidGameInterval);
+  paidTimeLeft = PAID_TOTAL_TIME;
+  paidGameInterval = setInterval(() => {
+    paidTimeLeft--;
+    const timerEl = document.getElementById('paid-timer-big');
+    timerEl.textContent = paidTimeLeft + 's';
+    if (paidTimeLeft <= 10) timerEl.classList.add('danger');
+    else timerEl.classList.remove('danger');
+    if (paidTimeLeft <= 0) {
+      clearInterval(paidGameInterval);
+      endPaidGame();
+    }
+  }, 1000);
+}
+
+async function endPaidGame() {
+  clearInterval(paidGameInterval);
+  clearInterval(timerInterval);
+
+  // Save game run to supabase
+  if (appState.wallet) {
+    await sb.from('game_runs').insert({
+      wallet: appState.wallet,
+      mode: 'paid',
+      paid_session_id: paidSessionId,
+      score: score,
+      correct_count: correctCount,
+      total_rounds: currentQ,
+      max_streak: maxStreak,
+      result: correctCount > 0 ? 'win' : 'loss'
+    });
+  }
+
+  // Consume the chance
+  if (paidSessionId) {
+    await sb.rpc('use_paid_chance', {
+      p_session_id: paidSessionId,
+      p_score: score,
+      p_correct: correctCount
+    });
+    // Refresh session
+    const { data: updatedSession } = await sb.from('paid_sessions')
+      .select('*').eq('id', paidSessionId).single();
+    if (updatedSession) appState.activeSession = updatedSession;
+  }
+
+  // Show paid game over screen
+  document.getElementById('paid-hud-extra').style.display = 'none';
+  document.getElementById('streak-wrap').style.display = '';
+  document.getElementById('hint-btn').style.display = '';
+
+  const chancesLeft = appState.activeSession
+    ? Math.max(0, appState.activeSession.chances_max - appState.activeSession.chances_used)
+    : 0;
+
+  document.getElementById('paid-final-score').textContent = score.toLocaleString();
+  document.getElementById('paid-final-stats').innerHTML =
+    `CORRECT: ${correctCount} MINERS &nbsp;|&nbsp; MAX STREAK: ×${maxStreak}`;
+  document.getElementById('paid-go-sub').textContent =
+    `YOU IDENTIFIED ${correctCount} MINERS IN ${PAID_TOTAL_TIME - paidTimeLeft}s`;
+  document.getElementById('paid-chances-remaining').textContent =
+    chancesLeft > 0 ? `${chancesLeft} CHANCE${chancesLeft!==1?'S':''} REMAINING` : '';
+
+  const useBtn = document.getElementById('paid-use-chance-btn');
+  useBtn.style.display = chancesLeft > 0 ? 'block' : 'none';
+
+  showScreen('paid-gameover-screen');
+  appState.isPaidMode = false;
+}
+
+function usePaidChance() {
+  startPaidRound();
+}
+
+// ══════════════════════════════════════════════════════
+// FREE MODE LAUNCH
+// ══════════════════════════════════════════════════════
+function launchFreeMode() {
+  appState.isPaidMode = false;
+  showScreen('intro-screen');
+}
+
+function launchPaidMode() {
+  openPaidModal();
+}
+
+// ══════════════════════════════════════════════════════
+// FETCH MINERS
+// ══════════════════════════════════════════════════════
 async function fetchMiners() {
   const res = await fetch(`${API_BASE}/contracts`, {
     headers: { 'x-api-key': API_KEY }
@@ -2215,7 +2703,184 @@ async function fetchMiners() {
   return data.contracts.filter(c => c.category === 'miner_nft' && c.imageUrl);
 }
 
-// ── CAVE DUST PARTICLES ────────────────────────────────
+// ══════════════════════════════════════════════════════
+// HOME STATS
+// ══════════════════════════════════════════════════════
+async function loadHomeStats() {
+  try {
+    const { data: pool } = await sb.from('prize_pool_summary').select('*').single();
+    const { count: playerCount } = await sb.from('players').select('*', { count: 'exact', head: true });
+    if (pool) {
+      document.getElementById('home-total-entries').textContent = pool.total_entries || 0;
+      document.getElementById('home-prize-pool').textContent = '$' + (parseFloat(pool.net_prize_pool_usd)||0).toFixed(2);
+    }
+    document.getElementById('home-players').textContent = playerCount || 0;
+  } catch(e) {
+    console.warn('Home stats error:', e);
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// LEADERBOARD
+// ══════════════════════════════════════════════════════
+const PRIZE_SPLITS = [0.40, 0.25, 0.15, 0.12, 0.08];
+const RANK_MEDALS = ['🥇','🥈','🥉','4','5'];
+const RANK_CLASSES = ['r1','r2','r3','',''];
+
+async function loadLeaderboard() {
+  document.getElementById('lb-loading').style.display = 'block';
+  document.getElementById('lb-table').style.display = 'none';
+  document.getElementById('lb-empty').style.display = 'none';
+
+  try {
+    const [{ data: topPlayers }, { data: pool }] = await Promise.all([
+      sb.from('leaderboard_top5').select('*'),
+      sb.from('prize_pool_summary').select('*').single()
+    ]);
+
+    const netPool = pool ? parseFloat(pool.net_prize_pool_usd)||0 : 0;
+    document.getElementById('lb-prize-amount').textContent = '$' + netPool.toFixed(2);
+
+    document.getElementById('lb-loading').style.display = 'none';
+
+    if (!topPlayers || topPlayers.length === 0) {
+      document.getElementById('lb-empty').style.display = 'block';
+      return;
+    }
+
+    document.getElementById('lb-table').style.display = 'table';
+    const tbody = document.getElementById('lb-tbody');
+    tbody.innerHTML = '';
+
+    topPlayers.forEach((p, i) => {
+      const prizeShare = (netPool * PRIZE_SPLITS[i]).toFixed(2);
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><span class="lb-rank ${RANK_CLASSES[i]}">${RANK_MEDALS[i]}</span></td>
+        <td class="lb-username">${p.username}</td>
+        <td>${p.chain === 'grotto' ? '🌋 GROTTO' : '🔺 AVAX'}</td>
+        <td class="lb-score">${parseInt(p.best_score).toLocaleString()}</td>
+        <td>${p.total_runs}</td>
+        <td class="lb-prize">$${prizeShare}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  } catch(e) {
+    document.getElementById('lb-loading').style.display = 'none';
+    document.getElementById('lb-empty').style.display = 'block';
+    document.getElementById('lb-empty').textContent = 'ERROR LOADING LEADERBOARD';
+    console.warn(e);
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// PROFILE
+// ══════════════════════════════════════════════════════
+async function loadProfile() {
+  if (!appState.wallet) {
+    document.getElementById('profile-connect-gate').style.display = 'block';
+    document.getElementById('profile-content').style.display = 'none';
+    return;
+  }
+  document.getElementById('profile-connect-gate').style.display = 'none';
+  document.getElementById('profile-content').style.display = 'block';
+
+  document.getElementById('profile-username').textContent = appState.username || '—';
+  document.getElementById('profile-wallet-addr').textContent = appState.wallet;
+  document.getElementById('profile-chain-badge').textContent =
+    appState.connectedChain === 'grotto' ? '🌋 THE GROTTO L1' : '🔺 AVALANCHE C-CHAIN';
+
+  loadPaymentHistory();
+  loadGameHistory();
+}
+
+async function loadPaymentHistory() {
+  document.getElementById('payment-history-loading').style.display = 'block';
+  document.getElementById('payment-history-table').style.display = 'none';
+  document.getElementById('payment-history-empty').style.display = 'none';
+
+  try {
+    const { data: rows } = await sb.from('payment_history')
+      .select('*').eq('wallet', appState.wallet).order('created_at', { ascending: false });
+
+    document.getElementById('payment-history-loading').style.display = 'none';
+
+    if (!rows || rows.length === 0) {
+      document.getElementById('payment-history-empty').style.display = 'block';
+      return;
+    }
+
+    document.getElementById('payment-history-table').style.display = 'table';
+    const tbody = document.getElementById('payment-history-tbody');
+    tbody.innerHTML = '';
+    const cfg = { grotto: CHAINS.grotto, avax: CHAINS.avax };
+
+    rows.forEach(r => {
+      const explorer = (cfg[r.chain]||CHAINS.avax).explorer;
+      const txUrl = `${explorer}/tx/${r.tx_hash}`;
+      const date = new Date(r.created_at).toLocaleDateString('en-GB');
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${date}</td>
+        <td>$${r.token}</td>
+        <td>${r.amount_paid}</td>
+        <td>${r.chances_used}/${r.chances_max}</td>
+        <td>${parseInt(r.best_score).toLocaleString()}</td>
+        <td><span class="status-badge ${r.status}">${r.status.toUpperCase()}</span></td>
+        <td><a class="tx-link" href="${txUrl}" target="_blank" rel="noopener">VIEW ↗</a></td>
+      `;
+      tbody.appendChild(tr);
+    });
+  } catch(e) {
+    document.getElementById('payment-history-loading').style.display = 'none';
+    document.getElementById('payment-history-empty').style.display = 'block';
+    document.getElementById('payment-history-empty').textContent = 'Error loading history';
+  }
+}
+
+async function loadGameHistory() {
+  document.getElementById('game-history-loading').style.display = 'block';
+  document.getElementById('game-history-table').style.display = 'none';
+  document.getElementById('game-history-empty').style.display = 'none';
+
+  try {
+    const { data: rows } = await sb.from('game_runs')
+      .select('*').eq('wallet', appState.wallet)
+      .order('played_at', { ascending: false }).limit(30);
+
+    document.getElementById('game-history-loading').style.display = 'none';
+
+    if (!rows || rows.length === 0) {
+      document.getElementById('game-history-empty').style.display = 'block';
+      return;
+    }
+
+    document.getElementById('game-history-table').style.display = 'table';
+    const tbody = document.getElementById('game-history-tbody');
+    tbody.innerHTML = '';
+
+    rows.forEach(r => {
+      const date = new Date(r.played_at).toLocaleDateString('en-GB');
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${date}</td>
+        <td>${r.mode === 'paid' ? '💀 PAID' : '🆓 FREE'}</td>
+        <td style="color:var(--gold)">${parseInt(r.score).toLocaleString()}</td>
+        <td>${r.correct_count}/${r.total_rounds}</td>
+        <td>×${r.max_streak}</td>
+        <td style="color:${r.result==='win'?'var(--correct-green)':'var(--wrong-red)'}">${r.result.toUpperCase()}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  } catch(e) {
+    document.getElementById('game-history-loading').style.display = 'none';
+    document.getElementById('game-history-empty').style.display = 'block';
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// CAVE DUST
+// ══════════════════════════════════════════════════════
 function spawnDust() {
   const container = document.getElementById('cave-dust');
   for (let i = 0; i < 25; i++) {
@@ -2229,51 +2894,46 @@ function spawnDust() {
   }
 }
 
-// ── INIT GAME ──────────────────────────────────────────
+// ══════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════
 async function init() {
-  showScreen('loading-screen');
   spawnDust();
+  // Show home page immediately (no loading screen on first load for page)
+  // But still fetch miners in background for game
+  showPage('home');
   try {
     miners = await fetchMiners();
     if (miners.length < 3) throw new Error('Not enough miners');
-    document.getElementById('loading-screen').style.display = 'none';
-    const best = getBest();
-    if (best > 0) {
-      document.getElementById('best-score-intro').textContent = `BEST: ${best.toLocaleString()}`;
-    }
-    // Show homepage instead of intro
-    showPage('home');
-    // Check if wallet was previously connected
-    await tryReconnectWallet();
   } catch(e) {
-    document.getElementById('loading-text').textContent = 'ERROR FETCHING MINERS — CHECK CONNECTION';
-    console.error(e);
+    console.error('Miner fetch error:', e);
+  }
+  loadHomeStats();
+
+  // Check if MetaMask already connected
+  if (typeof window.ethereum !== 'undefined') {
+    window.ethereum.on('accountsChanged', (accounts) => {
+      if (accounts.length === 0) {
+        appState.wallet = null;
+        appState.username = null;
+        appState.player = null;
+        updateWalletBtn();
+        showToast('Wallet disconnected', 'error');
+      }
+    });
+    window.ethereum.on('chainChanged', () => window.location.reload());
   }
 }
 
-function showScreen(id) {
-  ['loading-screen','intro-screen','gameover-screen','win-screen'].forEach(s => {
-    const el = document.getElementById(s);
-    if (el) el.style.display = (s===id) ? 'flex' : 'none';
-  });
-  document.getElementById('game-wrap').style.display = (id==='game') ? 'flex' : 'none';
-}
-
-function showGame() {
-  ['loading-screen','intro-screen','gameover-screen','win-screen'].forEach(s => {
-    const el = document.getElementById(s);
-    if (el) el.style.display = 'none';
-  });
-  hideAllPages();
-  document.getElementById('game-wrap').style.display = 'flex';
-  document.getElementById('nav-bar').style.display = 'flex';
-  document.getElementById('hint-btn').style.display = '';
-  document.getElementById('paid-game-wrap').style.display = 'none';
-  document.getElementById('paid-result-screen').style.display = 'none';
-}
-
-// ── START GAME ─────────────────────────────────────────
+// ══════════════════════════════════════════════════════
+// FREE MODE START
+// ══════════════════════════════════════════════════════
 function startGame() {
+  if (miners.length < 3) {
+    showToast('Miners not loaded yet — please wait', 'error');
+    return;
+  }
+  appState.isPaidMode = false;
   lives = 3;
   score = 0;
   streak = 0;
@@ -2284,7 +2944,10 @@ function startGame() {
   roundResults = [];
   bonusRound = false;
 
-  // Shuffle and pick queue
+  document.getElementById('paid-hud-extra').style.display = 'none';
+  document.getElementById('streak-wrap').style.display = '';
+  document.getElementById('hint-btn').style.display = '';
+
   const shuffled = [...miners].sort(()=>Math.random()-0.5);
   queue = shuffled.slice(0, TOTAL_ROUNDS);
 
@@ -2294,21 +2957,18 @@ function startGame() {
   document.getElementById('hint-btn').disabled = false;
   document.getElementById('bonus-banner').classList.remove('show');
 
-  // Hide all page screens
-  hideAllPages();
   showGame();
-  loadQuestion();
+  loadQuestion(false);
 }
 
-function startFreeMode() {
-  startGame();
-}
-
-// ── BUILD PROGRESS DOTS ────────────────────────────────
+// ══════════════════════════════════════════════════════
+// QUESTION LOADER (FREE + PAID)
+// ══════════════════════════════════════════════════════
 function buildProgressDots() {
   const wrap = document.getElementById('progress-dots');
   wrap.innerHTML = '';
-  for (let i = 0; i < TOTAL_ROUNDS; i++) {
+  const total = appState.isPaidMode ? 0 : TOTAL_ROUNDS; // no dots in paid mode
+  for (let i = 0; i < total; i++) {
     const d = document.createElement('div');
     d.className = 'pdot' + (i===0?' current':'');
     d.id = `pdot-${i}`;
@@ -2317,6 +2977,7 @@ function buildProgressDots() {
 }
 
 function updateProgressDot(idx, result) {
+  if (appState.isPaidMode) return;
   const d = document.getElementById(`pdot-${idx}`);
   if (!d) return;
   d.classList.remove('current');
@@ -2325,293 +2986,46 @@ function updateProgressDot(idx, result) {
   if (next) next.classList.add('current');
 }
 
-// ── TIMER ──────────────────────────────────────────────
-function startTimer(seconds) {
-  clearInterval(timerInterval);
-  timeLeft = seconds;
-  updateTimerUI();
-  timerInterval = setInterval(() => {
-    timeLeft -= 0.1;
-    if (timeLeft <= 0) {
-      timeLeft = 0;
-      updateTimerUI();
-      clearInterval(timerInterval);
-      onTimeout();
-    } else {
-      updateTimerUI();
-    }
-  }, 100);
-}
-
-function updateTimerUI() {
-  const pct = Math.max(0, timeLeft / maxTime) * 100;
-  const fill = document.getElementById('timer-fill');
-  fill.style.width = pct + '%';
-  // Color shift
-  if (pct > 50) fill.style.background = 'linear-gradient(to right, var(--gold), var(--fire), var(--ember))';
-  else if (pct > 25) fill.style.background = 'linear-gradient(to right, var(--fire), var(--ember))';
-  else fill.style.background = 'linear-gradient(to right, #cc0000, var(--wrong-red))';
-  document.getElementById('timer-text').textContent = Math.ceil(timeLeft) + 's';
-}
-
-function onTimeout() {
-  if (questionLocked) return;
-  questionLocked = true;
-
-  // Show timeout message
-  const msg = document.getElementById('timeout-msg');
-  msg.classList.add('show');
-  setTimeout(()=>msg.classList.remove('show'), 1200);
-
-  loseLife();
-  streak = 0;
-  updateHUD();
-  roundResults.push('timeout');
-  updateProgressDot(currentQ, 'timeout');
-
-  setTimeout(() => {
-    currentQ++;
-    loadQuestion();
-  }, 1600);
-}
-
-// ── ANSWER ─────────────────────────────────────────────
-function answer(chosen, correct, options, diff) {
-  if (questionLocked) return;
-  questionLocked = true;
-  clearInterval(timerInterval);
-
-  const isCorrect = chosen === correct;
-  const pillarCorrect = document.getElementById(`pillar-${correct}`);
-  const pillarChosen = document.getElementById(`pillar-${chosen}`);
-
-  // Disable all pillars
-  [0,1,2].forEach(i => document.getElementById(`pillar-${i}`).classList.add('disabled'));
-
-  if (isCorrect) {
-    pillarCorrect.classList.add('correct');
-    flashFeedback('correct');
-    correctCount++;
-    streak++;
-    if (streak > maxStreak) maxStreak = streak;
-
-    // Score calc
-    const timeBonus = Math.floor((timeLeft / maxTime) * TIME_BONUS_MAX);
-    const streakMult = Math.min(streak, 5);
-    const diffMult = diff.scoreMult * (bonusRound ? 2 : 1);
-    const pts = Math.floor((BASE_SCORE + timeBonus) * streakMult * diffMult);
-    score += pts;
-
-    showAnswerReveal('correct', `+${pts}`, streakMult > 1 ? `×${streakMult} STREAK BONUS` : `TIME BONUS +${timeBonus}`);
-    showStreakPopup(streak);
-    roundResults.push('correct');
-    updateProgressDot(currentQ, 'correct');
-  } else {
-    pillarChosen.classList.add('wrong');
-    pillarCorrect.classList.add('correct');
-    flashFeedback('wrong');
-    streak = 0;
-    loseLife();
-    showAnswerReveal('wrong', 'WRONG', `IT WAS: ${options[correct].name}`);
-    roundResults.push('wrong');
-    updateProgressDot(currentQ, 'wrong');
-  }
-
-  updateHUD();
-
-  // Check death
-  if (lives <= 0) {
-    setTimeout(() => endGame(false), 2200);
-    return;
-  }
-
-  setTimeout(() => {
-    hideAnswerReveal();
-    currentQ++;
-    loadQuestion();
-  }, 2000);
-}
-
-// ── HINT ───────────────────────────────────────────────
-document.getElementById('hint-btn').addEventListener('click', useHint);
-function useHint() {
-  if (questionLocked || hintUsed) return;
-  hintUsed = true;
-  document.getElementById('hint-btn').disabled = true;
-
-  // Find a wrong pillar and hide it
-  const pillars = [0,1,2].map(i=>({i,el:document.getElementById(`pillar-${i}`)}));
-  // Find wrong ones (not correct)
-  // We need to know which is correct — store it
-  // Actually we stored correctIdx in closure — let's use a global
-  const wrongPillars = pillars.filter(p => p.el.classList.contains('disabled') === false && p.i !== window._correctIdx);
-  if (wrongPillars.length === 0) return;
-  const toHide = wrongPillars[Math.floor(Math.random()*wrongPillars.length)];
-  toHide.el.style.opacity = '0.2';
-  toHide.el.style.pointerEvents = 'none';
-  toHide.el.classList.add('disabled');
-
-  // Small score penalty
-  score = Math.max(0, score - 30);
-  updateHUD();
-}
-
-// ── HEARTS ─────────────────────────────────────────────
-function loseLife() {
-  lives--;
-  updateHearts();
-}
-
-function updateHearts() {
-  for (let i = 0; i < 3; i++) {
-    const h = document.querySelector(`.heart[data-h="${i}"]`);
-    if (i >= lives) {
-      if (!h.classList.contains('lost')) {
-        h.classList.add('lost','shake');
-        setTimeout(()=>h.classList.remove('shake'), 500);
-      }
-    } else {
-      h.classList.remove('lost');
-    }
-  }
-}
-
-// ── HUD ────────────────────────────────────────────────
-function updateHUD() {
-  document.getElementById('score-val').textContent = score.toLocaleString();
-  document.getElementById('streak-val').textContent = `×${Math.min(streak,5)||1}`;
-  if (streak >= 5) document.getElementById('streak-val').style.color = 'var(--gold)';
-  else if (streak >= 3) document.getElementById('streak-val').style.color = 'var(--fire)';
-  else document.getElementById('streak-val').style.color = 'var(--fire)';
-}
-
-// ── FEEDBACK ───────────────────────────────────────────
-function flashFeedback(type) {
-  const f = document.getElementById('feedback-flash');
-  f.className = type+'-flash';
-  setTimeout(()=>f.className='',500);
-}
-
-function showAnswerReveal(type, main, sub) {
-  const el = document.getElementById('answer-reveal');
-  const txt = document.getElementById('answer-reveal-text');
-  const sub2 = document.getElementById('answer-reveal-sub');
-  txt.textContent = main;
-  txt.className = (type === 'correct') ? 'correct-txt' : 'wrong-txt';
-  sub2.textContent = sub;
-  el.classList.add('show');
-}
-function hideAnswerReveal() {
-  document.getElementById('answer-reveal').classList.remove('show');
-}
-
-function showStreakPopup(n) {
-  if (n < 2) return;
-  const p = document.getElementById('streak-popup');
-  const msgs = {2:'DOUBLE STRIKE!',3:'TRIPLE FLAME!',4:'QUAD INFERNO!',5:'UNSTOPPABLE!'};
-  p.textContent = msgs[Math.min(n,5)] || `${n}× RAMPAGE!`;
-  p.classList.add('show');
-  setTimeout(()=>p.classList.remove('show'), 1200);
-}
-
-// ── END GAME ───────────────────────────────────────────
-function endGame(won) {
-  clearInterval(timerInterval);
-
-  const best = getBest();
-  const isNew = score > best;
-  if (isNew) setBest(score);
-
-  addHS({ score, correct:correctCount, streak:maxStreak, date:new Date().toLocaleDateString() });
-
-  // Save free game to Supabase
-  if (walletAddress && sb) {
-    sbQuery('games','insert',{
-      address: walletAddress.toLowerCase(),
-      mode: 'free',
-      score: score,
-      answered: correctCount,
-      correct: correctCount,
-      tx_hash: null,
-      created_at: new Date().toISOString()
-    });
-  }
-
-  const statsText = `CORRECT: ${correctCount}/${TOTAL_ROUNDS}   MAX STREAK: ×${maxStreak}   ACCURACY: ${Math.round(correctCount/TOTAL_ROUNDS*100)}%`;
-  const noteText = isNew ? '🏆 NEW BEST SCORE!' : `BEST: ${Math.max(best,score).toLocaleString()}`;
-
-  if (won) {
-    showScreen('win-screen');
-    document.getElementById('final-score-win').textContent = score.toLocaleString();
-    document.getElementById('final-stats-win').innerHTML = statsText;
-    document.getElementById('highscore-note-win').textContent = noteText;
-    spawnWinParticles();
-  } else {
-    showScreen('gameover-screen');
-    document.getElementById('final-score').textContent = score.toLocaleString();
-    document.getElementById('final-stats').innerHTML = statsText;
-    document.getElementById('highscore-note').textContent = noteText;
-  }
-  document.getElementById('nav-bar').style.display = 'flex';
-  document.getElementById('hint-btn').style.display = 'none';
-}
-
-// ── WIN PARTICLES ─────────────────────────────────────
-function spawnWinParticles() {
-  const container = document.getElementById('win-particles');
-  container.innerHTML = '';
-  const colors = ['#ffd700','#ff8800','#ff4400','#ffcc00','#ff6600','#fff700'];
-  for (let i = 0; i < 60; i++) {
-    const p = document.createElement('div');
-    p.className = 'particle';
-    p.style.left = Math.random()*100+'%';
-    p.style.background = colors[Math.floor(Math.random()*colors.length)];
-    p.style.animationDuration = (3+Math.random()*4)+'s';
-    p.style.animationDelay = (Math.random()*3)+'s';
-    p.style.width = (4+Math.random()*8)+'px';
-    p.style.height = (4+Math.random()*8)+'px';
-    container.appendChild(p);
-  }
-}
-
-// ── KEYBOARD CONTROLS ──────────────────────────────────
-document.addEventListener('keydown', e => {
-  if (e.key === '1') document.getElementById('pillar-0')?.click();
-  if (e.key === '2') document.getElementById('pillar-1')?.click();
-  if (e.key === '3') document.getElementById('pillar-2')?.click();
-  if (e.key === 'h' || e.key === 'H') useHint();
-  if (e.key === 'Enter' && document.getElementById('intro-screen').style.display !== 'none') startGame();
-});
-
-// ── BUTTON WIRING ──────────────────────────────────────
-document.getElementById('start-btn').addEventListener('click', startGame);
-document.getElementById('retry-btn').addEventListener('click', startGame);
-document.getElementById('retry-intro-btn').addEventListener('click', ()=>showPage('how'));
-document.getElementById('win-retry-btn').addEventListener('click', startGame);
-
-function loadQuestion() {
-  if (currentQ >= TOTAL_ROUNDS) { endGame(true); return; }
+function loadQuestion(isPaid) {
+  if (!isPaid && currentQ >= TOTAL_ROUNDS) { endGame(true); return; }
+  if (!isPaid && miners.length < 3) { endGame(false); return; }
 
   questionLocked = false;
   hintUsed = false;
-  document.getElementById('hint-btn').disabled = false;
+  if (!isPaid) {
+    document.getElementById('hint-btn').disabled = false;
+  }
 
-  const diff = getDiff();
-  const correct = queue[currentQ];
+  const diff = isPaid ? getPaidDiff() : getDiff();
+  const correct = queue[currentQ % queue.length];
 
+  // PAID MODE: generate confusing options (similar-looking names)
+  let wrongs;
   const wrongPool = miners.filter(m => m.id !== correct.id);
   const shuffledWrong = wrongPool.sort(()=>Math.random()-0.5);
-  const wrongs = shuffledWrong.slice(0, diff.options - 1);
+
+  if (isPaid) {
+    // Pick confusing options: prefer miners from same category
+    const sameCategory = wrongPool.filter(m => m.category === correct.category);
+    const otherCategory = wrongPool.filter(m => m.category !== correct.category);
+    const confusingPool = [...sameCategory, ...otherCategory];
+    wrongs = confusingPool.slice(0, diff.options - 1);
+  } else {
+    wrongs = shuffledWrong.slice(0, diff.options - 1);
+  }
+
   const options = [correct, ...wrongs].sort(()=>Math.random()-0.5);
   const correctIdx = options.findIndex(o => o.id === correct.id);
   window._correctIdx = correctIdx;
 
-  bonusRound = (currentQ > 0 && currentQ % 5 === 0);
-  if (bonusRound) {
-    document.getElementById('bonus-banner').classList.add('show');
-    setTimeout(()=>document.getElementById('bonus-banner').classList.remove('show'), 3000);
-  } else {
-    document.getElementById('bonus-banner').classList.remove('show');
+  if (!isPaid) {
+    bonusRound = (currentQ > 0 && currentQ % 5 === 0);
+    if (bonusRound) {
+      document.getElementById('bonus-banner').classList.add('show');
+      setTimeout(()=>document.getElementById('bonus-banner').classList.remove('show'), 3000);
+    } else {
+      document.getElementById('bonus-banner').classList.remove('show');
+    }
   }
 
   const badge = document.getElementById('diff-badge');
@@ -2620,11 +3034,12 @@ function loadQuestion() {
   badge.id = 'diff-badge';
 
   document.getElementById('round-type').textContent =
-    bonusRound ? '⚡ SPEED BONUS ROUND' : 'IDENTIFICATION TRIAL';
-  document.getElementById('question-num').textContent = `ROUND ${currentQ+1} / ${TOTAL_ROUNDS}`;
+    isPaid ? '💀 GROTTO TRIALS' : (bonusRound ? '⚡ SPEED BONUS ROUND' : 'IDENTIFICATION TRIAL');
+  document.getElementById('question-num').textContent =
+    isPaid ? `MINER ${currentQ+1}` : `ROUND ${currentQ+1} / ${TOTAL_ROUNDS}`;
   updateHUD();
 
-  // Reset pillar opacity for hint
+  // Reset pillar opacity
   [0,1,2].forEach(i => {
     const p = document.getElementById(`pillar-${i}`);
     p.style.opacity = '';
@@ -2651,807 +3066,290 @@ function loadQuestion() {
     document.getElementById(`opt-${i}`).textContent = opt.name;
     const pillar = document.getElementById(`pillar-${i}`);
     pillar.className = 'pillar-wrap';
-    pillar.onclick = () => answer(i, correctIdx, options, diff);
+    pillar.onclick = () => answer(i, correctIdx, options, diff, isPaid);
   });
 
   maxTime = diff.time;
-  if (bonusRound) maxTime = Math.floor(maxTime * 0.7);
+  if (!isPaid && bonusRound) maxTime = Math.floor(maxTime * 0.7);
   startTimer(maxTime);
 }
 
 // ══════════════════════════════════════════════════════
-// ── PAGE ROUTING ───────────────────────────────────────
-function hideAllPages() {
-  ['home-screen','how-screen','lb-screen','profile-screen'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.display = 'none';
-  });
-  document.getElementById('paid-game-wrap').style.display = 'none';
-  document.getElementById('paid-result-screen').style.display = 'none';
-}
-
-function showPage(page) {
-  // Hide all game UI
-  ['loading-screen','intro-screen','gameover-screen','win-screen'].forEach(s => {
-    const el = document.getElementById(s);
-    if (el) el.style.display = 'none';
-  });
-  document.getElementById('game-wrap').style.display = 'none';
-  document.getElementById('paid-game-wrap').style.display = 'none';
-  document.getElementById('paid-result-screen').style.display = 'none';
-  document.getElementById('hint-btn').style.display = 'none';
+// TIMER
+// ══════════════════════════════════════════════════════
+function startTimer(seconds) {
   clearInterval(timerInterval);
-
-  hideAllPages();
-  document.getElementById('nav-bar').style.display = 'flex';
-
-  if (page === 'home') { document.getElementById('home-screen').style.display = 'flex'; }
-  else if (page === 'how') { document.getElementById('how-screen').style.display = 'flex'; }
-  else if (page === 'lb') { document.getElementById('lb-screen').style.display = 'flex'; loadLeaderboard(); }
-  else if (page === 'profile') { document.getElementById('profile-screen').style.display = 'flex'; loadProfile(); }
-  else if (page === 'free-game') { startGame(); }
-}
-
-// ══════════════════════════════════════════════════════
-// ── SUPABASE ───────────────────────────────────────────
-// NOTE: Replace with your actual Supabase project URL and anon key
-const SUPABASE_URL = 'https://ezbbrhpbnhyatkmxnlcp.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV6YmJyaHBibmh5YXRrbXhubGNwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MDYzMDUsImV4cCI6MjA5MjM4MjMwNX0.vXehiLHMHBATy3EIexo4WLGwU74jpP_wTxGYsYbIABU';
-let sb = null;
-try {
-  if (typeof window.supabase !== 'undefined') {
-    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  }
-} catch(e) { console.warn('Supabase not loaded:', e); }
-
-async function sbQuery(table, method, data, filter) {
-  if (!sb) return { error: 'Supabase not configured', data: null };
-  try {
-    let q = sb.from(table);
-    if (method === 'select') { q = q.select(data||'*'); if (filter) q = filter(q); }
-    else if (method === 'insert') q = q.insert(data).select();
-    else if (method === 'upsert') q = q.upsert(data).select();
-    else if (method === 'update') { q = q.update(data); if (filter) q = filter(q); }
-    const res = await q;
-    return res;
-  } catch(e) { return { error: e.message, data: null }; }
-}
-
-// ══════════════════════════════════════════════════════
-// ── WALLET & CHAIN CONFIG ─────────────────────────────
-const CHAINS = {
-  grotto: {
-    chainId: '0x8e8f', // 36463 decimal
-    chainName: 'The Grotto',
-    rpcUrls: ['https://subnets.avax.network/thegrotto/mainnet/rpc'],
-    blockExplorerUrls: ['https://explorer.avax.network/thegrotto'],
-    nativeCurrency: { name: 'GROTTO', symbol: 'GROTTO', decimals: 18 }
-  },
-  avax: {
-    chainId: '0xa86a', // 43114 decimal
-    chainName: 'Avalanche Network',
-    rpcUrls: ['https://api.avax.network/ext/bc/C/rpc'],
-    blockExplorerUrls: ['https://snowtrace.io'],
-    nativeCurrency: { name: 'AVAX', symbol: 'AVAX', decimals: 18 }
-  }
-};
-
-const TOKEN_CONFIGS = {
-  heresy: {
-    address: '0x432d38F83a50EC77C409D086e97448794cf76dCF',
-    chain: 'grotto',
-    amount: '850000000000000', // 0.00085 with 18 decimals
-    amountDisplay: '0.00085',
-    symbol: '$HERESY',
-    decimals: 18
-  },
-  hcash: {
-    address: '0xBa5444409257967E5E50b113C395A766B0678C03',
-    chain: 'avax',
-    amount: '18000000000000000000', // 18 with 18 decimals
-    amountDisplay: '18',
-    symbol: '$HCASH',
-    decimals: 18
-  }
-};
-
-const ADMIN_WALLET = '0xc27a7ffdd5729c5530781BFd2B0d218a846a0899';
-const ERC20_ABI = [
-  'function transfer(address to, uint256 amount) returns (bool)',
-  'function balanceOf(address owner) view returns (uint256)',
-  'function allowance(address owner, address spender) view returns (uint256)',
-  'function approve(address spender, uint256 amount) returns (bool)'
-];
-
-let walletAddress = null;
-let walletChain = null;
-let walletProvider = null;
-let walletSigner = null;
-let currentUser = null; // Supabase user record
-
-async function tryReconnectWallet() {
-  if (typeof window.ethereum === 'undefined') return;
-  try {
-    const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-    if (accounts && accounts[0]) {
-      walletAddress = accounts[0];
-      walletProvider = new ethers.BrowserProvider(window.ethereum);
-      walletSigner = await walletProvider.getSigner();
-      const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-      walletChain = (parseInt(chainId,16) === 36463) ? 'grotto' : 'avax';
-      updateWalletUI();
-      await loadUserRecord();
-    }
-  } catch(e) {}
-}
-
-function openWalletModal() {
-  document.getElementById('wallet-modal').style.display = 'flex';
-  document.getElementById('wallet-connect-status').textContent = '';
-}
-
-async function connectWallet(chain) {
-  if (typeof window.ethereum === 'undefined') {
-    document.getElementById('wallet-connect-status').textContent = 'NO WALLET DETECTED — INSTALL METAMASK';
-    return;
-  }
-  const status = document.getElementById('wallet-connect-status');
-  status.textContent = 'CONNECTING...';
-  try {
-    const cfg = CHAINS[chain];
-    // Switch or add chain
-    try {
-      await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: cfg.chainId }] });
-    } catch(switchErr) {
-      if (switchErr.code === 4902) {
-        await window.ethereum.request({ method: 'wallet_addEthereumChain', params: [cfg] });
-      } else { throw switchErr; }
-    }
-    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-    walletAddress = accounts[0];
-    walletChain = chain;
-    walletProvider = new ethers.BrowserProvider(window.ethereum);
-    walletSigner = await walletProvider.getSigner();
-    updateWalletUI();
-    closeModal('wallet-modal');
-    showToast('WALLET CONNECTED', 'ok');
-    await loadUserRecord();
-  } catch(e) {
-    status.textContent = e.message?.toUpperCase().slice(0,60) || 'CONNECTION FAILED';
-  }
-}
-
-function updateWalletUI() {
-  const btn = document.getElementById('wallet-btn');
-  if (walletAddress) {
-    const short = walletAddress.slice(0,6)+'...'+walletAddress.slice(-4);
-    btn.textContent = short.toUpperCase();
-    btn.classList.add('connected');
-    document.getElementById('profile-nav-btn').style.display = '';
-  } else {
-    btn.textContent = 'CONNECT WALLET';
-    btn.classList.remove('connected');
-  }
-}
-
-async function loadUserRecord() {
-  if (!walletAddress || !sb) return;
-  const addr = walletAddress.toLowerCase();
-  const { data } = await sbQuery('players', 'select', '*', q => q.eq('address', addr).single());
-  if (data) {
-    currentUser = data;
-  } else {
-    // New user — show username modal
-    document.getElementById('username-modal').style.display = 'flex';
-  }
-}
-
-async function registerUsername() {
-  const input = document.getElementById('username-input');
-  const status = document.getElementById('username-status');
-  const name = input.value.trim().replace(/[^a-zA-Z0-9_]/g,'');
-  if (!name || name.length < 2) { status.textContent = 'MIN 2 CHARACTERS'; return; }
-  if (!walletAddress) { status.textContent = 'CONNECT WALLET FIRST'; return; }
-
-  status.textContent = 'CHECKING...';
-  const addr = walletAddress.toLowerCase();
-
-  // Check uniqueness
-  const { data: existing } = await sbQuery('players', 'select', 'address', q => q.eq('username', name).single());
-  if (existing) { status.textContent = 'NAME ALREADY TAKEN — CHOOSE ANOTHER'; return; }
-
-  const { data, error } = await sbQuery('players', 'upsert', {
-    address: addr,
-    username: name,
-    created_at: new Date().toISOString(),
-    best_score: 0,
-    total_games: 0,
-    total_answered: 0,
-    total_entries: 0
-  });
-  if (error) { status.textContent = 'ERROR: ' + error; return; }
-  currentUser = data?.[0] || { address: addr, username: name, best_score:0, total_games:0, total_answered:0, total_entries:0 };
-  document.getElementById('username-modal').style.display = 'none';
-  showToast('WELCOME, ' + name + '!', 'ok');
-}
-
-async function updateUsername() {
-  const input = document.getElementById('edit-name-input');
-  const msg = document.getElementById('edit-name-msg');
-  const name = input.value.trim().replace(/[^a-zA-Z0-9_]/g,'');
-  if (!name || name.length < 2) { msg.textContent = 'MIN 2 CHARACTERS'; msg.style.color = 'var(--wrong-red)'; return; }
-  if (!walletAddress) { msg.textContent = 'NOT CONNECTED'; msg.style.color = 'var(--wrong-red)'; return; }
-
-  const { data: existing } = await sbQuery('players', 'select', 'address', q => q.eq('username', name).single());
-  if (existing && existing.address !== walletAddress.toLowerCase()) {
-    msg.textContent = 'NAME ALREADY TAKEN'; msg.style.color = 'var(--wrong-red)'; return;
-  }
-  const { error } = await sbQuery('players', 'update', { username: name }, q => q.eq('address', walletAddress.toLowerCase()));
-  if (error) { msg.textContent = 'ERROR SAVING'; msg.style.color = 'var(--wrong-red)'; return; }
-  if (currentUser) currentUser.username = name;
-  msg.textContent = 'NAME UPDATED ✓'; msg.style.color = 'var(--correct-green)';
-  input.value = '';
-  document.getElementById('profile-username').textContent = name;
-}
-
-// ══════════════════════════════════════════════════════
-// ── PAYMENT FLOW ───────────────────────────────────────
-let selectedToken = 'heresy';
-let paidAttemptsLeft = 0;
-let paidEntryTxHash = null;
-let usedTxHashes = new Set(); // prevent replay
-
-function openPayModal() {
-  if (!walletAddress) { openWalletModal(); return; }
-  if (!currentUser) { document.getElementById('username-modal').style.display = 'flex'; return; }
-  document.getElementById('pay-modal').style.display = 'flex';
-  document.getElementById('pay-status').textContent = '';
-  document.getElementById('pay-status').className = '';
-  document.getElementById('tx-confirm-box').classList.remove('show');
-  document.getElementById('pay-confirm-btn').disabled = false;
-  document.getElementById('pay-confirm-btn').textContent = 'PAY & ENTER';
-  selectToken('heresy');
-}
-
-function selectToken(tok) {
-  selectedToken = tok;
-  document.getElementById('tok-heresy').classList.toggle('selected', tok==='heresy');
-  document.getElementById('tok-hcash').classList.toggle('selected', tok==='hcash');
-}
-
-async function executePayment() {
-  const cfg = TOKEN_CONFIGS[selectedToken];
-  const status = document.getElementById('pay-status');
-  const btn = document.getElementById('pay-confirm-btn');
-
-  if (!walletAddress) { status.textContent = 'CONNECT WALLET FIRST'; status.className='err'; return; }
-
-  // Verify correct chain
-  const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-  const requiredChain = CHAINS[cfg.chain].chainId;
-  if (chainId.toLowerCase() !== requiredChain.toLowerCase()) {
-    status.textContent = `SWITCH TO ${cfg.chain === 'grotto' ? 'THE GROTTO' : 'AVALANCHE'} CHAIN FIRST`;
-    status.className = 'err';
-    // Auto-switch
-    try {
-      await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: requiredChain }] });
-      walletProvider = new ethers.BrowserProvider(window.ethereum);
-      walletSigner = await walletProvider.getSigner();
-    } catch(e) { return; }
-  }
-
-  btn.disabled = true;
-  btn.textContent = 'SENDING...';
-  status.textContent = 'WAITING FOR WALLET SIGNATURE...';
-  status.className = '';
-
-  try {
-    const contract = new ethers.Contract(cfg.address, ERC20_ABI, walletSigner);
-
-    // Check balance
-    const balance = await contract.balanceOf(walletAddress);
-    if (BigInt(balance) < BigInt(cfg.amount)) {
-      status.textContent = `INSUFFICIENT ${cfg.symbol} BALANCE`;
-      status.className = 'err';
-      btn.disabled = false; btn.textContent = 'PAY & ENTER';
-      return;
-    }
-
-    status.textContent = 'CONFIRM IN WALLET...';
-    const tx = await contract.transfer(ADMIN_WALLET, cfg.amount);
-    status.textContent = 'BROADCASTING TX...';
-    const receipt = await tx.wait(1); // wait 1 confirmation
-
-    // Verify receipt is real
-    if (!receipt || receipt.status !== 1) throw new Error('Transaction failed on-chain');
-
-    const txHash = receipt.hash;
-
-    // Replay protection — check hash not used before
-    if (usedTxHashes.has(txHash)) {
-      status.textContent = 'TX ALREADY USED — CANNOT REPLAY';
-      status.className = 'err';
-      btn.disabled = false; btn.textContent = 'PAY & ENTER';
-      return;
-    }
-
-    // Double-check on-chain via provider
-    const verifiedReceipt = await walletProvider.getTransactionReceipt(txHash);
-    if (!verifiedReceipt || verifiedReceipt.status !== 1) throw new Error('On-chain verification failed');
-
-    // Verify the payment — 3 methods with fallback
-    let verified = false;
-
-    // Method 1: parse Transfer event topic directly from logs
-    try {
-      const transferTopic = ethers.id('Transfer(address,address,uint256)');
-      for (const log of verifiedReceipt.logs) {
-        if (log.topics && log.topics[0] === transferTopic && log.topics.length === 3) {
-          const toAddr = '0x' + log.topics[2].slice(26);
-          const amt = BigInt(log.data === '0x' ? '0' : log.data);
-          if (toAddr.toLowerCase() === ADMIN_WALLET.toLowerCase() && amt >= BigInt(cfg.amount)) {
-            verified = true; break;
-          }
-        }
-      }
-    } catch(e) { console.warn('Verify method 1 error:', e); }
-
-    // Method 2: decode raw tx input data (transfer selector 0xa9059cbb)
-    if (!verified) {
-      try {
-        const txData = await walletProvider.getTransaction(txHash);
-        if (txData && txData.to && txData.to.toLowerCase() === cfg.address.toLowerCase()
-            && txData.data && txData.data.startsWith('0xa9059cbb')) {
-          const decoded = ethers.AbiCoder.defaultAbiCoder().decode(
-            ['address','uint256'], '0x' + txData.data.slice(10)
-          );
-          if (decoded[0].toLowerCase() === ADMIN_WALLET.toLowerCase()
-              && BigInt(decoded[1]) >= BigInt(cfg.amount)) {
-            verified = true;
-          }
-        }
-      } catch(e) { console.warn('Verify method 2 error:', e); }
-    }
-
-    // Method 3: trust receipt status + correct contract + correct sender
-    if (!verified) {
-      try {
-        const txData = await walletProvider.getTransaction(txHash);
-        if (txData
-            && txData.from.toLowerCase() === walletAddress.toLowerCase()
-            && txData.to && txData.to.toLowerCase() === cfg.address.toLowerCase()
-            && verifiedReceipt.status === 1) {
-          verified = true;
-          console.warn('Payment verified via receipt fallback (method 3)');
-        }
-      } catch(e) { console.warn('Verify method 3 error:', e); }
-    }
-
-    if (!verified) {
-      status.textContent = 'PAYMENT VERIFICATION FAILED — WRONG TOKEN OR AMOUNT';
-      status.className = 'err';
-      btn.disabled = false; btn.textContent = 'PAY & ENTER';
-      return;
-    }
-
-    usedTxHashes.add(txHash);
-    paidEntryTxHash = txHash;
-    paidAttemptsLeft = 3;
-
-    // Save payment to Supabase
-    const explorer = cfg.chain === 'grotto'
-      ? `https://explorer.avax.network/thegrotto/tx/${txHash}`
-      : `https://snowtrace.io/tx/${txHash}`;
-    await sbQuery('payments', 'insert', {
-      address: walletAddress.toLowerCase(),
-      token: cfg.symbol,
-      amount: cfg.amountDisplay,
-      tx_hash: txHash,
-      chain: cfg.chain,
-      created_at: new Date().toISOString()
-    });
-
-    // Update player entry count
-    if (currentUser) {
-      await sbQuery('players', 'update',
-        { total_entries: (currentUser.total_entries||0) + 1 },
-        q => q.eq('address', walletAddress.toLowerCase())
-      );
-      currentUser.total_entries = (currentUser.total_entries||0) + 1;
-    }
-
-    // Show confirmation
-    document.getElementById('tx-confirm-box').classList.add('show');
-    document.getElementById('tx-hash-link').innerHTML =
-      `<a href="${explorer}" target="_blank" style="color:rgba(0,255,136,0.7);text-decoration:none;">${txHash.slice(0,20)}...${txHash.slice(-10)}</a>`;
-
-    status.textContent = '✓ PAYMENT CONFIRMED — 3 ATTEMPTS UNLOCKED';
-    status.className = 'ok';
-
-    setTimeout(() => {
-      closeModal('pay-modal');
-      startPaidMode();
-    }, 2000);
-
-  } catch(e) {
-    const msg = e.message || 'PAYMENT FAILED';
-    status.textContent = msg.length > 60 ? msg.slice(0,60)+'...' : msg.toUpperCase();
-    status.className = 'err';
-    btn.disabled = false;
-    btn.textContent = 'PAY & ENTER';
-  }
-}
-
-function closeModal(id) {
-  document.getElementById(id).style.display = 'none';
-}
-
-// ══════════════════════════════════════════════════════
-// ── PAID GAME MODE ─────────────────────────────────────
-const PAID_TIME = 60; // seconds
-const PRIZE_RATIOS = [0.40, 0.25, 0.15, 0.12, 0.08];
-
-// Hard question bank for paid mode
-const PAID_QUESTIONS = [
-  // Single questions
-  { q: 'What does ASIC stand for in the context of crypto mining?', opts: ['Application-Specific Integrated Circuit','Advanced Silicon Integrated Chip','Automated Sector Interface Controller','Asymmetric Security Integration Core'], a: 0 },
-  { q: 'Which metric measures how many hash computations a miner performs per second?', opts: ['Power consumption','Hashrate','Difficulty target','Block reward'], a: 1 },
-  { q: 'On proof-of-work networks, what does "difficulty" control?', opts: ['Token price','Transaction fees','How hard it is to find a valid block hash','Staking rewards'], a: 2 },
-  { q: 'What unit is typically used to measure high-end miner hashrate for Bitcoin?', opts: ['GH/s (Gigahash/s)','KH/s (Kilohash/s)','TH/s (Terahash/s)','MH/s (Megahash/s)'], a: 2 },
-  { q: 'What does "efficiency" mean in mining hardware?', opts: ['Tokens earned per day','Watts consumed per terahash','Network uptime percentage','Block discovery speed'], a: 1 },
-  { q: 'What is a mining pool?', opts: ['A liquid staking protocol','Group of miners combining hashrate for consistent rewards','A cold wallet storage solution','A Layer 2 scaling mechanism'], a: 1 },
-  { q: 'The HashCash protocol was originally designed for what purpose?', opts: ['Proof-of-stake validation','Email spam prevention','NFT minting','Cross-chain bridging'], a: 1 },
-  { q: 'What happens to block rewards on Bitcoin approximately every 4 years?', opts: ['They double','They are redistributed to stakers','They halve','They remain constant'], a: 2 },
-  { q: 'What is an NFT (Non-Fungible Token)?', opts: ['A fungible utility token on Ethereum','A unique cryptographic token representing ownership of a distinct asset','A stablecoin pegged to the dollar','A governance token for DAO voting'], a: 1 },
-  { q: 'On The Grotto L1, what is the native gas token?', opts: ['$HERESY','$AVAX','$HCASH','$GRT'], a: 0 },
-  // Double questions (harder)
-  { q: 'DOUBLE QUESTION: Which blockchain is The Grotto built on AND what is its Chain ID?', opts: ['Ethereum · Chain 1','Avalanche subnet · Chain 36463','Polygon · Chain 137','BNB Chain · Chain 56'], a: 1, combo: true },
-  { q: 'DOUBLE QUESTION: What does $HERESY serve as AND on which network does it operate?', opts: ['Governance token on Ethereum','Payment & gas token on The Grotto L1','Staking token on Avalanche mainnet','Liquidity token on BSC'], a: 1, combo: true },
-  { q: 'DOUBLE QUESTION: What is hashrate AND what unit represents it for SHA-256 miners?', opts: ['Energy use in watts · W/TH','Computation speed · TH/s','Block finality time · seconds','Mining difficulty · bits'], a: 1, combo: true },
-  { q: 'DOUBLE QUESTION: What is a blockchain orphan block AND why does it occur?', opts: ['A block with no transactions · miner error','A valid block that loses the chain race · two miners solve simultaneously','A corrupt block · software bug','An empty block · miner fee evasion'], a: 1, combo: true },
-  { q: 'DOUBLE QUESTION: What is the $HCASH contract on Avalanche AND how many HCASH equals $1 in the Grotto game?', opts: ['0xBa54...C03 · 18 HCASH','0x432d...dCF · 0.00085 HCASH','0xBa54...C03 · 100 HCASH','0xDead...beef · 1 HCASH'], a: 0, combo: true },
-  { q: 'DOUBLE QUESTION: What is the $HERESY contract on The Grotto AND how many HERESY equals $1?', opts: ['0x432d38F8... · 0.00085 HERESY','0xBa5444... · 18 HERESY','0x432d38F8... · 1 HERESY','0xc27a7f... · 0.001 HERESY'], a: 0, combo: true },
-  { q: 'DOUBLE QUESTION: What is "merge mining" AND which two major coins famously use it?', opts: ['Mining two chains with same PoW · Bitcoin & Namecoin','Solo mining plus pool mining · Ethereum & Litecoin','ASIC mining plus GPU mining · Monero & Zcash','Dual-token issuance · Dogecoin & Solana'], a: 0, combo: true },
-  { q: 'DOUBLE QUESTION: What is the block time target for Avalanche C-Chain AND what consensus does it use?', opts: ['~2 seconds · Snowman consensus','~10 minutes · Nakamoto consensus','~15 seconds · PBFT','~1 second · Tendermint'], a: 0, combo: true },
-  { q: 'What is the admin wallet address for The Grotto game treasury?', opts: ['0xc27a7ffdd5729c5530781BFd2B0d218a846a0899','0x432d38F83a50EC77C409D086e97448794cf76dCF','0xBa5444409257967E5E50b113C395A766B0678C03','0xDead000000000000000000000000000000000001'], a: 0 },
-  { q: 'DOUBLE QUESTION: What percentage is taken as a platform fee from the prize pool AND how is the remainder split?', opts: ['5% fee · top 5 split remaining by rank','10% fee · top 3 split 50/30/20','3% fee · top 10 split equally','0% fee · winner takes all'], a: 0, combo: true },
-  { q: 'What does "finality" mean on a blockchain?', opts: ['The maximum token supply','The point at which a transaction cannot be reversed','The cost of a gas unit','The total number of validators'], a: 1 },
-  { q: 'DOUBLE QUESTION: What is the RPC URL for The Grotto L1 AND what is its explorer URL?', opts: ['subnets.avax.network/thegrotto/mainnet/rpc · explorer.avax.network/thegrotto','api.avax.network/ext/bc/C/rpc · snowtrace.io','rpc.ankr.com/grotto · blockscout.com/grotto','mainnet.infura.io/grotto · etherscan.io/grotto'], a: 0, combo: true },
-  { q: 'Which consensus mechanism does Avalanche use for subnet finality?', opts: ['Proof of Work','Proof of Stake with slashing','Snowball / Avalanche consensus (DAG-based)','Delegated Byzantine Fault Tolerance'], a: 2 },
-  { q: 'In NFT mining games, what does "rarity tier" typically determine?', opts: ['The NFT file size','Hashrate output and earning potential of the miner','Token price floor','Gas fee amount'], a: 1 },
-  { q: 'DOUBLE QUESTION: What is the purpose of ERC-20 token approval AND which function handles it?', opts: ['Allow a contract to spend tokens on your behalf · approve()','Transfer tokens directly · transfer()','Mint new tokens · mint()','Burn tokens permanently · burn()'], a: 0, combo: true },
-  { q: 'What is a "block explorer" used for?', opts: ['Mining blocks faster','Viewing transactions, addresses, and on-chain data','Generating private keys','Staking tokens in a validator pool'], a: 1 },
-  { q: 'DOUBLE QUESTION: What is the difference between L1 and L2 blockchains AND which is The Grotto?', opts: ['L1 = base layer, L2 = scaling solution built on L1 · Grotto is an Avalanche L1 subnet','L1 = fast chain, L2 = slow chain · Grotto is L2','L1 = public, L2 = private · Grotto is L2','L1 = new, L2 = legacy · Grotto is L1'], a: 0, combo: true },
-];
-
-let paidGameState = {
-  attempt: 1,
-  score: 0,
-  answered: 0,
-  correct: 0,
-  timeLeft: PAID_TIME,
-  qLocked: false,
-  timerInterval: null,
-  questionQueue: [],
-  currentQIdx: 0,
-  bestScore: 0
-};
-
-function startPaidMode() {
-  hideAllPages();
-  showScreen('loading-screen'); // brief
-  setTimeout(() => {
-    document.getElementById('loading-screen').style.display = 'none';
-    paidGameState.attempt = 1;
-    paidGameState.bestScore = 0;
-    launchPaidAttempt();
-  }, 300);
-}
-
-function startNextAttempt() {
-  if (paidAttemptsLeft <= 0) {
-    showPage('lb');
-    return;
-  }
-  document.getElementById('paid-result-screen').style.display = 'none';
-  launchPaidAttempt();
-}
-
-function launchPaidAttempt() {
-  paidAttemptsLeft--;
-  paidGameState.score = 0;
-  paidGameState.answered = 0;
-  paidGameState.correct = 0;
-  paidGameState.timeLeft = PAID_TIME;
-  paidGameState.qLocked = false;
-  paidGameState.questionQueue = [...PAID_QUESTIONS].sort(()=>Math.random()-0.5);
-  paidGameState.currentQIdx = 0;
-
-  updatePaidTries();
-  updatePaidHUD();
-
-  // Show paid game
-  document.getElementById('paid-result-screen').style.display = 'none';
-  document.getElementById('paid-game-wrap').style.display = 'flex';
-  document.getElementById('nav-bar').style.display = 'flex';
-  document.getElementById('hint-btn').style.display = 'none';
-
-  loadPaidQuestion();
-  startPaidTimer();
-}
-
-function updatePaidTries() {
-  for (let i = 0; i < 3; i++) {
-    const t = document.querySelector(`.paid-try[data-t="${i}"]`);
-    const used = (3 - paidAttemptsLeft);
-    if (i < used) t.classList.add('used');
-    else t.classList.remove('used');
-  }
-  const attempt = 3 - paidAttemptsLeft;
-  document.getElementById('paid-attempt-label').textContent = `ATTEMPT ${attempt} / 3`;
-}
-
-function updatePaidHUD() {
-  document.getElementById('paid-score-val').textContent = paidGameState.score.toLocaleString();
-  document.getElementById('paid-answered-val').textContent = paidGameState.answered;
-}
-
-function startPaidTimer() {
-  clearInterval(paidGameState.timerInterval);
-  paidGameState.timerInterval = setInterval(() => {
-    paidGameState.timeLeft -= 0.1;
-    const pct = Math.max(0, paidGameState.timeLeft / PAID_TIME) * 100;
-    document.getElementById('paid-timer-fill').style.width = pct + '%';
-    if (pct < 25) document.getElementById('paid-timer-fill').style.background = 'linear-gradient(to right,#cc0000,var(--wrong-red))';
-    else if (pct < 50) document.getElementById('paid-timer-fill').style.background = 'linear-gradient(to right,var(--fire),var(--ember))';
-    else document.getElementById('paid-timer-fill').style.background = 'linear-gradient(to right,var(--gold),var(--fire))';
-    document.getElementById('paid-timer-text').textContent = Math.ceil(Math.max(0,paidGameState.timeLeft)) + 's';
-    if (paidGameState.timeLeft <= 0) {
-      clearInterval(paidGameState.timerInterval);
-      endPaidAttempt();
+  timeLeft = seconds;
+  updateTimerUI();
+  timerInterval = setInterval(() => {
+    timeLeft -= 0.1;
+    if (timeLeft <= 0) {
+      timeLeft = 0;
+      updateTimerUI();
+      clearInterval(timerInterval);
+      onTimeout();
+    } else {
+      updateTimerUI();
     }
   }, 100);
 }
 
-function loadPaidQuestion() {
-  if (paidGameState.currentQIdx >= paidGameState.questionQueue.length) {
-    // Reshuffle and continue
-    paidGameState.questionQueue = [...PAID_QUESTIONS].sort(()=>Math.random()-0.5);
-    paidGameState.currentQIdx = 0;
-  }
-  paidGameState.qLocked = false;
-  const q = paidGameState.questionQueue[paidGameState.currentQIdx];
-  document.getElementById('paid-question-text').textContent = q.q;
-  document.getElementById('paid-combo-notice').textContent = q.combo ? '⚡ DOUBLE QUESTION — BOTH PARTS MUST MATCH' : '';
-
-  // Shuffle options but track correct index
-  const indices = [0,1,2,3];
-  const shuffled = indices.sort(()=>Math.random()-0.5);
-  const newCorrect = shuffled.indexOf(q.a);
-  window._paidCorrect = newCorrect;
-  window._paidQ = q;
-
-  const letters = ['A','B','C','D'];
-  shuffled.forEach((origIdx, displayIdx) => {
-    const el = document.getElementById(`popt-${displayIdx}`);
-    el.className = 'paid-opt';
-    el.innerHTML = `<span class="paid-opt-letter">${letters[displayIdx]}</span>${q.opts[origIdx]}`;
-  });
+function updateTimerUI() {
+  const pct = Math.max(0, timeLeft / maxTime) * 100;
+  const fill = document.getElementById('timer-fill');
+  fill.style.width = pct + '%';
+  if (pct > 50) fill.style.background = 'linear-gradient(to right, var(--gold), var(--fire), var(--ember))';
+  else if (pct > 25) fill.style.background = 'linear-gradient(to right, var(--fire), var(--ember))';
+  else fill.style.background = 'linear-gradient(to right, #cc0000, var(--wrong-red))';
+  document.getElementById('timer-text').textContent = Math.ceil(timeLeft) + 's';
 }
 
-function paidAnswer(chosen) {
-  if (paidGameState.qLocked || paidGameState.timeLeft <= 0) return;
-  paidGameState.qLocked = true;
-  const correct = window._paidCorrect;
-  const q = window._paidQ;
+function onTimeout() {
+  if (questionLocked) return;
+  questionLocked = true;
+  const msg = document.getElementById('timeout-msg');
+  msg.classList.add('show');
+  setTimeout(()=>msg.classList.remove('show'), 1200);
+  loseLife();
+  streak = 0;
+  updateHUD();
+  roundResults.push('timeout');
+  if (!appState.isPaidMode) updateProgressDot(currentQ, 'timeout');
+  setTimeout(() => {
+    currentQ++;
+    if (appState.isPaidMode) {
+      if (lives <= 0) { endPaidGame(); return; }
+      loadQuestion(true);
+    } else {
+      loadQuestion(false);
+    }
+  }, 1600);
+}
 
-  document.getElementById(`popt-${correct}`).classList.add('correct');
-  if (chosen !== correct) {
-    document.getElementById(`popt-${chosen}`).classList.add('wrong');
+// ══════════════════════════════════════════════════════
+// ANSWER
+// ══════════════════════════════════════════════════════
+function answer(chosen, correct, options, diff, isPaid) {
+  if (questionLocked) return;
+  questionLocked = true;
+  clearInterval(timerInterval);
+
+  const isCorrect = chosen === correct;
+  const pillarCorrect = document.getElementById(`pillar-${correct}`);
+  const pillarChosen = document.getElementById(`pillar-${chosen}`);
+  [0,1,2].forEach(i => document.getElementById(`pillar-${i}`).classList.add('disabled'));
+
+  if (isCorrect) {
+    pillarCorrect.classList.add('correct');
+    flashFeedback('correct');
+    correctCount++;
+    streak++;
+    if (streak > maxStreak) maxStreak = streak;
+
+    const timeBonus = Math.floor((timeLeft / maxTime) * TIME_BONUS_MAX);
+    const streakMult = Math.min(streak, 5);
+    const diffMult = diff.scoreMult * (!isPaid && bonusRound ? 2 : 1);
+    const pts = Math.floor((BASE_SCORE + timeBonus) * streakMult * diffMult);
+    score += pts;
+
+    showAnswerReveal('correct', `+${pts}`, streakMult > 1 ? `×${streakMult} STREAK BONUS` : `TIME BONUS +${timeBonus}`);
+    showStreakPopup(streak);
+    if (!isPaid) roundResults.push('correct');
+    if (!isPaid) updateProgressDot(currentQ, 'correct');
+  } else {
+    pillarChosen.classList.add('wrong');
+    pillarCorrect.classList.add('correct');
+    flashFeedback('wrong');
+    streak = 0;
+    loseLife();
+    showAnswerReveal('wrong', 'WRONG', `IT WAS: ${options[correct].name}`);
+    if (!isPaid) roundResults.push('wrong');
+    if (!isPaid) updateProgressDot(currentQ, 'wrong');
   }
 
-  paidGameState.answered++;
-  if (chosen === correct) {
-    paidGameState.correct++;
-    const timeBonus = Math.floor((paidGameState.timeLeft / PAID_TIME) * 80);
-    const pts = q.combo ? 250 + timeBonus : 150 + timeBonus;
-    paidGameState.score += pts;
+  updateHUD();
+
+  // Check death
+  if (lives <= 0) {
+    if (isPaid) {
+      setTimeout(() => endPaidGame(), 2200);
+    } else {
+      setTimeout(() => endGame(false), 2200);
+    }
+    return;
   }
-  updatePaidHUD();
 
   setTimeout(() => {
-    paidGameState.currentQIdx++;
-    loadPaidQuestion();
-  }, 700);
+    hideAnswerReveal();
+    currentQ++;
+    if (isPaid) {
+      loadQuestion(true);
+    } else {
+      loadQuestion(false);
+    }
+  }, 2000);
 }
 
-async function endPaidAttempt() {
-  paidGameState.qLocked = true;
-  clearInterval(paidGameState.timerInterval);
-  document.getElementById('paid-game-wrap').style.display = 'none';
+// ══════════════════════════════════════════════════════
+// HINT
+// ══════════════════════════════════════════════════════
+document.getElementById('hint-btn').addEventListener('click', useHint);
+function useHint() {
+  if (questionLocked || hintUsed || appState.isPaidMode) return;
+  hintUsed = true;
+  document.getElementById('hint-btn').disabled = true;
+  const pillars = [0,1,2].map(i=>({i,el:document.getElementById(`pillar-${i}`)}));
+  const wrongPillars = pillars.filter(p => p.el.classList.contains('disabled') === false && p.i !== window._correctIdx);
+  if (wrongPillars.length === 0) return;
+  const toHide = wrongPillars[Math.floor(Math.random()*wrongPillars.length)];
+  toHide.el.style.opacity = '0.2';
+  toHide.el.style.pointerEvents = 'none';
+  toHide.el.classList.add('disabled');
+  score = Math.max(0, score - 30);
+  updateHUD();
+}
 
-  if (paidGameState.score > paidGameState.bestScore) paidGameState.bestScore = paidGameState.score;
+// ══════════════════════════════════════════════════════
+// HEARTS / HUD
+// ══════════════════════════════════════════════════════
+function loseLife() {
+  lives--;
+  updateHearts();
+}
 
-  // Save game to Supabase
-  if (walletAddress && sb) {
-    await sbQuery('games', 'insert', {
-      address: walletAddress.toLowerCase(),
-      mode: 'paid',
-      score: paidGameState.score,
-      answered: paidGameState.answered,
-      correct: paidGameState.correct,
-      tx_hash: paidEntryTxHash,
-      created_at: new Date().toISOString()
-    });
-    // Update best score
-    const { data: player } = await sbQuery('players','select','*', q=>q.eq('address',walletAddress.toLowerCase()).single());
-    if (player) {
-      const newBest = Math.max(player.best_score||0, paidGameState.bestScore);
-      await sbQuery('players','update',{
-        best_score: newBest,
-        total_games: (player.total_games||0)+1,
-        total_answered: (player.total_answered||0)+paidGameState.answered
-      }, q=>q.eq('address',walletAddress.toLowerCase()));
-      currentUser = {...player, best_score:newBest};
+function updateHearts() {
+  for (let i = 0; i < 3; i++) {
+    const h = document.querySelector(`.heart[data-h="${i}"]`);
+    if (i >= lives) {
+      if (!h.classList.contains('lost')) {
+        h.classList.add('lost','shake');
+        setTimeout(()=>h.classList.remove('shake'), 500);
+      }
+    } else {
+      h.classList.remove('lost');
     }
   }
+}
 
-  // Show result
-  document.getElementById('paid-result-screen').style.display = 'flex';
-  document.getElementById('paid-result-title').textContent = paidGameState.timeLeft <= 0 ? "TIME'S UP!" : 'ROUND COMPLETE!';
-  document.getElementById('paid-result-score').textContent = paidGameState.score.toLocaleString();
-  document.getElementById('paid-result-stats').innerHTML =
-    `CORRECT: ${paidGameState.correct} / ${paidGameState.answered} &nbsp;·&nbsp; ACCURACY: ${paidGameState.answered>0?Math.round(paidGameState.correct/paidGameState.answered*100):0}%<br>BEST THIS ENTRY: ${paidGameState.bestScore.toLocaleString()}`;
+function updateHUD() {
+  document.getElementById('score-val').textContent = score.toLocaleString();
+  document.getElementById('streak-val').textContent = `×${Math.min(streak,5)||1}`;
+  if (streak >= 5) document.getElementById('streak-val').style.color = 'var(--gold)';
+  else document.getElementById('streak-val').style.color = 'var(--fire)';
+}
 
-  const attLeft = paidAttemptsLeft;
-  const retryBtn = document.getElementById('paid-retry-btn');
-  if (attLeft > 0) {
-    document.getElementById('paid-result-attempts-left').textContent = `${attLeft} ATTEMPT${attLeft>1?'S':''} REMAINING`;
-    retryBtn.style.display = '';
-    retryBtn.textContent = `USE ATTEMPT ${4-attLeft} / 3`;
+// ══════════════════════════════════════════════════════
+// FEEDBACK
+// ══════════════════════════════════════════════════════
+function flashFeedback(type) {
+  const f = document.getElementById('feedback-flash');
+  f.className = type+'-flash';
+  setTimeout(()=>f.className='',500);
+}
+function showAnswerReveal(type, main, sub) {
+  const el = document.getElementById('answer-reveal');
+  const txt = document.getElementById('answer-reveal-text');
+  const sub2 = document.getElementById('answer-reveal-sub');
+  txt.textContent = main;
+  txt.className = (type === 'correct') ? 'correct-txt' : 'wrong-txt';
+  sub2.textContent = sub;
+  el.classList.add('show');
+}
+function hideAnswerReveal() {
+  document.getElementById('answer-reveal').classList.remove('show');
+}
+function showStreakPopup(n) {
+  if (n < 2) return;
+  const p = document.getElementById('streak-popup');
+  const msgs = {2:'DOUBLE STRIKE!',3:'TRIPLE FLAME!',4:'QUAD INFERNO!',5:'UNSTOPPABLE!'};
+  p.textContent = msgs[Math.min(n,5)] || `${n}× RAMPAGE!`;
+  p.classList.add('show');
+  setTimeout(()=>p.classList.remove('show'), 1200);
+}
+
+// ══════════════════════════════════════════════════════
+// FREE MODE END GAME
+// ══════════════════════════════════════════════════════
+async function endGame(won) {
+  clearInterval(timerInterval);
+  const best = getBest();
+  const isNew = score > best;
+  if (isNew) setBest(score);
+  addHS({ score, correct:correctCount, streak:maxStreak, date:new Date().toLocaleDateString() });
+
+  // Save to supabase if connected
+  if (appState.wallet) {
+    await sb.from('game_runs').insert({
+      wallet: appState.wallet,
+      mode: 'free',
+      score: score,
+      correct_count: correctCount,
+      total_rounds: TOTAL_ROUNDS,
+      max_streak: maxStreak,
+      result: won ? 'win' : 'loss'
+    }).then(() => {}).catch(() => {});
+  }
+
+  const statsText = `CORRECT: ${correctCount}/${TOTAL_ROUNDS}   MAX STREAK: ×${maxStreak}   ACCURACY: ${Math.round(correctCount/TOTAL_ROUNDS*100)}%`;
+  const noteText = isNew ? '🏆 NEW BEST SCORE!' : `BEST: ${Math.max(best,score).toLocaleString()}`;
+
+  if (won) {
+    showScreen('win-screen');
+    document.getElementById('final-score-win').textContent = score.toLocaleString();
+    document.getElementById('final-stats-win').innerHTML = statsText;
+    document.getElementById('highscore-note-win').textContent = noteText;
+    spawnWinParticles();
   } else {
-    document.getElementById('paid-result-attempts-left').textContent = 'ALL ATTEMPTS USED — FINAL SCORE SUBMITTED';
-    retryBtn.style.display = 'none';
+    showScreen('gameover-screen');
+    document.getElementById('final-score').textContent = score.toLocaleString();
+    document.getElementById('final-stats').innerHTML = statsText;
+    document.getElementById('highscore-note').textContent = noteText;
   }
 }
 
 // ══════════════════════════════════════════════════════
-// ── LEADERBOARD ────────────────────────────────────────
-async function loadLeaderboard() {
-  const tbody = document.getElementById('lb-tbody');
-  tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:rgba(200,150,50,0.3);font-family:\'Share Tech Mono\',monospace;letter-spacing:2px;">LOADING...</td></tr>';
-
-  if (!sb) {
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:rgba(200,150,50,0.3);font-family:\'Share Tech Mono\',monospace;">SUPABASE NOT CONFIGURED</td></tr>';
-    document.getElementById('prize-pool-val').textContent = 'N/A';
-    return;
-  }
-
-  // Fetch top players
-  const { data: players } = await sbQuery('players','select','*', q=>q.order('best_score',{ascending:false}).limit(20));
-
-  // Fetch prize pool from payments table
-  const { data: payments } = await sbQuery('payments','select','token,amount');
-  let poolValue = 0;
-  let poolToken = '$HERESY / $HCASH';
-  if (payments) {
-    const heresy = payments.filter(p=>p.token==='$HERESY').length * 0.00085;
-    const hcash = payments.filter(p=>p.token==='$HCASH').length * 18;
-    const heresyNet = heresy * 0.95;
-    const hcashNet = hcash * 0.95;
-    const hereCount = payments.filter(p=>p.token==='$HERESY').length;
-    const hcashCount = payments.filter(p=>p.token==='$HCASH').length;
-    const poolLines = [];
-    if (hereCount > 0) poolLines.push(`${heresyNet.toFixed(5)} $HERESY`);
-    if (hcashCount > 0) poolLines.push(`${hcashNet.toFixed(2)} $HCASH`);
-    document.getElementById('prize-pool-val').textContent = poolLines.join(' + ') || '0';
-  } else {
-    document.getElementById('prize-pool-val').textContent = '0';
-  }
-
-  if (!players || players.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:rgba(200,150,50,0.3);font-family:\'Share Tech Mono\',monospace;letter-spacing:2px;">NO PLAYERS YET — BE THE FIRST!</td></tr>';
-    return;
-  }
-
-  const rankBadges = ['🥇','🥈','🥉','4','5'];
-  const rankClasses = ['lb-rank-1','lb-rank-2','lb-rank-3','',''];
-  tbody.innerHTML = '';
-  players.forEach((p, i) => {
-    const isYou = walletAddress && p.address === walletAddress.toLowerCase();
-    const prizeShare = i < 5 ? `${Math.round(PRIZE_RATIOS[i]*100)}%` : '—';
-    const tr = document.createElement('tr');
-    tr.className = (rankClasses[i]||'') + (isYou?' lb-you':'');
-    tr.innerHTML = `
-      <td><span class="lb-rank-badge">${rankBadges[i]||i+1}</span></td>
-      <td>${escHtml(p.username||p.address.slice(0,10)+'...')}${isYou?' <span style="color:var(--fire);font-size:9px;">YOU</span>':''}</td>
-      <td>${(p.best_score||0).toLocaleString()}</td>
-      <td>${(p.total_answered||0).toLocaleString()}</td>
-      <td>${prizeShare}</td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
+// WIN PARTICLES
 // ══════════════════════════════════════════════════════
-// ── PROFILE ────────────────────────────────────────────
-async function loadProfile() {
-  if (!walletAddress) {
-    document.getElementById('profile-username').textContent = 'NOT CONNECTED';
-    document.getElementById('profile-address').textContent = 'Connect your wallet to view profile';
-    return;
-  }
-  const addr = walletAddress.toLowerCase();
-  document.getElementById('profile-address').textContent = walletAddress;
-
-  if (currentUser) {
-    document.getElementById('profile-username').textContent = currentUser.username || 'UNNAMED';
-    document.getElementById('ps-entries').textContent = currentUser.total_entries || 0;
-    document.getElementById('ps-games').textContent = currentUser.total_games || 0;
-    document.getElementById('ps-best').textContent = (currentUser.best_score||0).toLocaleString();
-    document.getElementById('ps-answered').textContent = currentUser.total_answered || 0;
-  }
-
-  if (!sb) return;
-
-  // Load payment history
-  const { data: pays } = await sbQuery('payments','select','*', q=>q.eq('address',addr).order('created_at',{ascending:false}).limit(20));
-  const payBody = document.getElementById('pay-history-body');
-  if (pays && pays.length > 0) {
-    payBody.innerHTML = pays.map(p => {
-      const explorer = p.chain==='grotto'
-        ? `https://explorer.avax.network/thegrotto/tx/${p.tx_hash}`
-        : `https://snowtrace.io/tx/${p.tx_hash}`;
-      return `<tr>
-        <td>${new Date(p.created_at).toLocaleDateString()}</td>
-        <td>${escHtml(p.token)}</td>
-        <td>${escHtml(p.amount)}</td>
-        <td><a href="${explorer}" target="_blank" style="color:rgba(0,255,136,0.6);text-decoration:none;font-family:'Share Tech Mono',monospace;font-size:10px;">${p.tx_hash.slice(0,14)}...</a></td>
-      </tr>`;
-    }).join('');
-  } else {
-    payBody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:rgba(200,150,50,0.3);padding:16px;">No payments yet</td></tr>';
-  }
-
-  // Load game history
-  const { data: games } = await sbQuery('games','select','*', q=>q.eq('address',addr).order('created_at',{ascending:false}).limit(20));
-  const gameBody = document.getElementById('game-history-body');
-  if (games && games.length > 0) {
-    gameBody.innerHTML = games.map(g => `<tr>
-      <td>${new Date(g.created_at).toLocaleDateString()}</td>
-      <td>${(g.mode||'free').toUpperCase()}</td>
-      <td class="${g.score>0?'ok':'fail'}">${(g.score||0).toLocaleString()}</td>
-      <td>${g.answered||0}</td>
-    </tr>`).join('');
-  } else {
-    gameBody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:rgba(200,150,50,0.3);padding:16px;">No games yet</td></tr>';
+function spawnWinParticles() {
+  const container = document.getElementById('win-particles');
+  container.innerHTML = '';
+  const colors = ['#ffd700','#ff8800','#ff4400','#ffcc00','#ff6600','#fff700'];
+  for (let i = 0; i < 60; i++) {
+    const p = document.createElement('div');
+    p.className = 'particle';
+    p.style.left = Math.random()*100+'%';
+    p.style.background = colors[Math.floor(Math.random()*colors.length)];
+    p.style.animationDuration = (3+Math.random()*4)+'s';
+    p.style.animationDelay = (Math.random()*3)+'s';
+    p.style.width = (4+Math.random()*8)+'px';
+    p.style.height = (4+Math.random()*8)+'px';
+    container.appendChild(p);
   }
 }
 
 // ══════════════════════════════════════════════════════
-// ── UTILS ──────────────────────────────────────────────
-function showToast(msg, type) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.className = type || '';
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 3000);
-}
+// KEYBOARD CONTROLS
+// ══════════════════════════════════════════════════════
+document.addEventListener('keydown', e => {
+  if (document.getElementById('game-wrap').style.display !== 'none') {
+    if (e.key === '1') document.getElementById('pillar-0')?.click();
+    if (e.key === '2') document.getElementById('pillar-1')?.click();
+    if (e.key === '3') document.getElementById('pillar-2')?.click();
+    if (e.key === 'h' || e.key === 'H') useHint();
+  }
+  const introVisible = document.getElementById('intro-screen')?.style?.display !== 'none';
+  if (e.key === 'Enter' && introVisible) startGame();
+});
 
-function escHtml(str) {
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
+// ══════════════════════════════════════════════════════
+// BUTTON WIRING
+// ══════════════════════════════════════════════════════
+document.getElementById('start-btn').addEventListener('click', startGame);
+document.getElementById('retry-btn').addEventListener('click', startGame);
+document.getElementById('retry-intro-btn').addEventListener('click', ()=>showScreen('intro-screen'));
+document.getElementById('win-retry-btn').addEventListener('click', startGame);
 
-// Wallet event listeners
-if (typeof window.ethereum !== 'undefined') {
-  window.ethereum.on('accountsChanged', accs => {
-    if (accs.length === 0) { walletAddress = null; currentUser = null; updateWalletUI(); }
-    else { walletAddress = accs[0]; updateWalletUI(); loadUserRecord(); }
-  });
-  window.ethereum.on('chainChanged', () => { walletProvider = new ethers.BrowserProvider(window.ethereum); });
-}
-
-// Start
+// ── START ──────────────────────────────────────────
 init();
 </script>
 </body>
