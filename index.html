@@ -940,6 +940,21 @@
   }
   #wallet-btn:hover { background: linear-gradient(135deg, rgba(255,150,0,0.35), rgba(255,80,0,0.25)); border-color: var(--fire); }
   #wallet-btn.connected { color: var(--correct-green); border-color: rgba(0,255,136,0.4); background: rgba(0,255,136,0.06); }
+  #switch-chain-btn {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 1px;
+    background: rgba(255,140,0,0.08);
+    border: 1px solid rgba(255,140,0,0.25);
+    color: rgba(255,180,80,0.7);
+    padding: 7px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: none;
+  }
+  #switch-chain-btn:hover { color: var(--gold); border-color: var(--gold); background: rgba(255,180,0,0.12); }
+  #switch-chain-btn.visible { display: inline-block; }
 
   /* ── PAGE SYSTEM ─────────────────────────────────── */
   .page {
@@ -1533,6 +1548,7 @@
     <button class="nav-btn" data-page="leaderboard" onclick="showPage('leaderboard')">LEADERBOARD</button>
     <button class="nav-btn" data-page="profile" onclick="showPage('profile')">MY PROFILE</button>
     <button id="wallet-btn" onclick="openWalletFlow()">⚡ CONNECT WALLET</button>
+    <button id="switch-chain-btn" onclick="openSwitchChainModal()">🔀 SWITCH CHAIN</button>
   </div>
 </nav>
 
@@ -1768,6 +1784,30 @@
     </div>
     <div class="modal-error" id="register-error"></div>
     <button class="btn-primary" id="register-btn" onclick="doRegister()" style="width:100%;font-size:15px;">ENTER THE GROTTO</button>
+  </div>
+</div>
+
+<!-- SWITCH CHAIN MODAL -->
+<div class="modal-overlay" id="switch-chain-modal">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeModal('switch-chain-modal')">✕</button>
+    <div class="modal-title">SWITCH NETWORK</div>
+    <div class="modal-sub">SELECT CHAIN TO SWITCH TO</div>
+    <div class="form-group">
+      <div class="chain-select">
+        <div class="chain-opt" id="sc-opt-grotto" data-chain="grotto" onclick="doSwitchChain('grotto')">
+          <span class="chain-icon">🌋</span>
+          THE GROTTO L1<br>
+          <span style="font-size:10px;opacity:0.7;">$HERESY</span>
+        </div>
+        <div class="chain-opt" id="sc-opt-avax" data-chain="avax" onclick="doSwitchChain('avax')">
+          <span class="chain-icon">🔺</span>
+          AVALANCHE C-CHAIN<br>
+          <span style="font-size:10px;opacity:0.7;">$hCASH</span>
+        </div>
+      </div>
+    </div>
+    <div class="modal-error" id="switch-chain-error"></div>
   </div>
 </div>
 
@@ -2062,7 +2102,9 @@ let appState = {
   chain: 'grotto',          // selected chain in wallet modal
   connectedChain: null,     // actual connected chain
   player: null,             // supabase player row
-  activeSession: null,      // active paid session
+  activeSession: null,      // primary active session (most recent with chances left)
+  activeSessions: [],       // ALL active sessions with chances remaining
+  totalChancesLeft: 0,      // aggregate chances across all active sessions
   isPaidMode: false
 };
 
@@ -2251,6 +2293,7 @@ async function doConnectWallet() {
     if (player) {
       appState.player = player;
       appState.username = player.username;
+      await loadActiveSessionsForWallet(wallet);
       updateWalletBtn();
       showToast(`Welcome back, ${player.username}!`, 'success');
     } else {
@@ -2293,12 +2336,47 @@ async function switchToChain(chainKey) {
 
 function updateWalletBtn() {
   const btn = document.getElementById('wallet-btn');
+  const scBtn = document.getElementById('switch-chain-btn');
   if (appState.wallet) {
-    btn.textContent = `✓ ${appState.username || shortAddr(appState.wallet)}`;
+    const chainLabel = appState.connectedChain === 'grotto' ? '🌋' : '🔺';
+    btn.textContent = `✓ ${chainLabel} ${appState.username || shortAddr(appState.wallet)}`;
     btn.classList.add('connected');
+    scBtn.classList.add('visible');
   } else {
     btn.textContent = '⚡ CONNECT WALLET';
     btn.classList.remove('connected');
+    scBtn.classList.remove('visible');
+  }
+}
+
+function openSwitchChainModal() {
+  if (!appState.wallet) { showToast('Connect wallet first', 'error'); return; }
+  clearModalError('switch-chain-error');
+  // Highlight current chain
+  document.querySelectorAll('#switch-chain-modal .chain-opt').forEach(el => {
+    el.classList.toggle('selected', el.dataset.chain === appState.connectedChain);
+  });
+  openModal('switch-chain-modal');
+}
+
+async function doSwitchChain(chainKey) {
+  if (chainKey === appState.connectedChain) {
+    showToast('Already on this chain', '');
+    closeModal('switch-chain-modal');
+    return;
+  }
+  clearModalError('switch-chain-error');
+  try {
+    await switchToChain(chainKey);
+    appState.connectedChain = chainKey;
+    appState.chain = chainKey;
+    closeModal('switch-chain-modal');
+    updateWalletBtn();
+    // Reload active sessions for new chain
+    await loadActiveSessionsForWallet(appState.wallet);
+    showToast(`Switched to ${CHAINS[chainKey].name}`, 'success');
+  } catch(e) {
+    setModalError('switch-chain-error', e.message || 'Switch failed');
   }
 }
 
@@ -2391,9 +2469,38 @@ async function doEditName() {
 }
 
 // ══════════════════════════════════════════════════════
+// AGGREGATE ACTIVE SESSIONS
+// ══════════════════════════════════════════════════════
+async function loadActiveSessionsForWallet(wallet) {
+  try {
+    const { data: sessions } = await sb.from('paid_sessions')
+      .select('*')
+      .eq('wallet', wallet)
+      .eq('status', 'active')
+      .order('created_at', { ascending: false });
+
+    if (sessions && sessions.length > 0) {
+      // Filter to only sessions with chances remaining
+      const withChances = sessions.filter(s => s.chances_used < s.chances_max);
+      appState.activeSessions = withChances;
+      appState.totalChancesLeft = withChances.reduce((sum, s) => sum + (s.chances_max - s.chances_used), 0);
+      // Primary session = first with chances left
+      appState.activeSession = withChances.length > 0 ? withChances[0] : null;
+    } else {
+      appState.activeSessions = [];
+      appState.totalChancesLeft = 0;
+      appState.activeSession = null;
+    }
+    paidChancesLeft = appState.totalChancesLeft;
+  } catch(e) {
+    console.warn('Session load error:', e);
+  }
+}
+
+// ══════════════════════════════════════════════════════
 // PAID MODE — ENTRY PAYMENT
 // ══════════════════════════════════════════════════════
-function openPaidModal() {
+async function openPaidModal() {
   if (!appState.wallet) {
     showToast('Connect your wallet first!', 'error');
     openWalletFlow();
@@ -2403,6 +2510,8 @@ function openPaidModal() {
     showToast('Complete registration first!', 'error');
     return;
   }
+  // Refresh sessions from DB every time modal opens
+  await loadActiveSessionsForWallet(appState.wallet);
   updatePaidModalUI();
   openModal('paid-modal');
 }
@@ -2418,16 +2527,15 @@ function updatePaidModalUI() {
      Each $1 entry gives you <strong>3 chances</strong> to play.<br>
      No limit on entries!`;
 
-  const session = appState.activeSession;
   clearModalError('paid-modal-error');
   document.getElementById('tx-status-msg').className = 'tx-status';
 
-  if (session && session.status === 'active') {
-    const used = session.chances_used;
-    const max = session.chances_max;
-    const left = max - used;
-    renderChanceDots(left, max);
-    document.getElementById('paid-session-status').textContent = `${left} CHANCE${left!==1?'S':''} REMAINING`;
+  const total = appState.totalChancesLeft;
+  if (total > 0) {
+    // Show dots up to min(total, 9) — cap visual at 9 dots
+    const displayMax = Math.min(total, 9);
+    renderChanceDots(displayMax, displayMax);
+    document.getElementById('paid-session-status').textContent = `${total} CHANCE${total!==1?'S':''} REMAINING (ACROSS ALL SESSIONS)`;
     document.getElementById('paid-play-btn').style.display = 'block';
     document.getElementById('paid-pay-btn').textContent = 'BUY MORE — $1 FOR 3 CHANCES';
   } else {
@@ -2460,22 +2568,29 @@ async function doPaidEntry() {
 
   btn.disabled = true;
   btn.textContent = 'WAITING FOR METAMASK...';
+  statusEl.textContent = '';
+  statusEl.className = 'tx-status';
 
   try {
-    // Ensure correct chain
+    // Ensure correct chain first
     await switchToChain(chain);
 
     const provider = new ethers.BrowserProvider(window.ethereum);
     const signer = await provider.getSigner();
 
-    // Check balance
     const tokenContract = new ethers.Contract(cfg.tokenAddress, ERC20_ABI, signer);
-    const balance = await tokenContract.balanceOf(appState.wallet);
     const required = BigInt(cfg.tokenAmount);
 
-    if (balance < required) {
-      setModalError('paid-modal-error', `Insufficient $${cfg.token} balance. Need ${cfg.tokenAmountDisplay} $${cfg.token}.`);
-      return;
+    // Try balance check — skip gracefully if contract call fails (e.g. wrong RPC state)
+    try {
+      const balance = await tokenContract.balanceOf(appState.wallet);
+      if (balance < required) {
+        setModalError('paid-modal-error', `Insufficient $${cfg.token} balance. Need ${cfg.tokenAmountDisplay} $${cfg.token}.`);
+        return;
+      }
+    } catch(balErr) {
+      console.warn('Balance check skipped:', balErr.message);
+      // Continue — MetaMask will reject the tx itself if balance is insufficient
     }
 
     statusEl.textContent = 'CONFIRM IN METAMASK...';
@@ -2517,9 +2632,8 @@ async function doPaidEntry() {
 
     if (sessionErr) throw sessionErr;
 
-    appState.activeSession = session;
-    paidSessionId = session.id;
-    paidChancesLeft = 3;
+    // Reload aggregate sessions
+    await loadActiveSessionsForWallet(appState.wallet);
 
     updatePaidModalUI();
     showToast('Payment confirmed! 3 chances unlocked.', 'success', 4000);
@@ -2531,7 +2645,7 @@ async function doPaidEntry() {
     setModalError('paid-modal-error', e.reason || e.message || 'Payment failed. Try again.');
   } finally {
     btn.disabled = false;
-    btn.textContent = 'BUY MORE — $1 FOR 3 CHANCES';
+    btn.textContent = appState.totalChancesLeft > 0 ? 'BUY MORE — $1 FOR 3 CHANCES' : 'PAY $1 — GET 3 CHANCES';
   }
 }
 
@@ -2539,12 +2653,7 @@ async function doPaidEntry() {
 // PAID GAME START
 // ══════════════════════════════════════════════════════
 function startPaidRound() {
-  if (!appState.activeSession || appState.activeSession.status !== 'active') {
-    showToast('No active session', 'error');
-    return;
-  }
-  const left = appState.activeSession.chances_max - appState.activeSession.chances_used;
-  if (left <= 0) {
+  if (appState.totalChancesLeft <= 0) {
     showToast('No chances left — buy more!', 'error');
     return;
   }
@@ -2594,13 +2703,19 @@ function startPaidRound() {
 function updatePaidChancesHud() {
   const wrap = document.getElementById('paid-chances-hud');
   wrap.innerHTML = '';
-  if (!appState.activeSession) return;
-  const left = appState.activeSession.chances_max - appState.activeSession.chances_used;
-  for (let i = 0; i < 3; i++) {
+  const total = appState.totalChancesLeft;
+  const display = Math.min(total, 6);
+  for (let i = 0; i < display; i++) {
     const d = document.createElement('div');
-    d.className = 'chance-dot' + (i >= left ? ' used' : '');
+    d.className = 'chance-dot';
     d.style.width = '12px'; d.style.height = '12px';
     wrap.appendChild(d);
+  }
+  if (total > 6) {
+    const lbl = document.createElement('div');
+    lbl.style.cssText = 'font-family:Share Tech Mono,monospace;font-size:10px;color:var(--gold);margin-left:4px;';
+    lbl.textContent = `+${total - 6}`;
+    wrap.appendChild(lbl);
   }
 }
 
@@ -2645,27 +2760,25 @@ async function endPaidGame() {
     });
   }
 
-  // Consume the chance
-  if (paidSessionId) {
+  // Consume the chance from the first active session with chances
+  const sessionToUse = appState.activeSessions.find(s => s.chances_used < s.chances_max);
+  if (sessionToUse) {
+    paidSessionId = sessionToUse.id;
     await sb.rpc('use_paid_chance', {
       p_session_id: paidSessionId,
       p_score: score,
       p_correct: correctCount
     });
-    // Refresh session
-    const { data: updatedSession } = await sb.from('paid_sessions')
-      .select('*').eq('id', paidSessionId).single();
-    if (updatedSession) appState.activeSession = updatedSession;
+    // Reload all sessions to refresh aggregate
+    await loadActiveSessionsForWallet(appState.wallet);
   }
 
-  // Show paid game over screen
+  const chancesLeft = appState.totalChancesLeft;
+
+  // Restore HUD
   document.getElementById('paid-hud-extra').style.display = 'none';
   document.getElementById('streak-wrap').style.display = '';
   document.getElementById('hint-btn').style.display = '';
-
-  const chancesLeft = appState.activeSession
-    ? Math.max(0, appState.activeSession.chances_max - appState.activeSession.chances_used)
-    : 0;
 
   document.getElementById('paid-final-score').textContent = score.toLocaleString();
   document.getElementById('paid-final-stats').innerHTML =
@@ -2912,6 +3025,8 @@ async function init() {
   try {
     miners = await fetchMiners();
     if (miners.length < 3) throw new Error('Not enough miners');
+    // Eagerly preload all miner images into browser cache
+    miners.forEach(m => { const i = new Image(); i.src = m.imageUrl; });
   } catch(e) {
     console.error('Miner fetch error:', e);
   }
@@ -3056,12 +3171,28 @@ function loadQuestion(isPaid) {
   const img = document.getElementById('miner-img');
   img.classList.remove('reveal');
   void img.offsetWidth;
-  img.src = correct.imageUrl + '?t=' + Date.now();
-  img.onload = () => img.classList.add('reveal');
-  img.onerror = () => {
-    img.src = 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect fill="#251c15" width="200" height="200"/><text x="100" y="120" text-anchor="middle" fill="#ff6a00" font-size="60">⛏</text></svg>`);
+
+  // Use preloaded image if available, otherwise load fresh
+  const preloaded = window._preloadedImg;
+  if (preloaded && preloaded.src === correct.imageUrl && preloaded.complete) {
+    img.src = preloaded.src;
     img.classList.add('reveal');
-  };
+  } else {
+    img.src = correct.imageUrl;
+    img.onload = () => img.classList.add('reveal');
+    img.onerror = () => {
+      img.src = 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect fill="#251c15" width="200" height="200"/><text x="100" y="120" text-anchor="middle" fill="#ff6a00" font-size="60">⛏</text></svg>`);
+      img.classList.add('reveal');
+    };
+  }
+
+  // Preload the NEXT question's image in background
+  const nextMiner = queue[(currentQ + 1) % queue.length];
+  if (nextMiner) {
+    const preImg = new Image();
+    preImg.src = nextMiner.imageUrl;
+    window._preloadedImg = preImg;
+  }
 
   const stats = correct.minerStats;
   const showStats = diff.name !== 'EXTREME';
@@ -3134,6 +3265,7 @@ function onTimeout() {
   questionLocked = true;
   const msg = document.getElementById('timeout-msg');
   msg.classList.add('show');
+  playTimeout();
   setTimeout(()=>msg.classList.remove('show'), 1200);
   loseLife();
   streak = 0;
@@ -3152,12 +3284,65 @@ function onTimeout() {
 }
 
 // ══════════════════════════════════════════════════════
+// SOUND
+// ══════════════════════════════════════════════════════
+let _audioCtx = null;
+function getAudioCtx() {
+  if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return _audioCtx;
+}
+
+function playClick() {
+  try {
+    const ctx = getAudioCtx();
+    const buf = ctx.createBuffer(1, ctx.sampleRate * 0.04, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 3);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.18, ctx.currentTime);
+    src.connect(gain); gain.connect(ctx.destination);
+    src.start();
+  } catch(e) {}
+}
+
+function playTone(freq, type, duration, gainVal) {
+  try {
+    const ctx = getAudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(freq * 0.5, ctx.currentTime + duration);
+    gain.gain.setValueAtTime(gainVal, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(); osc.stop(ctx.currentTime + duration);
+  } catch(e) {}
+}
+
+function playCorrect() {
+  playTone(520, 'sine', 0.12, 0.15);
+  setTimeout(() => playTone(780, 'sine', 0.18, 0.12), 80);
+}
+
+function playWrong() {
+  playTone(220, 'sawtooth', 0.25, 0.12);
+}
+
+function playTimeout() {
+  playTone(180, 'square', 0.3, 0.08);
+}
+
+// ══════════════════════════════════════════════════════
 // ANSWER
 // ══════════════════════════════════════════════════════
 function answer(chosen, correct, options, diff, isPaid) {
   if (questionLocked) return;
   questionLocked = true;
   clearInterval(timerInterval);
+  playClick();
 
   const isCorrect = chosen === correct;
   const pillarCorrect = document.getElementById(`pillar-${correct}`);
@@ -3167,6 +3352,7 @@ function answer(chosen, correct, options, diff, isPaid) {
   if (isCorrect) {
     pillarCorrect.classList.add('correct');
     flashFeedback('correct');
+    playCorrect();
     correctCount++;
     streak++;
     if (streak > maxStreak) maxStreak = streak;
@@ -3185,6 +3371,7 @@ function answer(chosen, correct, options, diff, isPaid) {
     pillarChosen.classList.add('wrong');
     pillarCorrect.classList.add('correct');
     flashFeedback('wrong');
+    playWrong();
     streak = 0;
     loseLife();
     showAnswerReveal('wrong', 'WRONG', `IT WAS: ${options[correct].name}`);
